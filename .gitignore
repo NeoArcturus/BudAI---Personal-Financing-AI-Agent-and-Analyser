@@ -1,0 +1,18 @@
+# Model artifacts
+saved_model/
+saved_tokenizer/
+checkpoints/
+outputs/
+
+# Torch / HF files
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+*.csv
