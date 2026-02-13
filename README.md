@@ -1,48 +1,177 @@
-# BudAI: Personal Finance AI Agent and Analyser
+# BudAI: Personal Financing AI Agent and Analyser
 
-BudAI is a production-grade transaction categorization engine designed to effectively bridge the gap between semantic text understanding and numerical financial logic. By moving beyond text-only models, the system ensures that financial context (merchant intent) and mathematical reality (transaction magnitude) are processed in parallel to solve the "Math Blindness" of standard Language Models.
+BudAI is an autonomous financial intelligence system designed to standardize, categorize, and forecast personal expenditures. By bridging the gap between high-performance engineering (C++) and advanced machine learning (Python), BudAI provides users with a unified financial view and proactive, behaviour-aware recommendations.
 
+---
 
+## Core Architecture
 
-## Project Overview
+The system utilizes a hybrid neural-symbolic approach to manage personal finances:
 
-Standard NLP models often fail to distinguish between Income and Expenses due to numerical magnitude blindness (treating -50.00 and +50.00 as similar semantic strings). BudAI utilizes a hybrid architecture combining **Sentence-Transformer Embeddings** with **XGBoost** to achieve 98% weighted F1-accuracy.
+### Neutralization
 
-### Core Features & Engineering Highlights
+A hardware-accelerated Preprocessor that standardizes messy bank statements from multiple institutions using a hybrid Sentence Transformer (MiniLM and MPNet).
 
-* **Hybrid Machine Learning Architecture:** Engineered a multi-stage classification pipeline combining **Sentence-Transformer Embeddings** (all-MiniLM-L6-v2) for semantic context with **XGBoost** for numerical feature processing.
-* **Feature Engineering & Data Distillation:** Designed a custom preprocessing suite to handle messy bank CSV data. Implemented fuzzy semantic column mapping and regex-based boilerplate removal to isolate merchant intent from generic noise (e.g., "Card transaction issued by...").
-* **Solving the Accuracy Paradox:** Addressed class imbalance by implementing synthetic oversampling and class-weighting strategies, improving the **Macro F1-score from 0.37 to 0.85**.
-* **Semantic Fallback Logic:** Integrated a robust post-prediction layer using **Cosine Similarity** against high-confidence category anchors. This ensures prominent merchants (Tesco, Uber, Lebara) are categorized with near-perfect accuracy regardless of description variations.
+### Intelligence
 
+A transaction classifier combining semantic embeddings with XGBoost to achieve high-precision categorization.
 
+### Forecasting
 
-## Tech Stack
-* **Language:** Python 3.11+
-* **Modeling:** XGBoost (Gradient Boosting), Transformers (MiniLM-L6-v2)
-* **NLP Tools:** Sentence-Transformers, HuggingFace, Regex-based distillation
-* **Data Science:** Scikit-Learn (Stratified Splits, Oversampling), Pandas, NumPy
+A high-performance C++ engine that models user habits via the Ornstein-Uhlenbeck (OU) process and market volatility via Geometric Brownian Motion (GBM).
 
-## Project Structure
+### Agentic AI
 
-* `preprocessor.py`: Standardizes messy bank CSVs and handles column mapping via fuzzy semantic matching.
-* `model_trainer.py`: Encodes descriptions into 384-dimensional vectors, stacks them with numerical amounts, and trains the XGBoost classifier.
-* `categorizer.py`: The production-ready inference engine featuring strict directional logic to prevent spending from being categorized as income.
-* `xgb_model.json`: The serialized gradient boosting model.
-* `label_encoder.joblib`: Mapping of integer predictions to human-readable categories.
+A RAG-enabled (Retrieval-Augmented Generation) interface that allows users to query their financial data and receive personalized recommendations.
 
-## Performance Metrics
+---
 
-| Category | Precision | Recall | F1-Score |
-| :--- | :--- | :--- | :--- |
-| **Transfers & Investments** | 1.00 | 1.00 | 1.00 |
-| **Food & Dining** | 0.95 | 1.00 | 0.98 |
-| **Transportation** | 1.00 | 1.00 | 1.00 |
-| **Bills & Utilities** | 0.75 | 1.00 | 0.86 |
-| **Weighted Average** | **0.99** | **0.98** | **0.98** |
+## Key Features
 
-## Installation and Usage
+### Hybrid Transaction Classification
 
-### 1. Setup
+BudAI uses a multi-stage NLP pipeline to ensure speed and accuracy.
+
+The system utilizes:
+
+- `all-MiniLM-L12-v2` for rapid column standardization
+- `all-mpnet-base-v2` for deep semantic classification of transaction descriptions
+
+It features hardware-agnostic acceleration for:
+
+- Apple Silicon (MPS)
+- NVIDIA GPUs (CUDA)
+
+---
+
+### Stochastic Expenditure Forecasting
+
+Unlike traditional budget trackers, BudAI implements a dual-model forecasting layer in C++.
+
+#### Ornstein-Uhlenbeck Model
+
+Calibrates to user spending habits by calculating:
+
+- Mean reversion speed
+- Habitual mean spending levels
+
+#### Geometric Brownian Motion
+
+Simulates global commodity paths (e.g., crude oil) to predict the impact of external inflation on user expenses.
+
+---
+
+### Commodity-Linked Hedging
+
+The system identifies the **Beta correlation** between user categories (like Transportation) and commodity prices.
+
+It suggests **Hedged Paths**, such as:
+
+- Pre-buying
+- Bulk purchasing
+
+These recommendations help minimize expenditure when market forecasts indicate price increases.
+
+---
+
+### Agentic RAG Interface
+
+Forecasted paths, behavioral patterns, and market sensitivities are stored in a vector database.
+
+The AI agent uses Retrieval-Augmented Generation (RAG) to provide grounded responses to queries like:
+
+> "How can I optimize my spending for next month?"
+
+---
+
+## Technical Stack
+
+### Machine Learning
+
+- Python
+- PyTorch
+- Sentence-Transformers
+- XGBoost
+- Scikit-learn
+
+### Performance Engineering
+
+- C++ (SDE Simulation Engine)
+
+### Data Processing
+
+- Pandas
+- NumPy
+- Joblib
+
+### Hardware Acceleration
+
+- MPS (Apple Silicon)
+- CUDA (NVIDIA)
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.9+
+- C++ compiler (g++ or clang)
+- PyTorch with MPS or CUDA support
+
+---
+
+## Installation
+
+Clone the repository:
+
 ```bash
-pip install xgboost sentence-transformers pandas scikit-learn joblib tqdm
+git clone <repo-url>
+cd budai
+```
+
+Install Python dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Compile the C++ forecasting engine:
+
+```bash
+g++ -shared -fPIC -O3 -o forecasting/libforecaster.so forecasting/Forecaster.cpp
+```
+
+---
+
+## Usage
+
+### Training
+
+Train the categorizer using historical financial data:
+
+```bash
+python main.py --train --file your_bank_statement.csv
+```
+
+---
+
+### Forecasting and Analysis
+
+Run the autonomous analyzer:
+
+```bash
+python main.py --file your_bank_statement.csv
+```
+
+The system will:
+
+- Categorize transactions
+- Run 5,000+ stochastic simulations per category
+- Prepare the Agentic AI for natural language queries
+
+---
+
+## Vision
+
+BudAI aims to evolve from a financial tracker into a **personal financial intelligence system** capable of understanding behavioral spending patterns, market dynamics, and optimization strategies in a unified framework.
