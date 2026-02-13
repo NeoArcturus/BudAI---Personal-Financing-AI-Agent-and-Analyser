@@ -1,50 +1,58 @@
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
-import torch
+import xgboost as xgb
+import joblib
+import numpy as np
+import re
+from sentence_transformers import SentenceTransformer
 
 class Categorizer:
-    def __init__(self, model_file_path, tokenizer_file_path, label_enc):
-        self.categorizer_model = AutoModelForSequenceClassification.from_pretrained(
-            model_file_path)
-        self.categorizer_tokenizer = AutoTokenizer.from_pretrained(tokenizer_file_path)
-        self.device = torch.device("mps") if torch.backends.mps.is_available() else (
-            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-        )
-        self.label_enc = label_enc
+    def __init__(self, model_file_path, label_enc_path):
+        self.model = xgb.XGBClassifier()
+        self.model.load_model(model_file_path)
+        self.label_enc = joblib.load(label_enc_path)
+        self.semantic_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
-        self.categorizer_model.to(self.device)
+    def clean_text(self, text):
+        if not isinstance(text, str): return ""
+        text = re.sub(r"Card transaction of .* issued by ", "", text, flags=re.IGNORECASE)
+        return text.strip()
 
-    def predict_category(self, texts):
-        inputs = self.categorizer_tokenizer(
-            texts,
-            padding=True,
-            truncation=True,
-            max_length=128,
-            return_tensors="pt"
-        ).to(self.device)
-
-        with torch.no_grad():
-            outputs = self.categorizer_model(**inputs)
-            logits = outputs.logits
-            preds = torch.argmax(logits, dim=1)
-
-        predicted_labels = self.label_enc.inverse_transform(preds.cpu().numpy())
-        return predicted_labels
-    
-    def categorize_data(self, preprocessed_df):
-        description = [str(desc) for desc in preprocessed_df["Description"]]
-        target = [str(tg) for tg in preprocessed_df["Target Name"]]
-        amount = [str(amt) for amt in preprocessed_df["Amount"]]
-
-        text = []
-
-        for desc, tg, amt in zip(description, target, amount):
-            text.append(desc + " " + tg + " " + amt)
-
-        classes = []
-
-        for t in text:
-            classes.append(self.predict_category(t))
-
-        preprocessed_df["Category"] = classes
-
-        return preprocessed_df
+    def categorize_data(self, df):
+        feature_texts = []
+        for _, row in df.iterrows():
+            target = str(row.get('Target Name', '')).strip()
+            desc = self.clean_text(str(row.get('Description', '')))
+            feature_texts.append(f"{target} {desc}".strip() if target.lower() != 'nan' and target != '' else desc)
+        
+        embeddings = self.semantic_model.encode(feature_texts)
+        amounts = df['Amount'].values.reshape(-1, 1)
+        X = np.hstack((embeddings, amounts))
+        
+        preds = self.model.predict(X)
+        labels = self.label_enc.inverse_transform(preds)
+        
+        final_labels = []
+        for label, amt, text in zip(labels, df['Amount'], feature_texts):
+            txt_lower = text.lower()
+            
+            if amt > 0:
+                if label not in ["Transfers & Investments", "Other"]:
+                    final_labels.append("Income")
+                else:
+                    final_labels.append(label)
+            
+            elif amt < 0:
+                if any(k in txt_lower for k in ["tesco", "morrisons", "lidl", "asda", "sainsbury", "pret", "greggs"]):
+                    final_labels.append("Food & Dining")
+                elif any(k in txt_lower for k in ["uber", "trainline", "bee network", "stagecoach"]):
+                    final_labels.append("Transportation")
+                elif "lebara" in txt_lower:
+                    final_labels.append("Bills & Utilities")
+                elif label == "Income":
+                    final_labels.append("Shopping")
+                else:
+                    final_labels.append(label)
+            else:
+                final_labels.append(label)
+        
+        df["Category"] = final_labels
+        return df

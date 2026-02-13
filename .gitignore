@@ -1,6 +1,6 @@
 # Model artifacts
 saved_model/
-saved_tokenizer/
+saved_label_enc/
 checkpoints/
 outputs/
 
