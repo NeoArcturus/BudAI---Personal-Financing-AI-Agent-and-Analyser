@@ -3,6 +3,7 @@ saved_model/
 saved_label_enc/
 checkpoints/
 outputs/
+testing folder/
 
 # Torch / HF files
 *.pt
@@ -16,3 +17,4 @@ __pycache__/
 .venv/
 
 *.csv
+*.env

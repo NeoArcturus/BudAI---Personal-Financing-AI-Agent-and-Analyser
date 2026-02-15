@@ -18,7 +18,6 @@ class Preprocessor:
         ]
         self.label_enc.fit(self.standard_classes)
 
-        # Enhanced Category Anchors for better initial labeling
         self.category_hints = {
             "Food & Dining": ["supermarket", "grocery", "restaurant", "cafe", "coffee", "tesco", "sainsbury", "lidl", "morrisons", "asda", "aldi", "co-op", "greggs", "pret", "mcdonalds", "pizza", "burger", "dining"],
             "Bills & Utilities": ["mobile", "phone", "bill", "energy", "gas", "electric", "water", "internet", "broadband", "council tax", "utility", "lebara", "vodafone", "ee", "o2"],
@@ -27,7 +26,7 @@ class Preprocessor:
             "Health & Wellness": ["pharmacy", "doctor", "gym", "boots", "hospital", "wellness", "medicine"],
             "Shopping": ["amazon", "ebay", "clothing", "fashion", "electronics", "retail", "store", "mall", "shoes"],
             "Travel": ["hotel", "airbnb", "flight", "airline", "booking", "travel", "holiday", "staycation"],
-            "Transfers & Investments": ["transfer", "savings", "investment", "paypal", "revolut", "splitwise", "sent money", "received money"]
+            "Transfers & Investments": ["transfer", "savings", "investment", "paypal", "revolut", "splitwise", "sent money", "received money", "sent", "received"],
         }
 
         self.anchor_embeddings = {
