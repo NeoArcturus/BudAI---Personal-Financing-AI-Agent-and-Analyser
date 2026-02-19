@@ -6,10 +6,10 @@ import numpy as np
 
 
 class Preprocessor:
-    def __init__(self, data_file):
+    def __init__(self, dataframe):
         self.sentence_tf = SentenceTransformer(
             "sentence-transformers/all-MiniLM-L6-v2")
-        self.df = pd.read_csv(data_file)
+        self.df = dataframe
         self.label_enc = LabelEncoder()
         self.standard_classes = [
             "Income", "Bills & Utilities", "Food & Dining", "Shopping",

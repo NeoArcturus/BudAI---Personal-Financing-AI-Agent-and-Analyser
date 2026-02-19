@@ -13,35 +13,63 @@ class UserAccount:
             "Authorization": f"Bearer {self.access_token}",
             "accept": "application/json"
         }
-        self.account_id = ""
+        # Try to load existing ID from .env, otherwise start empty
+        self.account_id = os.getenv("TRUELAYER_ACCOUNT_ID", "")
 
     def get_user_account_details(self):
+        """Fetches accounts and identifies the primary transaction account."""
         try:
             response = requests.get(self.base_url, headers=self.headers)
-            all_accounts = response.json()
+            if response.status_code != 200:
+                print(f"Error {response.status_code}: {response.text}")
+                return None
 
-            for account in all_accounts.get("results", []):
+            all_accounts = response.json()
+            results = all_accounts.get("results", [])
+
+            for account in results:
+                # Logic: Find the first current/transaction account
                 if account.get("account_type") == "TRANSACTION":
                     self.account_id = account.get("account_id")
-                    break
+                    # Persist it to .env so we don't have to search next time
+                    dotenv.set_key(".env", "TRUELAYER_ACCOUNT_ID", self.account_id)
+                    print(f"Found and saved Account ID: {self.account_id}")
+                    return self.account_id
+            
+            # Fallback: if no 'TRANSACTION' type found, take the first available
+            if results:
+                self.account_id = results[0].get("account_id")
+                return self.account_id
+
         except Exception as e:
             print(f"Error fetching account details: {e}")
+        return None
 
     def all_transactions(self, from_date, to_date):
+        """Fetches transactions, automatically finding the account_id if missing."""
+        
+        # --- FIX FOR POINT #3: Auto-Discovery ---
         if not self.account_id:
-            print("No transaction account found.")
-            return
+            print("Account ID not set. Searching for a valid transaction account...")
+            if not self.get_user_account_details():
+                print("Aborting: Could not find a valid account ID.")
+                return None
 
-        transactions_url = f"{self.base_url}/{self.account_id}/transactions/"
+        # API Call Logic
+        transactions_url = f"{self.base_url}/{self.account_id}/transactions"
         try:
             params = {"to": to_date, "from": from_date}
             response = requests.get(transactions_url, headers=self.headers, params=params)
-            transactions = response.json()
-            if transactions.get("results"):
-                df = pd.DataFrame(transactions["results"])
-                df.to_csv("transactions.csv", index=False)
-                print("Transactions saved to transactions.csv")
+            
+            if response.status_code == 200:
+                transactions = response.json()
+                results = transactions.get("results", [])
+                if results:
+                    return pd.DataFrame(results)
+                else:
+                    print(f"No transactions found for range {from_date} to {to_date}")
             else:
-                print("No transactions found for the given date range.")
+                print(f"Failed to fetch transactions: {response.status_code} - {response.text}")
+                
         except Exception as e:
             print(f"Error fetching transactions: {e}")
