@@ -11,18 +11,18 @@ from categorizer.categorizer import Categorizer
 from categorizer.preprocessor import Preprocessor
 from diskcache import Cache
 from tqdm import tqdm
+from dotenv import load_dotenv
 
 
 class FinancialAgent:
     def __init__(self, model_dir="saved_model"):
         self.model_dir = model_dir
         self.local_st_path = os.path.join(model_dir, "st_model_local")
-        self.cache = Cache('../agent_cache')
-        self.vector_db = chromadb.PersistentClient(path="../agent_vector_db")
+        self.cache = Cache('./agent_cache')
+        self.vector_db = chromadb.PersistentClient(path="./agent_vector_db")
         self.memory = self.vector_db.get_or_create_collection(
             name="fin_memory")
         self.token_gen = AccessTokenGenerator()
-        self.user_acc = UserAccount()
         self.categorizer = Categorizer()
         self._st_model = None
 
@@ -48,7 +48,11 @@ class FinancialAgent:
     def execute_cycle(self, start_date, end_date):
         print("Starting financial agent cycle...")
         print("Authenticating with Truelayer...")
+
         self._authenticate()
+
+        load_dotenv(override=True)
+        self.user_acc = UserAccount()
 
         raw_df = self.user_acc.all_transactions(start_date, end_date)
         if raw_df is None or raw_df.empty:
@@ -62,9 +66,6 @@ class FinancialAgent:
         print("Generating embeddings and categorizing transactions...")
         final_df = self.categorizer.categorize_data(clean_df)
         final_df.to_csv("final_categorized_transactions.csv", index=False)
-
-        print("Training categorizer model and categorizing data...")
-        print("Loading categorizer model and categorizing transactions...")
 
         print("Generating embeddings for future forecasting...")
         descriptions = final_df['Description'].tolist()
@@ -102,4 +103,4 @@ class FinancialAgent:
 
 if __name__ == "__main__":
     agent = FinancialAgent()
-    agent.execute_cycle("2022-10-13", "2026-02-01")
+    agent.execute_cycle("2025-01-01", "2026-01-01")
