@@ -1,177 +1,68 @@
 # BudAI: Personal Financing AI Agent and Analyser
 
-BudAI is an autonomous financial intelligence system designed to standardize, categorize, and forecast personal expenditures. By bridging the gap between high-performance engineering (C++) and advanced machine learning (Python), BudAI provides users with a unified financial view and proactive, behaviour-aware recommendations.
+BudAI is an autonomous financial intelligence system designed to standardize, categorize, and forecast personal expenditures. By bridging high-performance C++ engineering with advanced Python machine learning, BudAI provides a unified, proactive financial view.
+
+The system is evolving from a single script into a **Multi-Agent Ecosystem** where specialized agents collaborate via shared memory to provide deep financial insights.
 
 ---
 
-## Core Architecture
+## Agentic Architecture
 
-The system utilizes a hybrid neural-symbolic approach to manage personal finances:
+BudAI operates through a decentralized constellation of autonomous agents, each with a defined role and its own `main.py` entry point. They interact through a **Shared Memory Substrate** comprising a Vector Database (ChromaDB) for long-term semantic history and a Disk Cache for high-speed local state.
 
-### Neutralization
+### Current & Future Agents
 
-A hardware-accelerated Preprocessor that standardizes messy bank statements from multiple institutions using a hybrid Sentence Transformer (MiniLM and MPNet).
-
-### Intelligence
-
-A transaction classifier combining semantic embeddings with XGBoost to achieve high-precision categorization.
-
-### Forecasting
-
-A high-performance C++ engine that models user habits via the Ornstein-Uhlenbeck (OU) process and market volatility via Geometric Brownian Motion (GBM).
-
-### Agentic AI
-
-A RAG-enabled (Retrieval-Augmented Generation) interface that allows users to query their financial data and receive personalized recommendations.
+- **Categorization Agent (Python - _Current_):** Acts as the sensory organ. It fetches raw bank data via TrueLayer, standardizes it, and performs rule-based categorization. It generates embeddings **post-categorization** to index "Ground Truth" into the Vector DB.
+- **Forecaster Agent (C++/Python - _In Development_):** The mathematical engine. It uses C++ to run 5,000+ stochastic simulations (Ornstein-Uhlenbeck and GBM) to predict habit-based expenditure and commodity-linked risks.
+- **News Reader Agent (Python - _Planned_):** Scans geo-political financial news to generate a "Sentiment Vector." This enhances commodity forecasting by adjusting for market volatility based on real-world events.
+- **Analyser Agent (Python - _Planned_):** The visualization layer. It synthesizes historical data from the Perception Agent and projections from the Forecaster to display comprehensive risk and gap analyses.
+- **User Input Agent (LLM-based - _Planned_):** A natural language interface (Voice/Text) that queries the shared Vector DB to answer complex user questions like, _"Can I buy this based on my current forecast?"_
 
 ---
 
-## Key Features
+## Directory Structure
 
-### Hybrid Transaction Classification
+To maintain modularity, each agent resides in its own top-level directory as a peer service.
 
-BudAI uses a multi-stage NLP pipeline to ensure speed and accuracy.
-
-The system utilizes:
-
-- `all-MiniLM-L12-v2` for rapid column standardization
-- `all-mpnet-base-v2` for deep semantic classification of transaction descriptions
-
-It features hardware-agnostic acceleration for:
-
-- Apple Silicon (MPS)
-- NVIDIA GPUs (CUDA)
-
----
-
-### Stochastic Expenditure Forecasting
-
-Unlike traditional budget trackers, BudAI implements a dual-model forecasting layer in C++.
-
-#### Ornstein-Uhlenbeck Model
-
-Calibrates to user spending habits by calculating:
-
-- Mean reversion speed
-- Habitual mean spending levels
-
-#### Geometric Brownian Motion
-
-Simulates global commodity paths (e.g., crude oil) to predict the impact of external inflation on user expenses.
-
----
-
-### Commodity-Linked Hedging
-
-The system identifies the **Beta correlation** between user categories (like Transportation) and commodity prices.
-
-It suggests **Hedged Paths**, such as:
-
-- Pre-buying
-- Bulk purchasing
-
-These recommendations help minimize expenditure when market forecasts indicate price increases.
-
----
-
-### Agentic RAG Interface
-
-Forecasted paths, behavioral patterns, and market sensitivities are stored in a vector database.
-
-The AI agent uses Retrieval-Augmented Generation (RAG) to provide grounded responses to queries like:
-
-> "How can I optimize my spending for next month?"
-
----
-
-## Technical Stack
-
-### Machine Learning
-
-- Python
-- PyTorch
-- Sentence-Transformers
-- XGBoost
-- Scikit-learn
-
-### Performance Engineering
-
-- C++ (SDE Simulation Engine)
-
-### Data Processing
-
-- Pandas
-- NumPy
-- Joblib
-
-### Hardware Acceleration
-
-- MPS (Apple Silicon)
-- CUDA (NVIDIA)
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.9+
-- C++ compiler (g++ or clang)
-- PyTorch with MPS or CUDA support
-
----
-
-## Installation
-
-Clone the repository:
-
-```bash
-git clone <repo-url>
-cd budai
+```text
+BudAI/
+├── agent_vector_db/              # Shared Long-term Memory (ChromaDB)
+├── agent_cache/                  # Shared Short-term Memory (DiskCache)
+├── Categorization Agent/         # Entry: main.py (API fetch & Categorization)
+├── Forecaster Agent/             # Entry: main.py (C++ SDE Simulation Engine)
+├── Analyser Agent/               # Entry: main.py (UI & Dashboard)
+├── Market Agent/                 # Entry: main.py (Commodity Market Reader)
+└── News_Reader Agent/            # Entry: main.py (Sentiment & Geo-Politics)
 ```
 
-Install Python dependencies:
+## Key Technical Features
 
-```bash
-pip install -r requirements.txt
-```
+### Semantic Memory Substrate
 
-Compile the C++ forecasting engine:
+Unlike standard trackers, BudAI uses **Vector Similarity** to preserve continuity across sessions.
 
-```bash
-g++ -shared -fPIC -O3 -o forecasting/libforecaster.so forecasting/Forecaster.cpp
-```
+- **Substrate:** ChromaDB for semantic search and reliable shared state.
+- **Interface:** Standardized Python `Preprocessor` ensuring no `NaN` data reaches the "brain".
 
----
+### Stochastic Habit Modeling (C++) (_Under development_)
 
-## Usage
+A high-performance C++ engine models user habits via the **Ornstein-Uhlenbeck (OU) process**, calculating:
 
-### Training
+- **Mean reversion speed**: How quickly you return to average spending levels.
+- **Habitual mean**: Your baseline "equilibrium" expenditure.
 
-Train the categorizer using historical financial data:
+### Commodity-Linked Hedging (_Under development_)
 
-```bash
-python main.py --train --file your_bank_statement.csv
-```
+BudAI identifies **Beta correlation** between user categories (e.g., Transportation) and global commodity paths (e.g., Crude Oil) simulated via **Geometric Brownian Motion (GBM)**.
 
----
+### Hardware Acceleration & ML Stack
 
-### Forecasting and Analysis
+- **Transformers:** Utilizes `Sentence-Transformers` for post-categorization embeddings.
+- **Acceleration:** Hardware-agnostic support for Apple Silicon (MPS) and NVIDIA GPUs (CUDA).
 
-Run the autonomous analyzer:
+### Technical Stack
 
-```bash
-python main.py --file your_bank_statement.csv
-```
-
-The system will:
-
-- Categorize transactions
-- Run 5,000+ stochastic simulations per category
-- Prepare the Agentic AI for natural language queries
-
----
-
-## Vision
-
-BudAI aims to evolve from a financial tracker into a **personal financial intelligence system** capable of understanding behavioral spending patterns, market dynamics, and optimization strategies in a unified framework.
+- Languages: Python 3.9+, C++ (Standard 17+)
+- AI/ML: PyTorch, Sentence-Transformers, XGBoost, Scikit-learn
+- Memory/RAG: ChromaDB, DiskCache
+- Acceleration: Apple Silicon (MPS), NVIDIA GPUs (CUDA)
