@@ -1,9 +1,7 @@
 # Model artifacts
 saved_model/
 saved_label_enc/
-checkpoints/
-outputs/
-testing folder/
+agent_cache/
 
 # Torch / HF files
 *.pt
@@ -18,3 +16,4 @@ __pycache__/
 
 *.csv
 *.env
+*.db
