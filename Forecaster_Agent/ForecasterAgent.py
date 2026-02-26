@@ -6,8 +6,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sqlite3
 from dotenv import load_dotenv
-from Categorizer_Agent.api_integrator.access_token_generator import AccessTokenGenerator
-from Categorizer_Agent.api_integrator.get_account_detail import UserAccount
+from api_integrator.access_token_generator import AccessTokenGenerator
+from api_integrator.get_account_detail import UserAccount
 
 
 class ForecasterAgent:
@@ -66,49 +66,70 @@ class ForecasterAgent:
             sigma = 0.05
         return current_balance, mu, sigma
 
-    def run_cpp_simulation(self, S0, mu, sigma, days=30, paths=5000):
+    def run_cpp_simulation(self, account_id, S0, mu, sigma, days=30, paths=5000):
         current_dir = os.path.dirname(os.path.abspath(__file__))
         cpp_file = os.path.join(current_dir, "forecaster.cpp")
         executable = os.path.join(current_dir, "forecaster")
         subprocess.run(["g++", "-O3", "-o", executable, cpp_file], check=True)
         subprocess.run([executable, str(S0), str(mu), str(sigma), str(
-            days), str(paths)], cwd=current_dir, check=True)
+            days), str(paths), str(account_id)], cwd=current_dir, check=True)
 
-    def analyze_and_plot(self, risk_threshold=100.0):
+    def analyze_and_plot(self, S0, threshold_pct=0.2):
+        risk_threshold = S0 * threshold_pct
         current_dir = os.path.dirname(os.path.abspath(__file__))
         csv_path = os.path.join(current_dir, "all_paths.csv")
         plot_path = os.path.join(
-            current_dir, "monte_carlo_student_forecast.png")
+            current_dir, "monte_carlo_forecast_paths.png")
 
         if not os.path.exists(csv_path):
             return
 
         paths_df = pd.read_csv(csv_path, header=None)
 
-        plt.figure(figsize=(20, 10))
-        for i in range(len(paths_df)):
-            plt.plot(paths_df.iloc[i], color='blue')
+        narratives = [
+            {"label": "Path 1: Careless Scenario (5th Percentile)",
+             "color": "#e74c3c", "ls": "-"},
+            {"label": "Path 2: Expected Mean Trajectory",
+                "color": "#7f8c8d", "ls": "--"},
+            {"label": "Path 3: Optimal Budgeting (Stable)",
+             "color": "#27ae60", "ls": "-"}
+        ]
 
-        mean_path = paths_df.mean(axis=0)
-        plt.plot(mean_path, color='red', linewidth=3,
-                 label='Mean Forecasted Balance')
-        plt.axhline(y=risk_threshold, color='red', linestyle='--', alpha=0.5)
+        plt.figure(figsize=(15, 8))
+
+        for i, meta in enumerate(narratives):
+            if i < len(paths_df):
+                plt.plot(
+                    paths_df.iloc[i],
+                    color=meta["color"],
+                    label=meta["label"],
+                    linewidth=3 if i != 1 else 2,
+                    linestyle=meta["ls"]
+                )
+
+        plt.axhline(y=risk_threshold, color='black', linestyle=':',
+                    alpha=0.6, label=f'Risk Threshold (£{risk_threshold:.2f})')
+
+        plt.title(
+            f'BudAI Narrative Forecast (Risk at {threshold_pct*100}% of Balance)', fontsize=16, pad=20)
+        plt.xlabel('Days into the Future', fontsize=12)
+        plt.ylabel('Projected Balance (£)', fontsize=12)
 
         max_val = paths_df.max().max()
-        plt.ylim(0, max(max_val * 1.1, risk_threshold * 1.1))
+        plt.ylim(0, max(max_val * 1.2, risk_threshold * 1.5))
 
-        plt.title('Monte Carlo GBM Forecast')
-        plt.xlabel('Days into the Future')
-        plt.ylabel('Projected Balance (£)')
-        plt.grid(True, alpha=0.3)
-        plt.legend()
+        plt.grid(True, which='both', linestyle='--', alpha=0.4)
+        plt.legend(loc='upper left', frameon=True, shadow=True)
         plt.tight_layout()
+
         plt.savefig(plot_path, dpi=300)
+        plt.close()
 
 
 if __name__ == "__main__":
     agent = ForecasterAgent()
     real_balance = agent.fetch_live_balance()
-    S0, mu, sigma = agent.fetch_and_calculate_parameters(real_balance, 60)
-    agent.run_cpp_simulation(S0, mu, sigma, days=60, paths=1000)
-    agent.analyze_and_plot(risk_threshold=100.0)
+    S0, mu, sigma = agent.fetch_and_calculate_parameters(real_balance, 120)
+    agent.run_cpp_simulation(agent.user_acc.account_id,
+                             S0, mu, sigma, days=60, paths=1000)
+    agent.analyze_and_plot(S0, threshold_pct=0.5)
