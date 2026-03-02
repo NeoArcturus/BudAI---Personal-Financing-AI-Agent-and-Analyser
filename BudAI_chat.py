@@ -4,9 +4,6 @@ from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_ollama import ChatOllama
 from tools import generate_financial_forecast, classify_financial_data, find_total_spent_for_given_category
 import os
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
 llm = ChatOllama(
@@ -19,19 +16,18 @@ tools = [generate_financial_forecast, classify_financial_data,
          find_total_spent_for_given_category]
 
 prompt = ChatPromptTemplate.from_messages([
-    ("system", """You are BudAI, a friendly, empathetic, and highly capable personal financial coach. 
+    ("system", """You are BudAI, a friendly, empathetic, and highly capable personal financing tool (Do not mention you are a tool or introduce yourself, just reply back naturally.). 
 
     YOUR CONVERSATIONAL RULES:
     1. Validate the User: Always start by warmly acknowledging the user's request. Make them feel heard and supported.
-    2. Conversational Delivery: Do not just spit out raw data. Weave the numbers into natural, easy-to-read sentences. 
+    2. Conversational Delivery: Do not just spit out raw data. Weave the numbers into natural, easy-to-read sentences. Do not use emojis, no one likes them.
     3. The "Sandwich" Method: 
        - Start with a supportive opening.
        - Present the tool's data clearly (use light bullet points if there's a lot of data, but keep it conversational).
        - End with an encouraging closing statement or a gentle, actionable piece of advice.
     4. Tone: Keep it optimistic and professional. You are talking to a friend who asked for financial help.
     5. If a Critical Tool error occurs, do not disclose that to the user. Just mention "There's an internal issue. Thank you for being patient.
-    6. While forecasting, do not include mathematical terms like percentile etc., use the output given by the tool and describe it based on the phrase given for it. 
-        For example, if it says "careless", describe the path's outcome for being careless and so forth."
+    6. While explaining, do not hallucinate. Use the output returned by the tools and use the exact wordings returned."
     
     CRITICAL: When the user asks for a forecast or to categorize data, you MUST use your tools first. Do not guess. Do not hallucinate."""),
     MessagesPlaceholder(variable_name="chat_history"),

@@ -1,9 +1,9 @@
 import os
-import xgboost as xgb
 import joblib
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import HistGradientBoostingClassifier
 from tqdm import tqdm
 
 
@@ -11,8 +11,9 @@ class CategorizerTrainer:
     def __init__(self, df, embeddings, model_dir, enc_dir):
         self.df = df
         self.embeddings = embeddings
-        self.model = xgb.XGBClassifier(
-            n_estimators=300, objective='multi:softprob', n_jobs=1)
+        # Replace XGBoost with Scikit-Learn's GBM
+        self.model = HistGradientBoostingClassifier(
+            max_iter=300, random_state=42)
         self.model_dir = model_dir
         self.enc_dir = enc_dir
         os.makedirs(self.model_dir, exist_ok=True)
@@ -25,19 +26,23 @@ class CategorizerTrainer:
             le = LabelEncoder()
             y = le.fit_transform(self.df['Category'])
             pbar.update(1)
+
             X = np.hstack(
                 (self.embeddings, self.df['Amount'].values.reshape(-1, 1).astype(np.float32)))
             pbar.update(1)
+
             unique_labels, counts = np.unique(y, return_counts=True)
             if len(unique_labels) > 1 and np.all(counts >= 2):
                 X_train, X_val, y_train, y_val = train_test_split(
                     X, y, test_size=0.2, stratify=y, random_state=42)
             else:
-                X_train, X_val, y_train, y_val = X, X, y, y
+                X_train, y_train = X, y
             pbar.update(1)
-            self.model.fit(X_train, y_train, eval_set=[
-                           (X_val, y_val)], verbose=False)
-            self.model.save_model(os.path.join(
-                self.model_dir, "xgb_model.json"))
+
+            self.model.fit(X_train, y_train)
+
+            # Save using joblib instead of xgb's custom saver
+            joblib.dump(self.model, os.path.join(
+                self.model_dir, "gbm_model.joblib"))
             joblib.dump(le, os.path.join(self.enc_dir, "label_encoder.joblib"))
             pbar.update(1)

@@ -46,35 +46,39 @@ class CategorizerAgent:
             self.token_gen.app.run(port=8080)
 
     def execute_cycle(self, start_date, end_date):
-        self._authenticate()
-        load_dotenv(override=True)
-        self.user_acc = UserAccount()
+        try:
+            self._authenticate()
+            load_dotenv(override=True)
+            self.user_acc = UserAccount()
 
-        raw_df = self.user_acc.all_transactions(start_date, end_date)
-        if raw_df is None or raw_df.empty:
-            return None
+            raw_df = self.user_acc.all_transactions(start_date, end_date)
+            if raw_df is None or raw_df.empty:
+                return None
 
-        proc = Preprocessor(raw_df, self.local_st_path)
+            proc = Preprocessor(raw_df, self.local_st_path)
 
-        xgb_model_path = os.path.join(self.model_dir, "xgb_model.json")
-        enc_path = os.path.join(self.enc_dir, "label_encoder.joblib")
+            xgb_model_path = os.path.join(
+                self.model_dir, "gbm_model.joblib")
+            enc_path = os.path.join(self.enc_dir, "label_encoder.joblib")
 
-        if not (os.path.exists(xgb_model_path) and os.path.exists(enc_path)):
-            training_df, embeddings = proc.preprocess_for_training()
-            trainer = CategorizerTrainer(
-                training_df, embeddings, self.model_dir, self.enc_dir)
-            trainer.train()
-            clean_df = training_df.drop(columns=['Category'])
-        else:
-            clean_df, embeddings = proc.preprocess_for_inference()
+            if not (os.path.exists(xgb_model_path) and os.path.exists(enc_path)):
+                training_df, embeddings = proc.preprocess_for_training()
+                trainer = CategorizerTrainer(
+                    training_df, embeddings, self.model_dir, self.enc_dir)
+                trainer.train()
+                clean_df = training_df.drop(columns=['Category'])
+            else:
+                clean_df, embeddings = proc.preprocess_for_inference()
 
-        final_df = self.categorizer.predict(
-            clean_df, embeddings, xgb_model_path, enc_path)
+            final_df = self.categorizer.predict(
+                clean_df, embeddings, xgb_model_path, enc_path)
 
-        csv_path = os.path.join(self.base_dir, "categorized_data.csv")
-        final_df.to_csv(csv_path, index=False)
-        self._update_sql_memory(final_df, embeddings)
-        return final_df
+            csv_path = os.path.join(self.base_dir, "categorized_data.csv")
+            final_df.to_csv(csv_path, index=False)
+            self._update_sql_memory(final_df, embeddings)
+            return final_df
+        except Exception as e:
+            print(f"Exception occured: {str(e)}")
 
     def _update_sql_memory(self, df, embs):
         with sqlite3.connect(self.db_path) as conn:
