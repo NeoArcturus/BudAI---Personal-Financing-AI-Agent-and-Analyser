@@ -1,85 +1,78 @@
 # BudAI: Personal Financing AI Agent and Analyser
 
-BudAI is an autonomous financial intelligence system designed to standardize, categorize, and forecast personal expenditures. By bridging high-performance C++ engineering with advanced Python machine learning, BudAI provides a unified, proactive financial view.
+BudAI is an autonomous, privacy-first financial intelligence system designed to standardize, categorize, and forecast personal expenditures. By bridging high-performance C++ engineering with advanced Python machine learning and local Large Language Models (LLMs), BudAI provides a unified, proactive financial view.
 
-The system is evolving from a single script into a **Multi-Agent Ecosystem** where specialized agents collaborate via shared memory to provide deep financial insights.
+The system operates as a **Hybrid Agentic Ecosystem**, utilizing a conversational AI orchestrator to trigger highly specialized, deterministic background engines.
 
 ---
 
 ## Agentic Architecture
 
-BudAI operates through a decentralized constellation of autonomous agents, each with a defined role and its own `main.py` entry point. They interact through a **Shared Memory Substrate** comprising a Vector Database (ChromaDB) for long-term semantic history and a Disk Cache for high-speed local state.
+BudAI operates through a central conversational router that delegates complex financial tasks to specialized tools, bypassing the limitations and latency of pure LLM math and logic.
 
-### Current & Future Agents
+### Core Components
 
-- **Categorization Agent (Python - _Current_):** Acts as the sensory organ. It fetches raw bank data via TrueLayer, standardizes it, and performs rule-based categorization. It generates embeddings **post-categorization** to index "Ground Truth" into the Vector DB.
-- **Forecaster Agent (C++/Python - _In Development_):** The mathematical engine. It uses C++ to run 5,000+ stochastic simulations (Ornstein-Uhlenbeck and GBM) to predict habit-based expenditure and commodity-linked risks.
-- **News Reader Agent (Python - _Planned_):** Scans geo-political financial news to generate a "Sentiment Vector." This enhances commodity forecasting by adjusting for market volatility based on real-world events.
-- **Analyser Agent (Python - _Planned_):** The visualization layer. It synthesizes historical data from the Perception Agent and projections from the Forecaster to display comprehensive risk and gap analyses.
-- **User Input Agent (LLM-based - _Planned_):** A natural language interface (Voice/Text) that queries the shared Vector DB to answer complex user questions like, _"Can I buy this based on my current forecast?"_
+- **Orchestrator Agent (BudAI Chat):** Powered by LangChain's `AgentExecutor` and running locally via Ollama (Qwen-3). This agent acts as a financial coach, interpreting user intent, routing tasks to the correct sub-agents, and synthesizing the raw data into conversational, empathetic advice using the "Sandwich Method."
+- **Categorization Agent (Python):** Acts as the sensory organ. It fetches raw bank data (via API integrations), standardizes it, and performs a two-phase categorization process. It utilizes a rule-based regex fallback to bootstrap a local XGBoost classifier, mapping semantic transaction embeddings to financial categories.
+- **Forecaster Agent (C++/Python):** The mathematical engine. It calculates drift and volatility from real balances and uses a custom C++ engine to run Monte Carlo simulations. It generates thousands of stochastic paths to predict "Careless", "Expected", and "Optimal" future account balances.
 
 ---
 
 ## Directory Structure
 
-To maintain modularity, each agent resides in its own top-level directory as a peer service.
+The project maintains strict modularity, separating API integration, machine learning environments, and specific agent capabilities.
 
 ```text
-BudAI/
-├── agent_vector_db/              # Shared Long-term Memory (ChromaDB)
+BudAI---Personal-Financing-AI-Agent-and-Analyser/
 ├── agent_cache/                  # Shared Short-term Memory (DiskCache)
-├── Categorization Agent/         # Entry: main.py (API fetch & Categorization)
-├── Forecaster Agent/             # Entry: main.py (C++ SDE Simulation Engine)
-├── Analyser Agent/               # Entry: main.py (UI & Dashboard)
-├── Market Agent/                 # Entry: main.py (Commodity Market Reader)
-└── News_Reader Agent/            # Entry: main.py (Sentiment & Geo-Politics)
+├── api_integrator/               # Auth token generation and TrueLayer data fetching
+├── Categorizer_Agent/            # Entry: CategorizerAgent.py
+│   ├── categorizer/              # Preprocessor and Regex Rule-based engine
+│   ├── training/                 # XGBoost model trainer
+│   └── saved_model/              # Stored ST embeddings and XGBoost JSON weights
+├── Forecaster_Agent/             # Entry: ForecasterAgent.py
+│   ├── forecaster.cpp            # High-performance Monte Carlo SDE Simulation Engine
+│   └── all_paths.csv             # Temporary output of simulation paths
+├── budai_memory.db               # SQLite database storing transactions and vector embeddings
+└── BudAI_chat.py                 # Main Entry Point: LangChain LLM Orchestrator
 ```
 
 ## Key Technical Features
 
-### Semantic Memory Substrate
+### Hybrid Local AI Orchestration
 
-Unlike standard trackers, BudAI uses **Vector Similarity** to preserve continuity across sessions.
-
-- **Substrate:** ChromaDB for semantic search and reliable shared state.
-- **Interface:** Standardized Python `Preprocessor` ensuring no `NaN` data reaches the "brain".
+BudAI is entirely privacy-first. It relies on a local LLM (like _Qwen-3:8b_) for natural language processing and task routing, ensuring that sensitive financial questions and data are never sent to external providers like OpenAI.
 
 ### The Hybrid XGBoost Classifier
 
 BudAI moves beyond simple keyword matching by employing a hybrid NLP + Gradient Boosting classification pipeline to achieve high-precision transaction labeling.
 
-- **Algorithm:** XGBoost Classifier (multi:softprob objective for multi-class probability scoring).
+- **Algorithm**: XGBoost Classifier (multi:softprob objective for multi-class probability scoring).
+- **Zero-Shot Bootstrapping**: On the first run, a deterministic regex rule-engine labels the data to bootstrap the ML model, allowing it to generate artificial training targets without manual intervention.
+- **Feature Engineering**: The model does not train on raw text. Instead, the feature matrix (X) is formed by concatenating:
+  1. Semantic Embeddings: High-dimensional dense vectors generated by Sentence-Transformers (all-MiniLM-L6-v2).
+  2. Transaction Amount: The numerical value (Amount), ensuring the model understands the magnitude and direction (spend vs. income) of the transaction.
 
-- **Hyperparameters:** Tuned for financial textual data with n_estimators=300, learning_rate=0.03, and max_depth=6 to prevent overfitting on sparse transaction descriptions.
-  1. **Feature Engineering:** The model does not train on raw text. Instead, the feature matrix (X) is formed by concatenating:
+- **Rare Class Oversampling**: The training loop automatically detects underrepresented categories (e.g., < 2 instances) and dynamically handles them to stabilize the LabelEncoder and prevent dead classes during train_test_split.
 
-  2. **Semantic Embeddings:** High-dimensional vectors generated by all-MiniLM-L6-v2.
+### Stochastic Habit Modeling (C++)
 
-  3. **Transaction Amount:** The numerical value (Amount), ensuring the model understands the magnitude and direction (spend vs. refund) of the transaction.
+To overcome the Python Global Interpreter Lock (GIL) and process heavy mathematical computations instantly, BudAI offloads forecasting to a compiled C++ engine.
 
-  4. **Rare Class Oversampling:** The training loop automatically detects underrepresented categories (e.g., < 2 instances) and dynamically duplicates them to stabilize the LabelEncoder and prevent dead classes.
+- Calculates historical drift ($\mu$) and volatility ($\sigma$) from real banking data.
+- Runs thousands of parallel Monte Carlo simulation paths over user-defined timeframes (e.g., 14, 30, or 60 days).
+- Extracts probability bands to return highly accurate "Careless", "Expected", and "Optimal" balance trajectories.
 
-- **Post-Prediction Routing:** After XGBoost outputs a prediction, a deterministic rule-engine intercepts the output to enforce logical bounds (e.g., preventing a positive transaction from being labeled as "Food & Dining" rather than "Income" or "Refund").
+### Hardware Acceleration & Memory Stack
 
-### Stochastic Habit Modeling (C++) (_Under development_)
-
-A high-performance C++ engine models user habits via the **Ornstein-Uhlenbeck (OU) process**, calculating:
-
-- **Mean reversion speed**: How quickly you return to average spending levels.
-- **Habitual mean**: Your baseline "equilibrium" expenditure.
-
-### Commodity-Linked Hedging (_Under development_)
-
-BudAI identifies **Beta correlation** between user categories (e.g., Transportation) and global commodity paths (e.g., Crude Oil) simulated via **Geometric Brownian Motion (GBM)**.
-
-### Hardware Acceleration & ML Stack
-
-- **Transformers:** Utilizes `Sentence-Transformers` for post-categorization embeddings.
-- **Acceleration:** Hardware-agnostic support for Apple Silicon (MPS) and NVIDIA GPUs (CUDA).
+- Memory/State: Uses sqlite3 to persist transaction history alongside BLOB-converted semantic vector embeddings, and diskcache for rapid, short-term agent state management.
+- Acceleration: Hardware-agnostic support for Apple Silicon (MPS) and NVIDIA GPUs (CUDA) for lightning-fast transformer encoding.
 
 ### Technical Stack
 
+```
 - Languages: Python 3.9+, C++ (Standard 17+)
 - AI/ML: PyTorch, Sentence-Transformers, XGBoost, Scikit-learn
-- Memory/RAG: ChromaDB, DiskCache
-- Acceleration: Apple Silicon (MPS), NVIDIA GPUs (CUDA)
+- Orchestration: LangChain, Ollama (Local LLMs)
+- Data & Storage: Pandas, SQLite, DiskCache
+```

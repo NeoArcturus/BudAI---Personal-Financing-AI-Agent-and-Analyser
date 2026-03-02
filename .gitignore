@@ -1,15 +1,12 @@
-# Model artifacts
 saved_model/
 saved_label_enc/
 agent_cache/
 
-# Torch / HF files
 *.pt
 *.pth
 *.bin
 *.safetensors
 
-# Python
 __pycache__/
 *.pyc
 .venv/

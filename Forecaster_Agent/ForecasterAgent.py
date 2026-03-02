@@ -1,6 +1,5 @@
 import os
 import webbrowser
-import subprocess
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,6 +7,7 @@ import sqlite3
 from dotenv import load_dotenv
 from api_integrator.access_token_generator import AccessTokenGenerator
 from api_integrator.get_account_detail import UserAccount
+from Forecaster_Agent.mathematics.mathematics import run_hybrid_engine
 
 
 class ForecasterAgent:
@@ -66,25 +66,36 @@ class ForecasterAgent:
             sigma = 0.05
         return current_balance, mu, sigma
 
-    def run_cpp_simulation(self, account_id, S0, mu, sigma, days=30, paths=5000):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        cpp_file = os.path.join(current_dir, "forecaster.cpp")
-        executable = os.path.join(current_dir, "forecaster")
-        subprocess.run(["g++", "-O3", "-o", executable, cpp_file], check=True)
-        subprocess.run([executable, str(S0), str(mu), str(sigma), str(
-            days), str(paths), str(account_id)], cwd=current_dir, check=True)
+    def run_hybrid_simulation(self, account_id, S0, mu, days=30, paths=50000):
+        csv_path = run_hybrid_engine(S0, mu, days, paths, str(account_id))
+        return csv_path
 
-    def analyze_and_plot(self, S0, threshold_pct=0.2):
+    def analyze_and_plot(self, csv_path, S0, threshold_pct=0.2):
         risk_threshold = S0 * threshold_pct
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        csv_path = os.path.join(current_dir, "all_paths.csv")
-        plot_path = os.path.join(
-            current_dir, "monte_carlo_forecast_paths.png")
+        plot_path = os.path.join(current_dir, "monte_carlo_forecast_paths.png")
 
         if not os.path.exists(csv_path):
+            print("Error: Simulation CSV not found.")
             return
 
+        print("Analyzing simulated paths and generating narratives...")
         paths_df = pd.read_csv(csv_path, header=None)
+
+        if len(paths_df) > 10:
+            final_balances = paths_df.iloc[:, -1]
+
+            p5_val = final_balances.quantile(0.05, interpolation='nearest')
+            path1_idx = (final_balances - p5_val).abs().idxmin()
+
+            p95_val = final_balances.quantile(0.95, interpolation='nearest')
+            path3_idx = (final_balances - p95_val).abs().idxmin()
+
+            path1 = paths_df.iloc[path1_idx]
+            path2 = paths_df.mean(axis=0)
+            path3 = paths_df.iloc[path3_idx]
+
+            paths_df = pd.DataFrame([path1, path2, path3])
 
         narratives = [
             {"label": "Path 1: Careless Scenario (5th Percentile)",
@@ -124,12 +135,21 @@ class ForecasterAgent:
 
         plt.savefig(plot_path, dpi=300)
         plt.close()
+        print(f"Plot saved successfully to {plot_path}")
 
 
 if __name__ == "__main__":
     agent = ForecasterAgent()
     real_balance = agent.fetch_live_balance()
+
     S0, mu, sigma = agent.fetch_and_calculate_parameters(real_balance, 120)
-    agent.run_cpp_simulation(agent.user_acc.account_id,
-                             S0, mu, sigma, days=60, paths=1000)
-    agent.analyze_and_plot(S0, threshold_pct=0.5)
+
+    output_csv = agent.run_hybrid_simulation(
+        account_id=agent.user_acc.account_id,
+        S0=S0,
+        mu=mu,
+        days=60,
+        paths=50000
+    )
+
+    agent.analyze_and_plot(output_csv, S0, threshold_pct=0.5)
