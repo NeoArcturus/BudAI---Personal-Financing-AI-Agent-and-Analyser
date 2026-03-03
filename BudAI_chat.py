@@ -51,7 +51,7 @@ agent_executor = AgentExecutor(
 def main():
     os.system('cls' if os.name == 'nt' else 'clear')
     print("==================================================")
-    print("BudAI Chat Initialized (AgentExecutor Mode)")
+    print("BudAI Chat Initialized")
     print("==================================================")
 
     chat_history = []
