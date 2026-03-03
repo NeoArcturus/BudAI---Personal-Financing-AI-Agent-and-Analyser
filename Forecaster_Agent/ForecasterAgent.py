@@ -7,7 +7,7 @@ import sqlite3
 from dotenv import load_dotenv
 from api_integrator.access_token_generator import AccessTokenGenerator
 from api_integrator.get_account_detail import UserAccount
-from Forecaster_Agent.mathematics.mathematics import run_hybrid_engine
+from Forecaster_Agent.mathematics.mathematics import run_hybrid_engine, run_converged_expense_engine
 
 
 class ForecasterAgent:
@@ -66,35 +66,100 @@ class ForecasterAgent:
             sigma = 0.05
         return current_balance, mu, sigma
 
-    def run_hybrid_simulation(self, account_id, S0, mu, days=30, paths=50000):
+    def fetch_expense_parameters(self, lookback_days=60):
+        with sqlite3.connect(self.db_path) as conn:
+            query = f"SELECT date, amount FROM transactions WHERE amount < 0"
+            df = pd.read_sql_query(query, conn)
+
+        if df.empty:
+            return 50.0, 0.001
+
+        df['Date'] = pd.to_datetime(
+            df['date'], format='ISO8601', utc=True).dt.date
+        df['amount'] = df['amount'].abs()
+        daily_expenses = df.groupby(
+            'Date')['amount'].sum().reset_index().sort_values('Date')
+
+        recent_data = daily_expenses.tail(lookback_days).copy()
+        recent_data['Safe_Amount'] = recent_data['amount'].apply(
+            lambda x: max(x, 1))
+
+        E0 = recent_data['Safe_Amount'].mean()
+        recent_data['Returns'] = np.log(
+            recent_data['Safe_Amount'] / recent_data['Safe_Amount'].shift(1))
+        mu_E = recent_data['Returns'].mean()
+
+        if np.isnan(mu_E):
+            mu_E = 0.001
+
+        return E0, mu_E
+
+    def run_hybrid_simulation(self, account_id, S0, mu, days=30, paths=1000000):
         csv_path = run_hybrid_engine(S0, mu, days, paths, str(account_id))
         return csv_path
+
+    def run_expense_simulation(self, account_id, E0, mu_E, days=30, paths=1000000):
+        expense_seed_id = str(account_id) + "_expenses"
+        csv_path = run_converged_expense_engine(
+            E0, mu_E, days, paths, expense_seed_id)
+        return csv_path
+
+    def analyze_and_plot_expenses(self, csv_path, E0, mu_E, days=30):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.abspath(os.path.join(current_dir, '..'))
+        img_dir = os.path.join(root_dir, "saved_media", "images")
+        os.makedirs(img_dir, exist_ok=True)
+        plot_path = os.path.join(img_dir, "expense_convergence_path.png")
+
+        if not os.path.exists(csv_path):
+            return
+
+        df = pd.read_csv(csv_path, header=None)
+        converged_path = df.iloc[0].values
+        t_days = np.arange(0, days + 1)
+        expected_path = E0 * np.exp(mu_E * t_days)
+
+        plt.figure(figsize=(15, 8))
+        plt.plot(converged_path, color="#e74c3c",
+                 label="Converged Stochastic Path (Realistic Daily Spend)", linewidth=2, alpha=0.8)
+        plt.plot(expected_path, color="#2c3e50",
+                 label="Historical Baseline (Mathematical Expectation)", linestyle="--", linewidth=3)
+        plt.title(
+            f'BudAI Expense Forecast Convergence ({days} Days)', fontsize=16, pad=20)
+        plt.xlabel('Days into the Future', fontsize=12)
+        plt.ylabel('Projected Daily Expense (£)', fontsize=12)
+
+        max_val = max(converged_path.max(), expected_path.max())
+        plt.ylim(0, max_val * 1.2)
+        plt.grid(True, which='both', linestyle='--', alpha=0.4)
+        plt.legend(loc='upper left', frameon=True, shadow=True)
+        plt.tight_layout()
+        plt.savefig(plot_path, dpi=300)
+        plt.close()
 
     def analyze_and_plot(self, csv_path, S0, threshold_pct=0.2):
         risk_threshold = S0 * threshold_pct
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        plot_path = os.path.join(current_dir, "monte_carlo_forecast_paths.png")
+        root_dir = os.path.abspath(os.path.join(current_dir, '..'))
+        img_dir = os.path.join(root_dir, "saved_media", "images")
+        os.makedirs(img_dir, exist_ok=True)
+        plot_path = os.path.join(img_dir, "monte_carlo_forecast_paths.png")
 
         if not os.path.exists(csv_path):
-            print("Error: Simulation CSV not found.")
             return
 
-        print("Analyzing simulated paths and generating narratives...")
         paths_df = pd.read_csv(csv_path, header=None)
 
         if len(paths_df) > 10:
             final_balances = paths_df.iloc[:, -1]
-
             p5_val = final_balances.quantile(0.05, interpolation='nearest')
             path1_idx = (final_balances - p5_val).abs().idxmin()
-
             p95_val = final_balances.quantile(0.95, interpolation='nearest')
             path3_idx = (final_balances - p95_val).abs().idxmin()
 
             path1 = paths_df.iloc[path1_idx]
             path2 = paths_df.mean(axis=0)
             path3 = paths_df.iloc[path3_idx]
-
             paths_df = pd.DataFrame([path1, path2, path3])
 
         narratives = [
@@ -107,20 +172,13 @@ class ForecasterAgent:
         ]
 
         plt.figure(figsize=(15, 8))
-
         for i, meta in enumerate(narratives):
             if i < len(paths_df):
-                plt.plot(
-                    paths_df.iloc[i],
-                    color=meta["color"],
-                    label=meta["label"],
-                    linewidth=3 if i != 1 else 2,
-                    linestyle=meta["ls"]
-                )
+                plt.plot(paths_df.iloc[i], color=meta["color"], label=meta["label"],
+                         linewidth=3 if i != 1 else 2, linestyle=meta["ls"])
 
         plt.axhline(y=risk_threshold, color='black', linestyle=':',
                     alpha=0.6, label=f'Risk Threshold (£{risk_threshold:.2f})')
-
         plt.title(
             f'BudAI Narrative Forecast (Risk at {threshold_pct*100}% of Balance)', fontsize=16, pad=20)
         plt.xlabel('Days into the Future', fontsize=12)
@@ -128,28 +186,17 @@ class ForecasterAgent:
 
         max_val = paths_df.max().max()
         plt.ylim(0, max(max_val * 1.2, risk_threshold * 1.5))
-
         plt.grid(True, which='both', linestyle='--', alpha=0.4)
         plt.legend(loc='upper left', frameon=True, shadow=True)
         plt.tight_layout()
-
         plt.savefig(plot_path, dpi=300)
         plt.close()
-        print(f"Plot saved successfully to {plot_path}")
 
 
 if __name__ == "__main__":
     agent = ForecasterAgent()
     real_balance = agent.fetch_live_balance()
-
     S0, mu, sigma = agent.fetch_and_calculate_parameters(real_balance, 120)
-
     output_csv = agent.run_hybrid_simulation(
-        account_id=agent.user_acc.account_id,
-        S0=S0,
-        mu=mu,
-        days=60,
-        paths=50000
-    )
-
+        account_id=agent.user_acc.account_id, S0=S0, mu=mu, days=60, paths=50000)
     agent.analyze_and_plot(output_csv, S0, threshold_pct=0.5)

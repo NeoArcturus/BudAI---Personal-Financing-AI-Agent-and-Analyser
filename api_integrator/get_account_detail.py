@@ -17,7 +17,6 @@ class UserAccount:
         self.account_id = os.getenv("TRUELAYER_ACCOUNT_ID", "")
 
     def get_user_account_details(self):
-        """Fetches accounts and identifies the primary transaction account."""
         try:
             response = requests.get(self.base_url, headers=self.headers)
             if response.status_code != 200:
@@ -44,8 +43,6 @@ class UserAccount:
         return None
 
     def all_transactions(self, from_date, to_date):
-        """Fetches transactions, automatically finding the account_id if missing."""
-
         if not self.account_id:
             print("Account ID not set. Searching for a valid transaction account...")
             if not self.get_user_account_details():
@@ -74,7 +71,6 @@ class UserAccount:
             print(f"Error fetching transactions: {e}")
 
     def get_account_balance(self):
-        """Fetches the current balance of the account."""
         if not self.account_id:
             print("Account ID not set. Searching for a valid transaction account...")
             if not self.get_user_account_details():

@@ -56,9 +56,7 @@ class CategorizerAgent:
                 return None
 
             proc = Preprocessor(raw_df, self.local_st_path)
-
-            xgb_model_path = os.path.join(
-                self.model_dir, "gbm_model.joblib")
+            xgb_model_path = os.path.join(self.model_dir, "gbm_model.joblib")
             enc_path = os.path.join(self.enc_dir, "label_encoder.joblib")
 
             if not (os.path.exists(xgb_model_path) and os.path.exists(enc_path)):
@@ -73,7 +71,11 @@ class CategorizerAgent:
             final_df = self.categorizer.predict(
                 clean_df, embeddings, xgb_model_path, enc_path)
 
-            csv_path = os.path.join(self.base_dir, "categorized_data.csv")
+            root_dir = os.path.abspath(os.path.join(self.base_dir, '..'))
+            csv_dir = os.path.join(root_dir, "saved_media", "csvs")
+            os.makedirs(csv_dir, exist_ok=True)
+            csv_path = os.path.join(csv_dir, "categorized_data.csv")
+
             final_df.to_csv(csv_path, index=False)
             self._update_sql_memory(final_df, embeddings)
             return final_df
@@ -90,6 +92,13 @@ class CategorizerAgent:
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (tx_id, str(row['Date']), float(row['Amount']), row['Description'], row['Category'], embs[i].tobytes()))
             conn.commit()
+
+    def get_classification_report(self):
+        report_path = os.path.join(self.model_dir, "classification_report.txt")
+        if os.path.exists(report_path):
+            with open(report_path, "r") as f:
+                return f.read()
+        return "Classification report not available. The model has not been trained yet."
 
 
 if __name__ == "__main__":

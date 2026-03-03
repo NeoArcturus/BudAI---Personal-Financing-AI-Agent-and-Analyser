@@ -2,9 +2,11 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_ollama import ChatOllama
-from tools import generate_financial_forecast, classify_financial_data, find_total_spent_for_given_category
+from tools import generate_financial_forecast, classify_financial_data, find_total_spent_for_given_category, create_bargraph_chart_and_save, generate_expense_forecast, plot_expenses
 import os
+from datetime import datetime
 
+current_date = datetime.now().strftime("%B %d, %Y")
 
 llm = ChatOllama(
     model="qwen3:4b",
@@ -13,10 +15,11 @@ llm = ChatOllama(
 )
 
 tools = [generate_financial_forecast, classify_financial_data,
-         find_total_spent_for_given_category]
+         find_total_spent_for_given_category, create_bargraph_chart_and_save, generate_expense_forecast, plot_expenses]
 
 prompt = ChatPromptTemplate.from_messages([
-    ("system", """You are BudAI, a friendly, empathetic, and highly capable personal financing tool (Do not mention you are a tool or introduce yourself, just reply back naturally.). 
+    ("system", f"""You are BudAI, a friendly, empathetic, and highly capable personal financing tool (Do not mention you are a tool or introduce yourself, just reply back naturally.).
+     Current date: {current_date} 
 
     YOUR CONVERSATIONAL RULES:
     1. Validate the User: Always start by warmly acknowledging the user's request. Make them feel heard and supported.
