@@ -1,26 +1,20 @@
 import os
-import webbrowser
 import requests
 import uuid
-import threading
-from flask import Flask, request
+import sqlite3
 from urllib.parse import urlencode
-from dotenv import load_dotenv, set_key
+from dotenv import load_dotenv
+
 
 class AccessTokenGenerator:
-    def __init__(self):
+    def __init__(self, db_path="budai_memory.db"):
         load_dotenv()
-        self.env_file = ".env"
-        
+        self.db_path = db_path
         self.client_id = os.getenv("CLIENT_ID")
         self.client_secret = os.getenv("CLIENT_SECRET")
         self.redirect_uri = os.getenv("REDIRECT_URI")
-        
         self.auth_base_url = os.getenv("AUTH_LINK_URL")
         self.token_url = "https://auth.truelayer.com/connect/token"
-        
-        self.app = Flask(__name__)
-        self._setup_routes()
 
     def get_auth_link(self):
         params = {
@@ -31,21 +25,9 @@ class AccessTokenGenerator:
             "providers": "uk-ob-all uk-oauth-all",
             "state": str(uuid.uuid4())
         }
-        
-        auth_url = f"{self.auth_base_url}?{urlencode(params)}"
-        return auth_url
+        return f"{self.auth_base_url}?{urlencode(params)}"
 
-    def _setup_routes(self):
-        @self.app.route('/callback')
-        def callback():
-            code = request.args.get('code')
-            if code:
-                response = self._handle_success(code)
-                self.stop_server()
-                return response
-            return "Authorization failed.", 400
-
-    def _handle_success(self, code):
+    def generate_token_from_code(self, code):
         payload = {
             "grant_type": "authorization_code",
             "client_id": self.client_id,
@@ -53,41 +35,45 @@ class AccessTokenGenerator:
             "redirect_uri": self.redirect_uri,
             "code": code
         }
-
         response = requests.post(self.token_url, data=payload)
         res = response.json()
-
         if "access_token" in res:
-            set_key(self.env_file, "TRUELAYER_ACCESS_TOKEN", res["access_token"])
-            set_key(self.env_file, "TRUELAYER_REFRESH_TOKEN", res["refresh_token"])
-            return "<h1>Success!</h1><p>Tokens saved. This server is shutting down...</p>"
-        
-        return f"Token Exchange Failed: {res}", 500
+            headers = {"Authorization": f"Bearer {res['access_token']}"}
+            me_res = requests.get(
+                "https://api.truelayer.com/data/v1/me", headers=headers).json()
+            provider_id = me_res['results'][0]['provider']['provider_id']
+            provider_name = me_res['results'][0]['provider']['display_name']
 
-    def stop_server(self):
-        shutdown_func = request.environ.get('werkzeug.server.shutdown')
-        if shutdown_func:
-            shutdown_func()
-        else:
-            threading.Timer(1, lambda: os._exit(0)).start()
-    
-    def regenerate_auth_token_using_refresh_token(self):
-        refresh_token = os.getenv("TRUELAYER_REFRESH_TOKEN")
-        if not refresh_token:
-            return False
-        
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO credentials (provider_id, provider_name, access_token, refresh_token)
+                    VALUES (?, ?, ?, ?)
+                """, (provider_id, provider_name, res["access_token"], res["refresh_token"]))
+            return True
+        return False
+
+    def refresh_token(self, provider_id):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT refresh_token FROM credentials WHERE provider_id = ?", (provider_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            refresh_token = row[0]
+
         payload = {
             "grant_type": "refresh_token",
             "client_id": self.client_id,
             "client_secret": self.client_secret,
             "refresh_token": refresh_token
         }
-
         response = requests.post(self.token_url, data=payload)
         res = response.json()
-
         if "access_token" in res:
-            set_key(self.env_file, "TRUELAYER_ACCESS_TOKEN", res["access_token"])
-            set_key(self.env_file, "TRUELAYER_REFRESH_TOKEN", res["refresh_token"])
-            return True
-        return False
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    UPDATE credentials SET access_token = ?, refresh_token = ? WHERE provider_id = ?
+                """, (res["access_token"], res.get("refresh_token", refresh_token), provider_id))
+            return res["access_token"]
+        return None

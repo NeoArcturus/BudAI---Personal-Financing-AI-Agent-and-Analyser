@@ -31,7 +31,7 @@ def run_hybrid_engine(S0: float, mu: float, days: int, paths: int, account_id: s
     csv_dir = os.path.join(root_dir, "saved_media", "csvs")
     os.makedirs(csv_dir, exist_ok=True)
 
-    target_csv_path = os.path.join(csv_dir, "hybrid_paths.csv")
+    target_csv_path = os.path.join(csv_dir, f"hybrid_paths_{account_id}.csv")
 
     result = hybrid_forecaster_lib.run_hybrid_forecast(
         S0, mu, days, paths, account_id.encode(
@@ -55,7 +55,8 @@ def run_converged_expense_engine(E0: float, mu: float, days: int, paths: int, ac
     csv_dir = os.path.join(root_dir, "saved_media", "csvs")
     os.makedirs(csv_dir, exist_ok=True)
 
-    target_csv_path = os.path.join(csv_dir, "converged_expense.csv")
+    target_csv_path = os.path.join(
+        csv_dir, f"converged_expense_{account_id}.csv")
 
     result = hybrid_forecaster_lib.run_converged_expense_forecast(
         E0, mu, days, paths, account_id.encode(

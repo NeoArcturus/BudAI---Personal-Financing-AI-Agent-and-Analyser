@@ -1,6 +1,8 @@
 import matplotlib.pyplot as mp
 import seaborn as sb
 import os
+import matplotlib
+matplotlib.use('Agg')
 
 
 class CategoryDistribution:

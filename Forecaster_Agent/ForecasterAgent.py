@@ -1,39 +1,34 @@
 import os
-import webbrowser
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import sqlite3
-from dotenv import load_dotenv
-from api_integrator.access_token_generator import AccessTokenGenerator
+import matplotlib
 from api_integrator.get_account_detail import UserAccount
 from Forecaster_Agent.mathematics.mathematics import run_hybrid_engine, run_converged_expense_engine
+
+matplotlib.use('Agg')
 
 
 class ForecasterAgent:
     def __init__(self, db_path="budai_memory.db"):
         self.db_path = db_path
-        self.token_gen = AccessTokenGenerator()
         self.user_acc = None
 
-    def _authenticate(self):
-        if not self.token_gen.regenerate_auth_token_using_refresh_token():
-            webbrowser.open(self.token_gen.get_auth_link())
-            self.token_gen.app.run(port=8080)
-
-    def fetch_live_balance(self):
-        self._authenticate()
-        load_dotenv(override=True)
-        self.user_acc = UserAccount()
+    def fetch_live_balance(self, identifier):
+        self.user_acc = UserAccount(identifier)
         balance_data = self.user_acc.get_account_balance()
         if isinstance(balance_data, list) and len(balance_data) > 0:
             return float(balance_data[0].get("available", balance_data[0].get("current", 0.0)))
         return 0.0
 
     def fetch_and_calculate_parameters(self, current_balance, lookback_days=60):
-        with sqlite3.connect(self.db_path) as conn:
-            query = f"SELECT date, amount FROM transactions"
-            df = pd.read_sql_query(query, conn)
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                query = "SELECT date, amount FROM transactions"
+                df = pd.read_sql_query(query, conn)
+        except Exception:
+            df = pd.DataFrame()
 
         if df.empty:
             return current_balance, -0.01, 0.05
@@ -43,23 +38,19 @@ class ForecasterAgent:
         daily_net = df.groupby('Date')['amount'].sum(
         ).reset_index().sort_values('Date')
         daily_net['Reverse_Amount'] = daily_net['amount'].iloc[::-1]
-
         historical_balances = [current_balance]
         temp_balance = current_balance
         for amt in daily_net['Reverse_Amount'].values[:-1]:
             temp_balance -= amt
             historical_balances.append(temp_balance)
-
         daily_net['Balance'] = historical_balances[::-1]
         recent_data = daily_net.tail(lookback_days).copy()
         recent_data['Safe_Balance'] = recent_data['Balance'].apply(
             lambda x: max(x, 10))
         recent_data['Returns'] = np.log(
             recent_data['Safe_Balance'] / recent_data['Safe_Balance'].shift(1))
-
         mu = recent_data['Returns'].mean()
         sigma = recent_data['Returns'].std()
-
         if np.isnan(mu):
             mu = -0.01
         if np.isnan(sigma) or sigma == 0:
@@ -67,9 +58,12 @@ class ForecasterAgent:
         return current_balance, mu, sigma
 
     def fetch_expense_parameters(self, lookback_days=60):
-        with sqlite3.connect(self.db_path) as conn:
-            query = f"SELECT date, amount FROM transactions WHERE amount < 0"
-            df = pd.read_sql_query(query, conn)
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                query = "SELECT date, amount FROM transactions WHERE amount < 0"
+                df = pd.read_sql_query(query, conn)
+        except Exception:
+            df = pd.DataFrame()
 
         if df.empty:
             return 50.0, 0.001
@@ -79,62 +73,45 @@ class ForecasterAgent:
         df['amount'] = df['amount'].abs()
         daily_expenses = df.groupby(
             'Date')['amount'].sum().reset_index().sort_values('Date')
-
         recent_data = daily_expenses.tail(lookback_days).copy()
         recent_data['Safe_Amount'] = recent_data['amount'].apply(
             lambda x: max(x, 1))
-
         E0 = recent_data['Safe_Amount'].mean()
         recent_data['Returns'] = np.log(
             recent_data['Safe_Amount'] / recent_data['Safe_Amount'].shift(1))
         mu_E = recent_data['Returns'].mean()
-
         if np.isnan(mu_E):
             mu_E = 0.001
-
         return E0, mu_E
 
     def run_hybrid_simulation(self, account_id, S0, mu, days=30, paths=1000000):
-        csv_path = run_hybrid_engine(S0, mu, days, paths, str(account_id))
-        return csv_path
+        return run_hybrid_engine(S0, mu, days, paths, str(account_id))
 
     def run_expense_simulation(self, account_id, E0, mu_E, days=30, paths=1000000):
-        expense_seed_id = str(account_id) + "_expenses"
-        csv_path = run_converged_expense_engine(
-            E0, mu_E, days, paths, expense_seed_id)
-        return csv_path
+        return run_converged_expense_engine(E0, mu_E, days, paths, str(account_id))
 
     def analyze_and_plot_expenses(self, csv_path, E0, mu_E, days=30):
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        root_dir = os.path.abspath(os.path.join(current_dir, '..'))
-        img_dir = os.path.join(root_dir, "saved_media", "images")
+        img_dir = os.path.join(os.path.abspath(
+            os.path.join(current_dir, '..')), "saved_media", "images")
         os.makedirs(img_dir, exist_ok=True)
-        plot_path = os.path.join(img_dir, "expense_convergence_path.png")
-
         if not os.path.exists(csv_path):
             return
-
+        acc_id = self.user_acc.account_id if self.user_acc and self.user_acc.account_id else "default"
         df = pd.read_csv(csv_path, header=None)
         converged_path = df.iloc[0].values
         t_days = np.arange(0, days + 1)
         expected_path = E0 * np.exp(mu_E * t_days)
-
         plt.figure(figsize=(15, 8))
         plt.plot(converged_path, color="#e74c3c",
-                 label="Converged Stochastic Path (Realistic Daily Spend)", linewidth=2, alpha=0.8)
+                 label="Converged Stochastic Path", linewidth=2)
         plt.plot(expected_path, color="#2c3e50",
-                 label="Historical Baseline (Mathematical Expectation)", linestyle="--", linewidth=3)
-        plt.title(
-            f'BudAI Expense Forecast Convergence ({days} Days)', fontsize=16, pad=20)
-        plt.xlabel('Days into the Future', fontsize=12)
-        plt.ylabel('Projected Daily Expense (£)', fontsize=12)
-
-        max_val = max(converged_path.max(), expected_path.max())
-        plt.ylim(0, max_val * 1.2)
-        plt.grid(True, which='both', linestyle='--', alpha=0.4)
-        plt.legend(loc='upper left', frameon=True, shadow=True)
-        plt.tight_layout()
-        plt.savefig(plot_path, dpi=300)
+                 label="Historical Baseline", linestyle="--", linewidth=3)
+        plt.title(f'BudAI Expense Forecast Convergence ({days} Days)')
+        plt.grid(True, alpha=0.4)
+        plt.legend()
+        plt.savefig(os.path.join(
+            img_dir, f"expense_convergence_path_{acc_id}.png"), dpi=300)
         plt.close()
 
     def analyze_and_plot(self, csv_path, S0, threshold_pct=0.2):
@@ -143,7 +120,10 @@ class ForecasterAgent:
         root_dir = os.path.abspath(os.path.join(current_dir, '..'))
         img_dir = os.path.join(root_dir, "saved_media", "images")
         os.makedirs(img_dir, exist_ok=True)
-        plot_path = os.path.join(img_dir, "monte_carlo_forecast_paths.png")
+
+        acc_id = self.user_acc.account_id if self.user_acc and self.user_acc.account_id else "default"
+        plot_path = os.path.join(
+            img_dir, f"monte_carlo_forecast_paths_{acc_id}.png")
 
         if not os.path.exists(csv_path):
             return
@@ -191,12 +171,3 @@ class ForecasterAgent:
         plt.tight_layout()
         plt.savefig(plot_path, dpi=300)
         plt.close()
-
-
-if __name__ == "__main__":
-    agent = ForecasterAgent()
-    real_balance = agent.fetch_live_balance()
-    S0, mu, sigma = agent.fetch_and_calculate_parameters(real_balance, 120)
-    output_csv = agent.run_hybrid_simulation(
-        account_id=agent.user_acc.account_id, S0=S0, mu=mu, days=60, paths=50000)
-    agent.analyze_and_plot(output_csv, S0, threshold_pct=0.5)

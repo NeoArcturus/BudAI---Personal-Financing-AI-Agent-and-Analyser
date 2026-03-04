@@ -1,15 +1,12 @@
-from dotenv import load_dotenv
+import sqlite3
+import pandas as pd
+import os
+import sys
 from diskcache import Cache
 from Categorizer_Agent.training.model_trainer import CategorizerTrainer
 from Categorizer_Agent.categorizer.preprocessor import Preprocessor
 from Categorizer_Agent.categorizer.categorizer import Categorizer
 from api_integrator.get_account_detail import UserAccount
-from api_integrator.access_token_generator import AccessTokenGenerator
-import sqlite3
-import pandas as pd
-import webbrowser
-import os
-import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -23,7 +20,6 @@ class CategorizerAgent:
         self.db_path = db_path
         self.cache = Cache('./agent_cache')
         self._init_db()
-        self.token_gen = AccessTokenGenerator()
         self.categorizer = Categorizer()
 
     def _init_db(self):
@@ -40,18 +36,10 @@ class CategorizerAgent:
             """)
             conn.commit()
 
-    def _authenticate(self):
-        if not self.token_gen.regenerate_auth_token_using_refresh_token():
-            webbrowser.open(self.token_gen.get_auth_link())
-            self.token_gen.app.run(port=8080)
-
-    def execute_cycle(self, start_date, end_date):
+    def execute_cycle(self, identifier, start_date, end_date):
         try:
-            self._authenticate()
-            load_dotenv(override=True)
-            self.user_acc = UserAccount()
-
-            raw_df = self.user_acc.all_transactions(start_date, end_date)
+            user_acc = UserAccount(identifier)
+            raw_df = user_acc.all_transactions(start_date, end_date)
             if raw_df is None or raw_df.empty:
                 return None
 
@@ -74,13 +62,14 @@ class CategorizerAgent:
             root_dir = os.path.abspath(os.path.join(self.base_dir, '..'))
             csv_dir = os.path.join(root_dir, "saved_media", "csvs")
             os.makedirs(csv_dir, exist_ok=True)
-            csv_path = os.path.join(csv_dir, "categorized_data.csv")
+            csv_path = os.path.join(
+                csv_dir, "categorized_data_" + str(user_acc.account_id) + ".csv")
 
             final_df.to_csv(csv_path, index=False)
             self._update_sql_memory(final_df, embeddings)
             return final_df
         except Exception as e:
-            print(f"Exception occured: {str(e)}")
+            pass
 
     def _update_sql_memory(self, df, embs):
         with sqlite3.connect(self.db_path) as conn:
@@ -98,9 +87,4 @@ class CategorizerAgent:
         if os.path.exists(report_path):
             with open(report_path, "r") as f:
                 return f.read()
-        return "Classification report not available. The model has not been trained yet."
-
-
-if __name__ == "__main__":
-    agent = CategorizerAgent()
-    agent.execute_cycle("2025-01-01", "2026-01-01")
+        return "Classification report not available."

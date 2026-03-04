@@ -2,11 +2,13 @@ import matplotlib.pyplot as mp
 import pandas as pd
 import os
 from api_integrator.get_account_detail import UserAccount
+import matplotlib
+matplotlib.use('Agg')
 
 
 class ExpenseAnalysis:
-    def __init__(self):
-        self.user_account = UserAccount()
+    def __init__(self, identifier=None):
+        self.user_account = UserAccount(identifier)
         self.classified_data = None
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self.root_dir = os.path.abspath(os.path.join(self.base_dir, '..'))
@@ -15,24 +17,18 @@ class ExpenseAnalysis:
 
     def fetch_data(self, from_date, to_date):
         df = self.user_account.all_transactions(from_date, to_date)
-
         if df is None or df.empty:
             return False
-
         if 'timestamp' in df.columns and 'Date' not in df.columns:
             df.rename(columns={'timestamp': 'Date'}, inplace=True)
         elif 'date' in df.columns and 'Date' not in df.columns:
             df.rename(columns={'date': 'Date'}, inplace=True)
-
         if 'amount' in df.columns and 'Amount' not in df.columns:
             df.rename(columns={'amount': 'Amount'}, inplace=True)
-
         df = df[df['Amount'] < 0].copy()
         df['Amount'] = df['Amount'].abs()
-
         if df.empty:
             return False
-
         self.classified_data = df
         return True
 
@@ -80,7 +76,7 @@ class ExpenseAnalysis:
         mp.figure(figsize=(10, 6))
         mp.plot(daily_spend.index, daily_spend.values, marker='o')
         mp.title('Daily Spend Over Time')
-        mp.xlabel('Days')
+        mp.xlabel('Date')
         mp.ylabel('Total Spend')
         mp.xticks(rotation=45)
         mp.tight_layout()
