@@ -1,13 +1,30 @@
+import { ChartConfiguration } from "chart.js";
+
+export interface Account {
+  account_id: string;
+  truelayer_account_id?: string;
+  provider_name?: string;
+  bank_name?: string;
+  account_number: string;
+  sort_code: string;
+  currency: string;
+  balance: number;
+  account_balance?: number;
+  status?: string;
+  provider_id?: string;
+}
+
 export interface Transaction {
-  description?: string;
-  Description?: string; // CSV mapping
-  category?: string;
-  Category?: string; // CSV mapping
-  amount?: number;
-  Amount?: number; // CSV mapping
+  id?: string;
+  transaction_uuid?: string;
   date?: string;
-  Date?: string; // CSV mapping
-  timestamp?: string; // TrueLayer mapping
+  timestamp?: string;
+  amount?: number;
+  Amount?: number;
+  description?: string;
+  Description?: string;
+  category?: string;
+  Category?: string;
 }
 
 export interface ChatMessage {
@@ -15,16 +32,11 @@ export interface ChatMessage {
   text: string;
 }
 
-export interface FinancialData {
-  balance: string;
-  transactions: Transaction[];
-}
+export type TabType =
+  | "raw"
+  | "categorized"
+  | "balance_forecast"
+  | "expense_forecast"
+  | "historical";
 
-export interface Account {
-  account_id: string;
-  provider_name: string;
-  account_number: string;
-  sort_code: string;
-  currency: string;
-  balance: number;
-}
+export type NativeChartConfig = ChartConfiguration<"line" | "bar">;

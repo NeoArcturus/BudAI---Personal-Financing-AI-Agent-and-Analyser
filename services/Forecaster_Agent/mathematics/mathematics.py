@@ -1,6 +1,7 @@
 import ctypes
 import os
 import subprocess
+import pandas as pd
 
 
 def _ensure_compiled():
@@ -27,18 +28,33 @@ def run_hybrid_engine(S0: float, mu: float, days: int, paths: int, account_id: s
     ]
     hybrid_forecaster_lib.run_hybrid_forecast.restype = ctypes.c_int
 
-    root_dir = os.path.abspath(os.path.join(base_dir, '..', '..'))
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.abspath(os.path.join(base_dir, '..', '..', '..'))
     csv_dir = os.path.join(root_dir, "saved_media", "csvs")
     os.makedirs(csv_dir, exist_ok=True)
 
+    temp_csv_path = os.path.join(
+        csv_dir, f"temp_hybrid_paths_{account_id}.csv")
     target_csv_path = os.path.join(csv_dir, f"hybrid_paths_{account_id}.csv")
 
     result = hybrid_forecaster_lib.run_hybrid_forecast(
         S0, mu, days, paths, account_id.encode(
-            'utf-8'), target_csv_path.encode('utf-8')
+            'utf-8'), temp_csv_path.encode('utf-8')
     )
+
     if result == 0:
+        df = pd.read_csv(temp_csv_path, header=None)
+        mean_path = df.mean(axis=0)
+        careless_path = df.quantile(0.05, axis=0)
+        optimal_path = df.quantile(0.95, axis=0)
+
+        summary_df = pd.DataFrame([mean_path, careless_path, optimal_path])
+        summary_df.to_csv(target_csv_path, index=False, header=False)
+
+        os.remove(temp_csv_path)
+
         return target_csv_path
+
     raise RuntimeError("Balance Engine Failed.")
 
 
@@ -51,7 +67,8 @@ def run_converged_expense_engine(E0: float, mu: float, days: int, paths: int, ac
     ]
     hybrid_forecaster_lib.run_converged_expense_forecast.restype = ctypes.c_int
 
-    root_dir = os.path.abspath(os.path.join(base_dir, '..', '..'))
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.abspath(os.path.join(base_dir, '..', '..', '..'))
     csv_dir = os.path.join(root_dir, "saved_media", "csvs")
     os.makedirs(csv_dir, exist_ok=True)
 

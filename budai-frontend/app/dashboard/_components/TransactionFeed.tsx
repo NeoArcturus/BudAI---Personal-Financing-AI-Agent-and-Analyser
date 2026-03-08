@@ -24,14 +24,14 @@ export default function TransactionFeed({
         <div className={showCategory ? "w-1/2" : "w-3/4"}>
           Transaction Details
         </div>
-        {showCategory && <div className="w-1/4 text-center">AI Category</div>}
+        {showCategory && <div className="w-1/4 text-center">Category</div>}
         <div className="w-1/4 text-right">Amount</div>
       </div>
 
       {transactions.map((tx, i) => {
         // Safely extract data whether it comes from TrueLayer (lowercase) or CSV (uppercase)
         const description = tx.description || tx.Description || "Unknown";
-        const dateStr = tx.timestamp || tx.Date || tx.date || "";
+        const dateStr = tx.timestamp || tx.date || "";
         const category = tx.category || tx.Category || "Uncategorized";
 
         // Safely resolve amount using ?? to prevent 0 from evaluating to false
@@ -61,7 +61,7 @@ export default function TransactionFeed({
             {showCategory && (
               <div className="w-1/4 flex justify-center">
                 <span className="bg-[#0D1117] border border-slate-700 px-3 py-1 rounded-full text-[10px] uppercase tracking-wider text-[#00FFAA] font-bold shadow-inner truncate max-w-full text-center">
-                  {category}
+                  {category === "Uncategorized" ? "" : category}
                 </span>
               </div>
             )}
