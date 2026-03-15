@@ -9,19 +9,15 @@ import {
   Plus,
   BarChart3,
   AlertTriangle,
+  Unlink,
+  Loader2,
 } from "lucide-react";
 import BudAIChat from "./_components/BudAIChat";
 import TransactionModal from "./_components/TransactionsModal";
 import DynamicChart from "./_components/DynamicChart";
-import { Account, Transaction, TabType } from "@/types";
-import {
-  ChartConfiguration,
-  ScriptableContext,
-  ChartDataset,
-  PointElement,
-} from "chart.js";
+import { Account, Transaction, TabType, NativeChartConfig } from "@/types";
+import { ChartDataset } from "chart.js";
 
-// --- STRICT TYPING: Replaces 'any' for all CSV/JSON parsing ---
 interface ChartDataRow {
   date?: string;
   Date?: string;
@@ -29,6 +25,7 @@ interface ChartDataRow {
   Amount?: number | string;
   Category?: string;
   Total_Amount?: number | string;
+  [key: string]: string | number | undefined;
 }
 
 interface ChartJsonResponse {
@@ -40,16 +37,9 @@ interface DashboardState {
   activeAccountId: string | null;
   selectedTransactions: Transaction[];
   isModalOpen: boolean;
-  chartConfig: ChartConfiguration | null;
+  chartConfig: NativeChartConfig | null;
   userName: string;
 }
-
-// Strictly typed caching context for the progressive animation to prevent browser freezing
-type AnimContext = ScriptableContext<"line"> & {
-  xStarted?: boolean;
-  yStarted?: number;
-  yStartedDelay?: boolean;
-};
 
 export default function Dashboard() {
   const router = useRouter();
@@ -62,7 +52,13 @@ export default function Dashboard() {
     userName: "User",
   });
 
-  const fetchAccounts = async (token: string) => {
+  const [availableCharts, setAvailableCharts] = useState<string[]>([]);
+  const [isCheckingCharts, setIsCheckingCharts] = useState(false);
+  const [revokingProviderId, setRevokingProviderId] = useState<string | null>(
+    null,
+  );
+
+  const fetchAccounts = async (token: string): Promise<Account[]> => {
     try {
       const res = await fetch("http://localhost:8080/api/accounts/", {
         headers: { Authorization: `Bearer ${token}` },
@@ -70,7 +66,7 @@ export default function Dashboard() {
       const data = (await res.json()) as { accounts?: Account[] };
       return data.accounts || [];
     } catch (error) {
-      console.error("Failed to fetch accounts", error);
+      console.error("Error fetching accounts:", error);
       return [];
     }
   };
@@ -84,32 +80,104 @@ export default function Dashboard() {
 
     (async () => {
       const fetchedAccounts = await fetchAccounts(token);
-      const firstAccountId =
-        fetchedAccounts.length > 0
-          ? fetchedAccounts[0].truelayer_account_id ||
-            fetchedAccounts[0].account_id
-          : null;
-
       setState((prev) => ({
         ...prev,
         accounts: fetchedAccounts,
-        activeAccountId: firstAccountId,
+        activeAccountId: "ALL",
       }));
     })();
   }, [router]);
 
-  const openAccountLedger = async (account: Account) => {
-    const token = localStorage.getItem("budai_token") || "";
-    const accountId = account.truelayer_account_id || account.account_id;
+  useEffect(() => {
+    if (!state.activeAccountId) return;
 
-    setState((prev) => ({ ...prev, activeAccountId: accountId }));
+    const checkAvailableCharts = async () => {
+      setIsCheckingCharts(true);
+      const token = localStorage.getItem("budai_token") || "";
+      const targetId = state.activeAccountId;
+
+      const baseCharts = [
+        { id: "historical_daily", prefix: "daily_spend" },
+        { id: "historical_weekly", prefix: "weekly_spend" },
+        { id: "historical_monthly", prefix: "monthly_spend" },
+        { id: "categorized", prefix: "total_per_category" },
+        { id: "expense_forecast", prefix: "converged_expense" },
+        { id: "balance_forecast", prefix: "hybrid_paths" },
+      ];
+
+      const results = await Promise.all(
+        baseCharts.map(async (chart) => {
+          try {
+            const res = await fetch(
+              `http://localhost:8080/api/media/csv/${chart.prefix}_${targetId}.csv`,
+              {
+                method: "HEAD",
+                headers: { Authorization: `Bearer ${token}` },
+              },
+            );
+
+            return res.ok ? chart.id : null;
+          } catch (error) {
+            console.error("Error:", error);
+            return null;
+          }
+        }),
+      );
+
+      setAvailableCharts(results.filter(Boolean) as string[]);
+      setIsCheckingCharts(false);
+    };
+
+    checkAvailableCharts();
+  }, [state.activeAccountId]);
+
+  const handleRevokeAccess = async (
+    providerId: string,
+    e: React.MouseEvent,
+  ) => {
+    e.stopPropagation();
+    const confirmRevoke = window.confirm(
+      "Are you sure you want to disconnect this bank? All associated sub-accounts, financial data, and charts will be permanently deleted from BudAI.",
+    );
+    if (!confirmRevoke) return;
+
+    setRevokingProviderId(providerId);
+    const token = localStorage.getItem("budai_token") || "";
 
     try {
       const res = await fetch(
-        `http://localhost:8080/api/accounts/${accountId}/transactions`,
+        `http://localhost:8080/api/accounts/${providerId}`,
         {
-          headers: { Authorization: `Bearer ${token}` },
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
         },
+      );
+
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        const data = await res.json();
+        alert(`Failed to disconnect: ${data.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      console.error("Error occured:", err);
+      alert("A network error occurred while trying to disconnect.");
+    } finally {
+      setRevokingProviderId(null);
+    }
+  };
+
+  const openAccountLedger = async (account: Account) => {
+    const token = localStorage.getItem("budai_token") || "";
+    setState((prev) => ({ ...prev, activeAccountId: account.account_id }));
+
+    try {
+      const res = await fetch(
+        `http://localhost:8080/api/accounts/${account.account_id}/transactions`,
+        { headers: { Authorization: `Bearer ${token}` } },
       );
       const data = (await res.json()) as { transactions?: Transaction[] };
 
@@ -119,7 +187,8 @@ export default function Dashboard() {
         isModalOpen: true,
       }));
     } catch (error) {
-      console.error("Failed to fetch transactions", error);
+      console.error("Error occured:", error);
+      alert("Failed to load transactions for this account.");
     }
   };
 
@@ -128,17 +197,63 @@ export default function Dashboard() {
     router.push("/");
   };
 
+  const getChartDisplayName = (chartId: string) => {
+    switch (chartId) {
+      case "historical_daily":
+        return "Daily Spend";
+      case "historical_weekly":
+        return "Weekly Spend";
+      case "historical_monthly":
+        return "Monthly Spend";
+      case "categorized":
+        return "Category Breakdown";
+      case "expense_forecast":
+        return "Expense Forecast";
+      case "balance_forecast":
+        return "Balance Projection";
+      default:
+        return "View Chart";
+    }
+  };
+
+  // --- UPDATED: Now accepts an optional aiTargetId from BudAIChat ---
   const handleAiChartTrigger = async (
-    type: TabType | "historical",
+    type: TabType | string,
     customTitle?: string,
+    aiTargetId?: string,
   ) => {
-    if (!state.activeAccountId) return;
+    let targetId = aiTargetId || state.activeAccountId;
+
+    // Resolve bank names (like "Wise") to the actual alphanumeric account_id
+    if (aiTargetId && aiTargetId !== "ALL") {
+      const matchedAccount = state.accounts.find(
+        (a) =>
+          a.account_id === aiTargetId ||
+          a.bank_name?.toLowerCase() === aiTargetId.toLowerCase() ||
+          a.provider_name?.toLowerCase() === aiTargetId.toLowerCase(),
+      );
+      if (matchedAccount) {
+        targetId = matchedAccount.account_id;
+      }
+    }
+
+    if (!targetId) return;
+
+    // Automatically switch the UI sidebar to the account BudAI is analyzing
+    if (targetId !== state.activeAccountId) {
+      setState((prev) => ({ ...prev, activeAccountId: targetId }));
+    }
+
     const token = localStorage.getItem("budai_token") || "";
     const headers = { Authorization: `Bearer ${token}` };
 
     const baseOptions = {
       responsive: true,
       maintainAspectRatio: false,
+      animation: {
+        duration: 1000,
+        easing: "easeOutQuart" as const,
+      },
       plugins: {
         legend: {
           position: "top" as const,
@@ -147,17 +262,30 @@ export default function Dashboard() {
       },
       scales: {
         y: {
+          grace: "5%",
           grid: { color: "#1e293b" },
           ticks: { color: "#94a3b8", font: { family: "monospace" } },
         },
-        x: { grid: { display: false }, ticks: { color: "#94a3b8" } },
+        x: {
+          grid: { display: false },
+          ticks: { color: "#94a3b8", maxTicksLimit: 12, maxRotation: 0 },
+        },
       },
     };
+
+    const colorPalette = [
+      "#00FFAA",
+      "#3b82f6",
+      "#ef4444",
+      "#f59e0b",
+      "#a855f7",
+      "#ec4899",
+    ];
 
     try {
       if (type === "categorized") {
         const res = await fetch(
-          `http://localhost:8080/api/media/csv/total_per_category_${state.activeAccountId}.csv`,
+          `http://localhost:8080/api/media/csv/total_per_category_${targetId}.csv`,
           { headers },
         );
         if (!res.ok) return;
@@ -183,10 +311,9 @@ export default function Dashboard() {
             },
             options: {
               ...baseOptions,
-              animation: {
-                duration: 1000,
-                delay: (ctx: ScriptableContext<"bar">) =>
-                  ctx.type === "data" ? ctx.dataIndex * 100 : 0,
+              scales: {
+                ...baseOptions.scales,
+                y: { ...baseOptions.scales.y, beginAtZero: true },
               },
               plugins: {
                 ...baseOptions.plugins,
@@ -198,13 +325,185 @@ export default function Dashboard() {
                 },
               },
             },
-          } as ChartConfiguration,
+          } as NativeChartConfig,
+        }));
+      } else if (type === "categorized_doughnut") {
+        const res = await fetch(
+          `http://localhost:8080/api/media/csv/total_per_category_${targetId}.csv`,
+          { headers },
+        );
+        if (!res.ok) return;
+
+        const json = (await res.json()) as ChartJsonResponse;
+        const filteredData = json.data.filter(
+          (d) => String(d.Category).toLowerCase() !== "income",
+        );
+        const labels = filteredData.map((d) => String(d.Category || "Unknown"));
+        const amounts = filteredData.map((d) => Number(d.Total_Amount || 0));
+
+        setState((prev) => ({
+          ...prev,
+          chartConfig: {
+            type: "doughnut",
+            data: {
+              labels,
+              datasets: [
+                {
+                  data: amounts,
+                  backgroundColor: colorPalette,
+                  borderColor: "#161B22",
+                  borderWidth: 4,
+                  hoverOffset: 10,
+                },
+              ],
+            },
+            options: {
+              ...baseOptions,
+              cutout: "75%",
+              scales: { x: { display: false }, y: { display: false } },
+              plugins: {
+                ...baseOptions.plugins,
+                title: {
+                  display: true,
+                  text: customTitle || "Expense Distribution",
+                  color: "#ffffff",
+                  font: { size: 16 },
+                },
+              },
+            },
+          } as NativeChartConfig,
+        }));
+      } else if (type === "cash_flow_mixed") {
+        const res = await fetch(
+          `http://localhost:8080/api/media/csv/cash_flow_mixed_${targetId}.csv`,
+          { headers },
+        );
+        if (!res.ok) return;
+
+        const json = (await res.json()) as ChartJsonResponse;
+        const labels = json.data.map((d) => String(d.Month));
+        const income = json.data.map((d) => Number(d.Income));
+        const expense = json.data.map((d) => Number(d.Expense));
+        const netBalance = json.data.map((d) => Number(d.Net_Balance));
+
+        setState((prev) => ({
+          ...prev,
+          chartConfig: {
+            type: "bar",
+            data: {
+              labels,
+              datasets: [
+                {
+                  type: "line",
+                  label: "Net Flow (£)",
+                  data: netBalance,
+                  borderColor: "#3b82f6",
+                  backgroundColor: "rgba(59, 130, 246, 0.1)",
+                  borderWidth: 3,
+                  tension: 0.4,
+                  fill: true,
+                  yAxisID: "y",
+                },
+                {
+                  type: "bar",
+                  label: "Income (£)",
+                  data: income,
+                  backgroundColor: "#00FFAA",
+                  borderRadius: 4,
+                  yAxisID: "y",
+                },
+                {
+                  type: "bar",
+                  label: "Expenses (£)",
+                  data: expense,
+                  backgroundColor: "#ef4444",
+                  borderRadius: 4,
+                  yAxisID: "y",
+                },
+              ],
+            },
+            options: {
+              ...baseOptions,
+              scales: {
+                ...baseOptions.scales,
+                y: { ...baseOptions.scales.y, beginAtZero: true },
+              },
+              plugins: {
+                ...baseOptions.plugins,
+                title: {
+                  display: true,
+                  text: customTitle || "Income vs Expense Matrix",
+                  color: "#ffffff",
+                  font: { size: 16 },
+                },
+              },
+            },
+          } as NativeChartConfig,
+        }));
+      } else if (type === "health_radar") {
+        const res = await fetch(
+          `http://localhost:8080/api/media/csv/health_radar_${targetId}.csv`,
+          { headers },
+        );
+        if (!res.ok) return;
+
+        const json = (await res.json()) as ChartJsonResponse;
+        const labels = json.data.map((d) => String(d.Metric));
+        const scores = json.data.map((d) => Number(d.Score));
+
+        setState((prev) => ({
+          ...prev,
+          chartConfig: {
+            type: "radar",
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: "Health Index",
+                  data: scores,
+                  backgroundColor: "rgba(0, 255, 170, 0.2)",
+                  borderColor: "#00FFAA",
+                  borderWidth: 2,
+                  pointBackgroundColor: "#161B22",
+                  pointBorderColor: "#00FFAA",
+                  pointHoverBackgroundColor: "#fff",
+                  pointHoverBorderColor: "#00FFAA",
+                },
+              ],
+            },
+            options: {
+              ...baseOptions,
+              scales: {
+                x: { display: false },
+                y: { display: false },
+                r: {
+                  angleLines: { color: "#1e293b" },
+                  grid: { color: "#1e293b" },
+                  pointLabels: {
+                    color: "#94a3b8",
+                    font: { family: "monospace", size: 11 },
+                  },
+                  ticks: { display: false, min: 0, max: 100, stepSize: 20 },
+                },
+              },
+              plugins: {
+                ...baseOptions.plugins,
+                title: {
+                  display: true,
+                  text: customTitle || "Financial Health Profile",
+                  color: "#ffffff",
+                  font: { size: 16 },
+                },
+              },
+            },
+          } as NativeChartConfig,
         }));
       } else if (type === "expense_forecast" || type === "balance_forecast") {
         const prefix =
           type === "expense_forecast" ? "converged_expense" : "hybrid_paths";
+
         const res = await fetch(
-          `http://localhost:8080/api/media/csv/${prefix}_${state.activeAccountId}.csv`,
+          `http://localhost:8080/api/media/csv/${prefix}_${targetId}.csv`,
           { headers },
         );
         if (!res.ok) return;
@@ -236,95 +535,60 @@ export default function Dashboard() {
           },
         ];
 
-        let maxPoints = 0;
-
         rows.forEach((row, rIdx) => {
-          const parsedAmounts = row
+          const parts = row
             .split(",")
             .map((v) => v.trim())
-            .filter((v) => v !== "")
-            .map((v) => Number(v))
-            .filter((n) => !isNaN(n));
-          if (parsedAmounts.length === 0) return;
+            .filter((v) => v !== "");
+          if (parts.length === 0) return;
 
-          if (parsedAmounts.length > maxPoints)
-            maxPoints = parsedAmounts.length;
-          if (rIdx === 0) labels = parsedAmounts.map((_, i) => `Day ${i}`);
+          let labelName = "Expected Balance";
+          let borderColor = pathConfigs[0].border;
+          let bgColor = pathConfigs[0].bg;
 
-          const config =
-            type === "balance_forecast" && rows.length === 3
-              ? pathConfigs[rIdx]
-              : pathConfigs[0];
-
-          datasets.push({
-            label:
+          if (isNaN(Number(parts[0]))) {
+            labelName = parts[0];
+            parts.shift();
+            borderColor = colorPalette[rIdx % colorPalette.length];
+            bgColor = "transparent";
+          } else {
+            const config =
+              type === "balance_forecast" && rows.length === 3
+                ? pathConfigs[rIdx]
+                : pathConfigs[0];
+            labelName =
               type === "expense_forecast"
                 ? "Projected Daily Spend (£)"
-                : config.label,
-            data: parsedAmounts,
-            borderColor:
-              type === "expense_forecast" ? "#ef4444" : config.border,
-            backgroundColor:
+                : config.label;
+            borderColor =
+              type === "expense_forecast" ? "#ef4444" : config.border;
+            bgColor =
               type === "expense_forecast"
                 ? "rgba(239, 68, 68, 0.1)"
-                : config.bg,
-            fill: datasets.length === 0 && rows.length === 1 ? true : false,
+                : config.bg;
+          }
+
+          const parsedAmounts = parts
+            .map((v) => Number(v))
+            .filter((n) => !isNaN(n));
+          if (rIdx === 0) labels = parsedAmounts.map((_, i) => `Day ${i}`);
+
+          datasets.push({
+            label: labelName,
+            data: parsedAmounts,
+            borderColor: borderColor,
+            backgroundColor: bgColor,
+            fill:
+              datasets.length === 0 &&
+              rows.length === 1 &&
+              !isNaN(Number(row.split(",")[0]))
+                ? true
+                : false,
             tension: 0.4,
             pointRadius: 0,
             pointHitRadius: 10,
           });
         });
-
-        const totalDuration = 2500;
-        const delayBetweenPoints =
-          maxPoints > 0 ? totalDuration / maxPoints : 0;
-
-        const progressiveAnimation = {
-          x: {
-            type: "number",
-            easing: "linear",
-            duration: delayBetweenPoints,
-            from: NaN,
-            delay: (ctx: ScriptableContext<"line">) => {
-              const aCtx = ctx as AnimContext;
-              if (aCtx.type !== "data" || aCtx.xStarted) return 0;
-              aCtx.xStarted = true;
-              return aCtx.dataIndex * delayBetweenPoints;
-            },
-          },
-          y: {
-            type: "number",
-            easing: "linear",
-            duration: delayBetweenPoints,
-            from: (ctx: ScriptableContext<"line">) => {
-              const aCtx = ctx as AnimContext;
-              if (aCtx.type !== "data") return 0;
-
-              if (aCtx.dataIndex === 0) {
-                const datasetIndex = aCtx.datasetIndex;
-                const startingValue =
-                  (datasets[datasetIndex]?.data[0] as number) || 0;
-                return (
-                  aCtx.chart.scales.y?.getPixelForValue(startingValue) || 0
-                );
-              }
-
-              if (aCtx.yStarted === undefined) {
-                const meta = aCtx.chart.getDatasetMeta(aCtx.datasetIndex);
-                const prev = meta.data[aCtx.dataIndex - 1] as PointElement;
-                aCtx.yStarted = prev ? prev.y : 0;
-              }
-
-              return aCtx.yStarted;
-            },
-            delay: (ctx: ScriptableContext<"line">) => {
-              const aCtx = ctx as AnimContext;
-              if (aCtx.type !== "data" || aCtx.yStartedDelay) return 0;
-              aCtx.yStartedDelay = true;
-              return aCtx.dataIndex * delayBetweenPoints;
-            },
-          },
-        };
 
         setState((prev) => ({
           ...prev,
@@ -333,11 +597,14 @@ export default function Dashboard() {
             data: { labels, datasets },
             options: {
               ...baseOptions,
-              interaction: {
-                mode: "index",
-                intersect: false,
+              scales: {
+                ...baseOptions.scales,
+                y: {
+                  ...baseOptions.scales.y,
+                  beginAtZero: type === "expense_forecast",
+                },
               },
-              animations: progressiveAnimation,
+              interaction: { mode: "index", intersect: false },
               plugins: {
                 ...baseOptions.plugins,
                 title: {
@@ -348,124 +615,94 @@ export default function Dashboard() {
                 },
               },
             },
-          } as unknown as ChartConfiguration,
+          } as unknown as NativeChartConfig,
         }));
       } else if (type.startsWith("historical")) {
-        // Extract the time type (e.g., "historical_monthly" -> "monthly")
         const timeType = type.includes("_") ? type.split("_")[1] : "monthly";
 
-        // Fetch the specific file based on the timeframe
         const res = await fetch(
-          `http://localhost:8080/api/media/csv/${timeType}_spend_${state.activeAccountId}.csv`,
+          `http://localhost:8080/api/media/csv/${timeType}_spend_${targetId}.csv`,
           { headers },
         );
         if (!res.ok) return;
 
-        // Cast using the strict interface defined at the top
         const json = (await res.json()) as ChartJsonResponse;
 
-        // Safely map values, formatting the date to remove the time component
         const labels = json.data.map((d) => {
           const rawDate = String(d.date || d.Date || "Unknown");
           return rawDate.split(" ")[0].split("T")[0];
         });
 
-        const amounts = json.data.map((d) => Number(d.amount || d.Amount || 0));
-        const timeTitle = timeType.charAt(0).toUpperCase() + timeType.slice(1);
+        const datasets: ChartDataset<"line">[] = [];
+        const firstRow = json.data[0] || {};
+        const bankKeys = Object.keys(firstRow).filter(
+          (k) => !["date", "Date", "amount", "Amount"].includes(k),
+        );
 
-        // --- PROGRESSIVE ANIMATION MATH ---
-        const maxPoints = amounts.length;
-        const totalDuration = 2500;
-        const delayBetweenPoints =
-          maxPoints > 0 ? totalDuration / maxPoints : 0;
-
-        const progressiveAnimation = {
-          x: {
-            type: "number",
-            easing: "linear",
-            duration: delayBetweenPoints,
-            from: NaN,
-            delay: (ctx: ScriptableContext<"line">) => {
-              const aCtx = ctx as AnimContext;
-              if (aCtx.type !== "data" || aCtx.xStarted) return 0;
-              aCtx.xStarted = true;
-              return aCtx.dataIndex * delayBetweenPoints;
-            },
-          },
-          y: {
-            type: "number",
-            easing: "linear",
-            duration: delayBetweenPoints,
-            from: (ctx: ScriptableContext<"line">) => {
-              const aCtx = ctx as AnimContext;
-              if (aCtx.type !== "data") return 0;
-
-              if (aCtx.dataIndex === 0) {
-                const startingValue = amounts[0] || 0;
-                return (
-                  aCtx.chart.scales.y?.getPixelForValue(startingValue) || 0
-                );
-              }
-
-              if (aCtx.yStarted === undefined) {
-                const meta = aCtx.chart.getDatasetMeta(aCtx.datasetIndex);
-                const prev = meta.data[aCtx.dataIndex - 1] as PointElement;
-                aCtx.yStarted = prev ? prev.y : 0;
-              }
-
-              return aCtx.yStarted;
-            },
-            delay: (ctx: ScriptableContext<"line">) => {
-              const aCtx = ctx as AnimContext;
-              if (aCtx.type !== "data" || aCtx.yStartedDelay) return 0;
-              aCtx.yStartedDelay = true;
-              return aCtx.dataIndex * delayBetweenPoints;
-            },
-          },
-        };
+        if (bankKeys.length > 0) {
+          bankKeys.forEach((bank, idx) => {
+            const amounts = json.data.map((d) => Number(d[bank] || 0));
+            datasets.push({
+              label: bank,
+              data: amounts,
+              borderColor: colorPalette[idx % colorPalette.length],
+              fill: false,
+              tension: 0.4,
+              pointRadius: 0,
+              pointHitRadius: 10,
+            });
+          });
+        } else {
+          const amounts = json.data.map((d) =>
+            Number(d.amount || d.Amount || 0),
+          );
+          datasets.push({
+            label: `Historical Expenses`,
+            data: amounts,
+            borderColor: "#3b82f6",
+            fill: false,
+            tension: 0.4,
+            pointRadius: 0,
+            pointHitRadius: 10,
+          });
+        }
 
         setState((prev) => ({
           ...prev,
           chartConfig: {
             type: "line",
-            data: {
-              labels,
-              datasets: [
-                {
-                  label: `Historical Expenses (${timeTitle})`,
-                  data: amounts,
-                  borderColor: "#3b82f6",
-                  fill: false,
-                  pointRadius: 0,
-                  pointHitRadius: 10,
-                  pointHoverRadius: 4,
-                },
-              ],
-            },
+            data: { labels, datasets },
             options: {
               ...baseOptions,
-              interaction: {
-                mode: "index",
-                intersect: false,
+              scales: {
+                ...baseOptions.scales,
+                y: { ...baseOptions.scales.y, beginAtZero: true },
               },
-              animations: progressiveAnimation, // Inject the animation here
+              interaction: { mode: "index", intersect: false },
               plugins: {
                 ...baseOptions.plugins,
                 title: {
                   display: true,
-                  text: customTitle || `${timeTitle} Expense Analysis`,
+                  text:
+                    customTitle ||
+                    `${timeType.charAt(0).toUpperCase() + timeType.slice(1)} Expense Analysis`,
                   color: "#ffffff",
                   font: { size: 16 },
                 },
               },
             },
-          } as unknown as ChartConfiguration,
+          } as unknown as NativeChartConfig,
         }));
       }
     } catch (err) {
-      console.error("Chart parsing failed:", err);
+      console.error("Error during chart generation:", err);
     }
   };
+
+  const totalBalance = state.accounts.reduce(
+    (sum, acc) => sum + (acc.balance ?? acc.account_balance ?? 0),
+    0,
+  );
 
   return (
     <div className="h-screen bg-[#0D1117] text-white flex overflow-hidden">
@@ -474,11 +711,8 @@ export default function Dashboard() {
         onClose={() => setState((prev) => ({ ...prev, isModalOpen: false }))}
         transactions={state.selectedTransactions}
         bankName={
-          state.accounts.find(
-            (a) =>
-              (a.truelayer_account_id || a.account_id) ===
-              state.activeAccountId,
-          )?.bank_name || "Selected Account"
+          state.accounts.find((a) => a.account_id === state.activeAccountId)
+            ?.provider_name || "Selected Account"
         }
       />
 
@@ -502,34 +736,85 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {state.accounts.map((acc, idx) => (
-          <div
-            key={idx}
-            onClick={() => openAccountLedger(acc)}
-            className={`bg-[#161B22] p-5 rounded-2xl border ${(acc.truelayer_account_id || acc.account_id) === state.activeAccountId ? "border-[#00FFAA]" : "border-slate-800 hover:border-[#00FFAA]/50"} cursor-pointer transition-all shrink-0 group relative`}
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <CreditCard className="text-[#00FFAA] w-6 h-6 shrink-0 group-hover:scale-110 transition-transform" />
-              <div className="flex flex-col truncate">
-                <span className="text-sm font-bold text-slate-200 truncate">
-                  {acc.bank_name || acc.provider_name}
-                </span>
-                <span className="text-[10px] text-slate-500 font-mono tracking-widest mt-0.5">
-                  {acc.sort_code} | ••••{acc.account_number}
-                </span>
-              </div>
-            </div>
-            <h3 className="text-2xl font-mono font-bold text-white">
-              {acc.currency === "GBP" ? "£" : acc.currency}
-              {(acc.balance ?? acc.account_balance ?? 0).toLocaleString()}
-            </h3>
-            {acc.status === "revoked" && (
-              <div className="mt-4 flex items-center justify-center gap-2 py-2 bg-red-500/10 text-red-400 border border-red-500/50 rounded-lg text-xs font-bold">
-                <AlertTriangle size={14} /> Reconnect Required
-              </div>
-            )}
+        <div
+          onClick={() =>
+            setState((prev) => ({
+              ...prev,
+              activeAccountId: "ALL",
+              isModalOpen: false,
+            }))
+          }
+          className={`bg-[#161B22] p-5 rounded-2xl border ${
+            state.activeAccountId === "ALL"
+              ? "border-[#00FFAA]"
+              : "border-slate-800 hover:border-[#00FFAA]/50"
+          } cursor-pointer transition-all shrink-0 group relative`}
+        >
+          <div className="flex items-center gap-3 mb-4 pr-8">
+            <Globe className="text-[#00FFAA] w-6 h-6 shrink-0 group-hover:scale-110 transition-transform" />
+            <span className="text-sm font-bold text-slate-200">
+              All Accounts
+            </span>
           </div>
-        ))}
+          <h3 className="text-2xl font-mono font-bold text-white">
+            £
+            {totalBalance.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </h3>
+        </div>
+
+        {state.accounts.map((acc, idx) => {
+          const isActive = acc.account_id === state.activeAccountId;
+
+          return (
+            <div
+              key={idx}
+              onClick={() => openAccountLedger(acc)}
+              className={`bg-[#161B22] p-5 rounded-2xl border ${isActive ? "border-[#00FFAA]" : "border-slate-800 hover:border-[#00FFAA]/50"} cursor-pointer transition-all shrink-0 group relative`}
+            >
+              <button
+                onClick={(e) =>
+                  handleRevokeAccess(acc.provider_id || acc.account_id, e)
+                }
+                disabled={revokingProviderId === acc.provider_id}
+                className="absolute top-4 right-4 text-slate-600 hover:text-red-500 transition-colors bg-[#0D1117] p-1.5 rounded-lg border border-slate-800 disabled:opacity-50"
+                title="Disconnect Bank Account"
+              >
+                {revokingProviderId === acc.provider_id ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Unlink size={14} />
+                )}
+              </button>
+
+              <div className="flex items-center gap-3 mb-4 pr-8">
+                <CreditCard className="text-[#00FFAA] w-6 h-6 shrink-0 group-hover:scale-110 transition-transform" />
+                <div className="flex flex-col truncate">
+                  <span className="text-sm font-bold text-slate-200 truncate">
+                    {acc.provider_name || acc.bank_name}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-mono tracking-widest mt-0.5">
+                    {acc.sort_code} | ••••{acc.account_number}
+                  </span>
+                </div>
+              </div>
+              <h3 className="text-2xl font-mono font-bold text-white">
+                {acc.currency === "GBP" ? "£" : acc.currency}
+                {(acc.balance ?? acc.account_balance ?? 0).toLocaleString(
+                  undefined,
+                  { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+                )}
+              </h3>
+              {acc.status === "revoked" && (
+                <div className="mt-4 flex items-center justify-center gap-2 py-2 bg-red-500/10 text-red-400 border border-red-500/50 rounded-lg text-xs font-bold">
+                  <AlertTriangle size={14} /> Reconnect Required
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         <button
           type="button"
@@ -550,7 +835,7 @@ export default function Dashboard() {
               if (data && data.auth_url && data.auth_url !== "undefined")
                 window.location.href = data.auth_url;
             } catch (err) {
-              console.error("Network error fetching bank link:", err);
+              console.error("Error initiating bank linking:", err);
             }
           }}
           className="w-full mt-2 flex items-center justify-center gap-2 bg-[#161B22] border border-slate-800 text-slate-400 p-4 rounded-2xl hover:border-[#00FFAA]/50 hover:text-[#00FFAA] transition-all border-dashed"
@@ -563,22 +848,45 @@ export default function Dashboard() {
       </aside>
 
       <main className="flex-1 flex flex-col relative bg-[#0D1117] p-8 pb-0">
-        <div className="flex-1 mb-8 overflow-hidden rounded-3xl border border-slate-800 bg-[#161B22] shadow-xl">
-          {state.chartConfig ? (
-            <DynamicChart config={state.chartConfig} />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-slate-600 bg-[#0D1117]">
-              <BarChart3 className="w-16 h-16 mb-4 opacity-50" />
-              <p className="text-sm tracking-widest uppercase font-bold text-slate-400">
-                Awaiting AI Analysis
-              </p>
-              <p className="text-xs opacity-50 mt-2">
-                Talk with BudAI to generate insights, forecasts, and
-                visualizations based on your financial data. Try asking for a
-                spending breakdown or a 30-day forecast!
-              </p>
+        <div className="flex-1 mb-8 flex flex-col overflow-hidden rounded-3xl border border-slate-800 bg-[#161B22] shadow-xl relative">
+          {/* Display buttons for ANY account if charts exist */}
+          {availableCharts.length > 0 && (
+            <div className="flex flex-wrap gap-2 p-4 border-b border-slate-800 bg-[#0D1117]/50 items-center justify-center z-10">
+              {isCheckingCharts ? (
+                <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
+              ) : (
+                availableCharts.map((chartId) => (
+                  <button
+                    key={chartId}
+                    onClick={() => handleAiChartTrigger(chartId as TabType)}
+                    className="bg-[#161B22] border border-slate-700 hover:border-[#00FFAA] text-slate-300 hover:text-[#00FFAA] transition-all px-4 py-2 rounded-xl text-xs font-bold"
+                  >
+                    {getChartDisplayName(chartId)}
+                  </button>
+                ))
+              )}
             </div>
           )}
+
+          <div className="flex-1 relative p-4 flex flex-col items-center justify-center">
+            {state.chartConfig ? (
+              <DynamicChart config={state.chartConfig} />
+            ) : (
+              <div className="text-center max-w-md">
+                <BarChart3 className="w-16 h-16 mb-4 opacity-50 mx-auto text-[#00FFAA]" />
+                <p className="text-sm tracking-widest uppercase font-bold text-slate-400">
+                  {availableCharts.length > 0
+                    ? "Select a Dashboard"
+                    : "Awaiting AI Analysis"}
+                </p>
+                <p className="text-xs opacity-50 mt-2">
+                  {availableCharts.length > 0
+                    ? "Click one of the buttons above to view your available charts, or ask BudAI for a new analysis."
+                    : "No data visualizations are available for this account yet. Ask BudAI to plot your monthly expenses or generate a forecast."}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="h-[45vh] shrink-0 pb-8">

@@ -1,12 +1,26 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Loader2, Sparkles, TrendingUp, ShieldCheck } from "lucide-react";
+import {
+  Send,
+  Loader2,
+  Sparkles,
+  TrendingUp,
+  ShieldCheck,
+  Activity,
+  CalendarDays,
+  BarChart2,
+  Flame,
+} from "lucide-react";
 import { ChatMessage, Account, TabType } from "@/types";
 import ReactMarkdown from "react-markdown";
 
 interface BudAIChatProps {
-  onAiAction: (type: TabType) => void;
+  onAiAction: (
+    type: TabType | string,
+    customTitle?: string,
+    aiTargetId?: string,
+  ) => void;
   activeAccountId: string | null;
   accounts: Account[];
 }
@@ -25,7 +39,10 @@ export default function BudAIChat({
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
   }, [messages]);
 
-  const handleSend = async (overrideText?: string, actionType?: TabType) => {
+  const handleSend = async (
+    overrideText?: string,
+    actionType?: TabType | string,
+  ) => {
     const textToSend = overrideText || input;
     if (!textToSend.trim() || loading) return;
 
@@ -38,11 +55,16 @@ export default function BudAIChat({
         a.account_id === activeAccountId ||
         a.truelayer_account_id === activeAccountId,
     );
-    const bankName = activeAccount
-      ? activeAccount.bank_name || activeAccount.provider_name
-      : "Unknown Bank";
 
-    console.log("Active bank:", bankName);
+    const bankName =
+      activeAccountId === "ALL"
+        ? "ALL"
+        : activeAccount
+          ? activeAccount.bank_name ||
+            activeAccount.provider_name ||
+            "Unknown Bank"
+          : "Unknown Bank";
+
     const token = localStorage.getItem("budai_token") || "";
 
     try {
@@ -54,7 +76,7 @@ export default function BudAIChat({
         },
         body: JSON.stringify({
           input: textToSend,
-          active_account_id: activeAccountId,
+          active_account_id: bankName,
           user_id: localStorage.getItem("budai_token"),
           chat_history: messages,
         }),
@@ -75,12 +97,10 @@ export default function BudAIChat({
         const chunk = decoder.decode(value, { stream: true });
         aiText += chunk;
 
-        // Strip the secret trigger tags out in real-time so they never appear in the UI
+        // Clean out any trigger tags (both parameterized and unparameterized) so they don't render in the chat
         const cleanText = aiText
-          .replace("[TRIGGER_EXPENSE_CHART]", "")
-          .replace("[TRIGGER_CATEGORIZED_CHART]", "")
-          .replace("[TRIGGER_BALANCE_CHART]", "")
-          .replace("[TRIGGER_HISTORICAL_CHART]", "");
+          .replace(/\[TRIGGER_[A-Z_]+_CHART(?:[:][^\]]+)?\]/g, "")
+          .trim();
 
         setMessages((prev) => {
           const newMessages = [...prev];
@@ -89,24 +109,37 @@ export default function BudAIChat({
         });
       }
 
-      // ---------------------------------------------------------
-      // BULLETPROOF CHART TRIGGER LOGIC
-      // ---------------------------------------------------------
-      // We check the RAW 'aiText' (which still contains the tags)
-      if (aiText.includes("[TRIGGER_EXPENSE_CHART]")) {
-        onAiAction("expense_forecast");
-      } else if (aiText.includes("[TRIGGER_CATEGORIZED_CHART]")) {
-        onAiAction("categorized");
-      } else if (aiText.includes("[TRIGGER_BALANCE_CHART]")) {
-        onAiAction("balance_forecast");
-      } else if (aiText.includes("[TRIGGER_HISTORICAL_CHART]")) {
-        const lowerText = aiText.toLowerCase();
-        let timeType = "monthly";
+      // Check for parameterized trigger tags, e.g., [TRIGGER_CATEGORIZED_CHART:14748516...]
+      const triggerRegex = /\[TRIGGER_(.*?)_CHART(?:[:](.*?))?\]/;
+      const match = aiText.match(triggerRegex);
 
-        if (lowerText.includes("daily")) timeType = "daily";
-        else if (lowerText.includes("weekly")) timeType = "weekly";
+      if (match) {
+        const triggerType = match[1]; // e.g., "CATEGORIZED", "HISTORICAL"
+        const targetId = match[2]; // e.g., "14748516b23747cf73ec7416a0b21a68" or undefined if missing
 
-        onAiAction(`historical_${timeType}` as TabType);
+        let triggeredAction = "";
+
+        if (triggerType === "CATEGORIZED")
+          triggeredAction = "categorized_doughnut";
+        else if (triggerType === "BALANCE")
+          triggeredAction = "balance_forecast";
+        else if (triggerType === "EXPENSE")
+          triggeredAction = "expense_forecast";
+        else if (triggerType === "CASH_FLOW")
+          triggeredAction = "cash_flow_mixed";
+        else if (triggerType === "HEALTH_RADAR")
+          triggeredAction = "health_radar";
+        else if (triggerType === "HISTORICAL") {
+          const lowerText = aiText.toLowerCase();
+          let timeType = "monthly";
+          if (lowerText.includes("daily")) timeType = "daily";
+          else if (lowerText.includes("weekly")) timeType = "weekly";
+          triggeredAction = `historical_${timeType}`;
+        }
+
+        if (triggeredAction) {
+          onAiAction(triggeredAction, undefined, targetId);
+        }
       } else if (actionType) {
         onAiAction(actionType);
       }
@@ -152,6 +185,7 @@ export default function BudAIChat({
                 />{" "}
                 Categorize Data
               </button>
+
               <button
                 onClick={() =>
                   handleSend(
@@ -165,7 +199,65 @@ export default function BudAIChat({
                   size={16}
                   className="text-[#00FFAA] group-hover:scale-110"
                 />{" "}
-                Run Forecast
+                Balance Forecast
+              </button>
+
+              <button
+                onClick={() =>
+                  handleSend(
+                    "Generate an expense forecast for the next 30 days.",
+                    "expense_forecast",
+                  )
+                }
+                className="bg-[#0D1117] border border-slate-800 p-3 rounded-xl hover:border-[#00FFAA]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
+              >
+                <Activity
+                  size={16}
+                  className="text-[#00FFAA] group-hover:scale-110"
+                />{" "}
+                Expense Forecast
+              </button>
+
+              <button
+                onClick={() =>
+                  handleSend("Plot my monthly expenses.", "historical_monthly")
+                }
+                className="bg-[#0D1117] border border-slate-800 p-3 rounded-xl hover:border-[#00FFAA]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
+              >
+                <CalendarDays
+                  size={16}
+                  className="text-[#00FFAA] group-hover:scale-110"
+                />{" "}
+                Monthly History
+              </button>
+
+              <button
+                onClick={() =>
+                  handleSend(
+                    "Plot my daily spending trends.",
+                    "historical_daily",
+                  )
+                }
+                className="bg-[#0D1117] border border-slate-800 p-3 rounded-xl hover:border-[#00FFAA]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
+              >
+                <BarChart2
+                  size={16}
+                  className="text-[#00FFAA] group-hover:scale-110"
+                />{" "}
+                Daily Spending
+              </button>
+
+              <button
+                onClick={() =>
+                  handleSend("What is my highest spending category?", undefined)
+                }
+                className="bg-[#0D1117] border border-slate-800 p-3 rounded-xl hover:border-[#00FFAA]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
+              >
+                <Flame
+                  size={16}
+                  className="text-[#00FFAA] group-hover:scale-110"
+                />{" "}
+                Highest Spend
               </button>
             </div>
           </div>

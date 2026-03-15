@@ -12,10 +12,6 @@ interface TransactionModalProps {
   bankName: string;
 }
 
-/*
- * Modal designated exclusively for displaying account transactions.
- * Keeps the main dashboard clean for high-level charts and AI chat.
- */
 export default function TransactionModal({
   isOpen,
   onClose,

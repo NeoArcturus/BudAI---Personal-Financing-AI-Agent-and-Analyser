@@ -11,17 +11,17 @@ from tqdm import tqdm
 class Preprocessor:
     def __init__(self, dataframe, st_model_path):
         self.df = dataframe.copy()
-        self.standard_columns = ["Date", "Amount",
-                                 "Currency", "Description", "Target Name"]
+        self.standard_columns = ["Date", "Amount", "Currency",
+                                 "Description", "Target Name", "Truelayer_classification"]
 
         self.rules = {
-            "Food & Dining": r"tesco|lidl|asda|greggs|pret|sainsbury|morrisons|aldi|mcdonalds|kfc|starbucks|costa|co-op|vending|chillionrice",
-            "Transportation": r"uber|trainline|tfl|bus|rail|stagecoach|bee network|taxi|bolt",
-            "Bills & Utilities": r"lebara|vodafone|ee|o2|british gas|octopus|council tax|water|energy|mobile",
-            "Shopping": r"amazon|ebay|argos|zara|h&m|ikea|currys",
-            "Entertainment": r"netflix|spotify|cinema|vue|odeon|steam|playstation|xbox",
-            "Health & Wellness": r"boots|pharmacy|gym|nhs|dentist",
-            "Transfers & Investments": r"paypal|revolut|transfer|monzo|savings|investment|sent"
+            "Food & Dining": r"(?i)\b(tesco|lidl|asda|greggs|pret|sainsbury|morrisons|aldi|mcdonalds|kfc|starbucks|costa|co-op|vending|chillionrice|subway|grill|restaurant|cafe|pizza|burger|kitchen|food|deliveroo|just eat|uber eats)\b",
+            "Transportation": r"(?i)\b(uber|trainline|tfl|transport for london|bus|rail|stagecoach|bee network|taxi|bolt|national express|beryl|transport|coach|train|ticket|avanti|west coast|ctylink)\b",
+            "Bills & Utilities": r"(?i)\b(lebara|vodafone|ee|o2|british gas|octopus|council tax|water|energy|mobile|circuit laundry|utility|broadband)\b",
+            "Shopping": r"(?i)\b(amazon|prime|ebay|argos|zara|h&m|ikea|currys|adidas|nike|freeprints|shop|store|flexistore)\b",
+            "Entertainment": r"(?i)\b(netflix|spotify|cinema|vue|odeon|steam|playstation|xbox|tower bridge|obscura|pub|bar|club|wake|hotstar)\b",
+            "Health & Wellness": r"(?i)\b(boots|pharmacy|gym|nhs|dentist|barber|clinic|health|hospital|medical)\b",
+            "Transfers & Investments": r"(?i)\b(paypal|revolut|transfer|monzo|savings|investment|sent|added to)\b"
         }
 
         self.semantic_anchors = {
@@ -60,7 +60,7 @@ class Preprocessor:
         manual_map = {
             "timestamp": "Date", "transaction_date": "Date", "Merchant": "Target Name",
             "Narrative": "Description", "Reference": "Payment Reference",
-            "amount": "Amount", "description": "Description"
+            "amount": "Amount", "description": "Description", "truelayer_classification": "Truelayer_classification"
         }
         self.df.rename(columns=manual_map, inplace=True)
         self.df.columns = [c.capitalize() if c.lower(
@@ -79,8 +79,13 @@ class Preprocessor:
         for _, row in tqdm(self.df.iterrows(), total=len(self.df), desc="Cleaning"):
             target = str(row.get('Target Name', '')).strip()
             desc = self.clean_text(str(row.get('Description', '')))
-            feature_texts.append(f"{target} {desc}".strip(
-            ) if target.lower() != 'nan' and target != '' else desc)
+            tl_class = str(row.get('Truelayer_classification', '')).strip()
+
+            combined = f"{target} {desc} {tl_class}".strip()
+            if combined.lower().startswith('nan '):
+                combined = combined[4:]
+
+            feature_texts.append(combined)
 
         self.df.loc[:, "Description"] = feature_texts
         embeddings = self.st_model.encode(

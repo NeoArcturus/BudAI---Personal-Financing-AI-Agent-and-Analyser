@@ -11,11 +11,17 @@ class CategoryDistribution:
         self.csv_dir = os.path.join(self.root_dir, "saved_media", "csvs")
         os.makedirs(self.csv_dir, exist_ok=True)
 
-    def extract_category_distribution_data(self, account_id):
-        category_counts = self.classified_data['Category'].value_counts(
-        ).reset_index()
-        category_counts.columns = ['Category', 'Count']
+    def extract_category_distribution_data(self, suffix):
+        df = self.classified_data.copy()
+        df['Amount'] = df['Amount'].abs()
+
+        grouped = df.groupby('Category')['Amount'].sum().reset_index()
+        grouped.columns = ['Category', 'Total_Amount']
+
+        grouped = grouped.sort_values(by='Total_Amount', ascending=False)
+
         csv_path = os.path.join(
-            self.csv_dir, f"category_distribution_{account_id}.csv")
-        category_counts.to_csv(csv_path, index=False)
+            self.csv_dir, f"total_per_category_{suffix}.csv")
+        grouped.to_csv(csv_path, index=False)
+
         return csv_path

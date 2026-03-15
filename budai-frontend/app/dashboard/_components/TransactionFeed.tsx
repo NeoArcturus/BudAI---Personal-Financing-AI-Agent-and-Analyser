@@ -19,7 +19,6 @@ export default function TransactionFeed({
 
   return (
     <div className="space-y-3">
-      {/* Table Header dynamically adjusting to prevent width overflow */}
       <div className="flex justify-between items-center text-[10px] font-bold tracking-widest text-slate-500 uppercase px-4 pb-2 border-b border-slate-800">
         <div className={showCategory ? "w-1/2" : "w-3/4"}>
           Transaction Details
@@ -29,12 +28,10 @@ export default function TransactionFeed({
       </div>
 
       {transactions.map((tx, i) => {
-        // Safely extract data whether it comes from TrueLayer (lowercase) or CSV (uppercase)
         const description = tx.description || tx.Description || "Unknown";
         const dateStr = tx.timestamp || tx.date || "";
         const category = tx.category || tx.Category || "Uncategorized";
 
-        // Safely resolve amount using ?? to prevent 0 from evaluating to false
         const amount = tx.amount ?? tx.Amount ?? 0;
         const isNegative = amount < 0;
         const displayAmount = Math.abs(amount).toFixed(2);
@@ -44,7 +41,6 @@ export default function TransactionFeed({
             key={i}
             className="bg-[#1c2128] p-4 rounded-xl border border-slate-800/50 text-sm hover:border-[#00FFAA]/30 transition-colors flex items-center justify-between"
           >
-            {/* Description Column */}
             <div
               className={`flex flex-col ${showCategory ? "w-1/2" : "w-3/4"} pr-4`}
             >
@@ -57,7 +53,6 @@ export default function TransactionFeed({
               <span className="text-[10px] text-slate-500 mt-1">{dateStr}</span>
             </div>
 
-            {/* AI Category Column */}
             {showCategory && (
               <div className="w-1/4 flex justify-center">
                 <span className="bg-[#0D1117] border border-slate-700 px-3 py-1 rounded-full text-[10px] uppercase tracking-wider text-[#00FFAA] font-bold shadow-inner truncate max-w-full text-center">
@@ -66,7 +61,6 @@ export default function TransactionFeed({
               </div>
             )}
 
-            {/* Amount Column */}
             <div
               className={`w-1/4 text-right font-mono font-bold text-base ${isNegative ? "text-red-400" : "text-[#00FFAA]"}`}
             >

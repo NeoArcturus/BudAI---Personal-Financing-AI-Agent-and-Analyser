@@ -35,8 +35,16 @@ export interface ChatMessage {
 export type TabType =
   | "raw"
   | "categorized"
+  | "categorized_doughnut"
   | "balance_forecast"
   | "expense_forecast"
-  | "historical";
+  | "historical"
+  | "historical_daily"
+  | "historical_weekly"
+  | "historical_monthly"
+  | "cash_flow_mixed"
+  | "health_radar";
 
-export type NativeChartConfig = ChartConfiguration<"line" | "bar">;
+export type NativeChartConfig = ChartConfiguration<
+  "line" | "bar" | "doughnut" | "radar"
+>;

@@ -2,35 +2,46 @@ import os
 import pandas as pd
 import numpy as np
 import sqlite3
-from services.api_integrator.get_account_detail import UserAccount
+from services.api_integrator.get_account_detail import UserAccounts
 from services.Forecaster_Agent.mathematics.mathematics import run_hybrid_engine, run_converged_expense_engine
 
 
 class ForecasterAgent:
     def __init__(self, db_path="budai_memory.db"):
         self.db_path = db_path
-        self.user_acc = None
 
     def fetch_live_balance(self, identifier, user_uuid):
-        self.user_acc = UserAccount(identifier, user_uuid)
-        if self.user_acc.needs_user_clarification:
-            raise ValueError("MULTIPLE_ACCOUNTS")
-        balance_data = self.user_acc.get_account_balance()
-        if isinstance(balance_data, list) and len(balance_data) > 0:
-            return float(balance_data[0].get("available", balance_data[0].get("current", 0.0)))
-        return 0.0
+        if str(identifier).upper() == "ALL" or "," in identifier:
+            raise ValueError(
+                "ForecasterAgent strictly handles a single account identifier.")
 
-    def fetch_and_calculate_parameters(self, current_balance, user_uuid, lookback_days=60):
+        user_acc = UserAccounts(user_id=user_uuid, db_path=self.db_path)
+        balance = user_acc.get_account_balance(identifier, user_uuid)
+        return float(balance) if balance is not None else 0.0
+
+    def fetch_and_calculate_parameters(self, account_id, current_balance, user_uuid, lookback_days=60):
         try:
             with sqlite3.connect(self.db_path) as conn:
-                query = "SELECT date, amount FROM transactions WHERE user_uuid = ?"
-                df = pd.read_sql_query(query, conn, params=(user_uuid,))
+                cursor = conn.cursor()
+                cursor.execute("""SELECT b.bank_name 
+                               FROM banks b 
+                               LEFT JOIN accounts a
+                               ON b.bank_uuid = a.bank_uuid
+                               WHERE a.account_id=?""", (account_id))
+                row = cursor.fetchone()
+
+                user = UserAccounts(user_uuid)
+                bank_name = row[0]
+                df = user.get_transactions(
+                    bank_name_or_id=bank_name, user_uuid=user_uuid)
         except Exception:
             df = pd.DataFrame()
 
         if df.empty:
             return current_balance, -0.01, 0.05
 
+        if 'timestamp' in df.columns and 'date' not in df.columns:
+            df['date'] = df['timestamp']
         df['Date'] = pd.to_datetime(
             df['date'], format='ISO8601', utc=True).dt.date
         daily_net = df.groupby('Date')['amount'].sum(
@@ -49,23 +60,31 @@ class ForecasterAgent:
             recent_data['Safe_Balance'] / recent_data['Safe_Balance'].shift(1))
         mu = recent_data['Returns'].mean()
         sigma = recent_data['Returns'].std()
+
         if np.isnan(mu):
             mu = -0.01
         if np.isnan(sigma) or sigma == 0:
             sigma = 0.05
         return current_balance, mu, sigma
 
-    def fetch_expense_parameters(self, user_uuid, lookback_days=60):
+    def fetch_expense_parameters(self, account_id, user_uuid, lookback_days=60):
         try:
             with sqlite3.connect(self.db_path) as conn:
-                query = "SELECT date, amount FROM transactions WHERE amount < 0 AND user_uuid = ?"
-                df = pd.read_sql_query(query, conn, params=(user_uuid,))
+                query = """
+                    SELECT t.* FROM transactions t 
+                    JOIN banks b ON t.bank_uuid = b.bank_uuid 
+                    WHERE t.amount < 0 AND b.bank_name = ? AND t.user_uuid = ?
+                """
+                df = pd.read_sql_query(
+                    query, conn, params=(account_id, user_uuid))
         except Exception:
             df = pd.DataFrame()
 
         if df.empty:
             return 50.0, 0.001
 
+        if 'timestamp' in df.columns and 'date' not in df.columns:
+            df['date'] = df['timestamp']
         df['Date'] = pd.to_datetime(
             df['date'], format='ISO8601', utc=True).dt.date
         df['amount'] = df['amount'].abs()
@@ -78,6 +97,7 @@ class ForecasterAgent:
         recent_data['Returns'] = np.log(
             recent_data['Safe_Amount'] / recent_data['Safe_Amount'].shift(1))
         mu_E = recent_data['Returns'].mean()
+
         if np.isnan(mu_E):
             mu_E = 0.001
         return E0, mu_E

@@ -8,32 +8,42 @@ def init_db(db_path="budai_memory.db"):
                 user_uuid TEXT PRIMARY KEY,
                 name TEXT,
                 password TEXT,
-                truelayer_account_ids TEXT,
                 user_type TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS banks (
+                bank_uuid TEXT PRIMARY KEY,
+                user_uuid TEXT REFERENCES users(user_uuid),
+                truelayer_provider_id TEXT,
+                bank_name TEXT,
+                bank_logo_uri TEXT,
+                access_token BLOB,
+                refresh_token BLOB,
+                consent_status TEXT,
+                consent_status_updated_at TIMESTAMP,
+                consent_created_at TIMESTAMP,
+                consent_expires_at TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS accounts (
+                account_id TEXT PRIMARY KEY,
+                user_uuid TEXT REFERENCES users(user_uuid),
+                bank_uuid TEXT REFERENCES banks(bank_uuid),
+                account_number TEXT,
+                sort_code TEXT,
+                account_type TEXT,
+                account_balance REAL
             )
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
                 transaction_uuid TEXT PRIMARY KEY,
-                user_uuid TEXT,
-                truelayer_account_id TEXT,
+                user_uuid TEXT REFERENCES users(user_uuid),
+                bank_uuid TEXT REFERENCES banks(bank_uuid),
+                account_id TEXT REFERENCES accounts(account_id),
                 csv_file_path TEXT
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS accounts (
-                user_uuid TEXT,
-                truelayer_account_id TEXT PRIMARY KEY,
-                bank_name TEXT,
-                sort_code TEXT,
-                account_number TEXT,
-                account_balance REAL,
-                account_label TEXT,
-                access_token BLOB,
-                refresh_token BLOB,
-                access_token_validity_time TIMESTAMP,
-                connection_extension_status TEXT,
-                access_status TEXT
             )
         """)
         conn.execute("""
