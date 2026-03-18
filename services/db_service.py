@@ -43,14 +43,10 @@ def init_db(db_path="budai_memory.db"):
                 user_uuid TEXT REFERENCES users(user_uuid),
                 bank_uuid TEXT REFERENCES banks(bank_uuid),
                 account_id TEXT REFERENCES accounts(account_id),
-                csv_file_path TEXT
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS auth_states (
-                state_uuid TEXT PRIMARY KEY,
-                user_uuid TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                date TIMESTAMP,
+                amount REAL,
+                category TEXT,
+                description TEXT
             )
         """)
         conn.execute("""

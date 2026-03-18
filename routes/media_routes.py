@@ -1,24 +1,292 @@
-from flask import Blueprint, jsonify, Response
-import os
+from flask import Blueprint, jsonify, request
+import sqlite3
 import pandas as pd
+import time
+import json
+from datetime import datetime, timedelta
 from middleware.auth_middleware import token_required
+
+from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+from services.Analyser_Agent.financial_health import FinancialHealthAnalyzer
+from services.Forecaster_Agent.ForecasterAgent import ForecasterAgent
+from services.Analyser_Agent.expense_analysis import ExpenseAnalysis
 
 media_bp = Blueprint('media', __name__)
 
 
-@media_bp.route('/csv/<filename>', methods=['GET'])
+def resolve_bank_accounts(bank_name_or_id, user_uuid):
+    with sqlite3.connect("budai_memory.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT b.bank_name, a.account_id 
+            FROM banks b 
+            JOIN accounts a ON b.bank_uuid = a.bank_uuid 
+            WHERE a.user_uuid = ?
+        """, (user_uuid,))
+        all_accounts = cursor.fetchall()
+
+        if not all_accounts:
+            return []
+
+        if not bank_name_or_id or str(bank_name_or_id).upper() in ["ALL", "NONE", ""]:
+            if len(all_accounts) == 1:
+                return [{"bank_name": all_accounts[0][0], "account_id": all_accounts[0][1]}]
+            return [{"bank_name": row[0], "account_id": row[1]} for row in all_accounts]
+
+        raw_banks = [b.strip().lower()
+                     for b in str(bank_name_or_id).split(",") if b.strip()]
+        resolved = []
+        for row in all_accounts:
+            b_name, a_id = row
+            if b_name.lower() in raw_banks or a_id.lower() in raw_banks:
+                resolved.append({"bank_name": b_name, "account_id": a_id})
+
+        if not resolved:
+            return [{"bank_name": bank_name_or_id, "account_id": bank_name_or_id}]
+
+        return resolved
+
+
+@media_bp.route('/execute', methods=['POST'])
 @token_required
-def serve_csv(filename):
-    csv_dir = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), '..', 'saved_media', 'csvs'))
-    file_path = os.path.join(csv_dir, filename)
+def execute_tool():
+    start_time = time.time()
+    data_req = request.json or {}
+
+    tool_name = data_req.get("tool_name")
+    params = data_req.get("parameters", {})
+    user_uuid = request.user_uuid
+
+    # --- INSTANT CACHE FETCH ENGINE ---
+    bank_name_or_id = params.get("bank_name_or_id", "")
+    if isinstance(bank_name_or_id, str) and bank_name_or_id.startswith("CACHE_"):
+        with sqlite3.connect("budai_memory.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT chart_data FROM chart_cache WHERE cache_id = ?", (bank_name_or_id,))
+            row = cursor.fetchone()
+            if row:
+                cached_payload = json.loads(row[0])
+                execution_time = int((time.time() - start_time) * 1000)
+                return jsonify({
+                    "status": "success",
+                    "metadata": {
+                        "execution_time_ms": execution_time,
+                        "tool_executed": tool_name,
+                        "query_type": "CACHED_RETRIEVAL",
+                        "resolved_accounts": [{"bank_name": "Cached Data"}]
+                    },
+                    "data": cached_payload
+                })
+
+    # --- FALLBACK: ON-THE-FLY GENERATION FOR UI QUICK ACTIONS ---
+    resolved_accounts = resolve_bank_accounts(bank_name_or_id, user_uuid)
+
+    if not resolved_accounts:
+        return jsonify({"error": "No accounts found for user."}), 404
+
+    query_type = "SINGLE_BANK" if len(
+        resolved_accounts) == 1 else "MULTIPLE_BANKS"
+    response_data = []
 
     try:
-        if "converged" in filename or "hybrid" in filename:
-            with open(file_path, 'r') as f:
-                return Response(f.read(), mimetype='text/csv')
+        if tool_name == "plot_cash_flow_mixed":
+            from_date = (datetime.now() - timedelta(days=365)
+                         ).strftime("%Y-%m-%d")
+            to_date = datetime.now().strftime("%Y-%m-%d")
 
-        df = pd.read_csv(file_path)
-        return jsonify({"data": df.fillna("").to_dict(orient="records")})
-    except Exception:
-        return jsonify({"data": []}), 404
+            for acc in resolved_accounts:
+                ea = ExpenseAnalysis(
+                    identifier=acc["bank_name"], user_uuid=user_uuid)
+                ea.fetch_data(from_date, to_date)
+                df = ea.get_monthly_spend_data()
+
+                bank_data = []
+                if df is not None and not df.empty:
+                    df['Date'] = pd.to_datetime(
+                        df['Date'], errors='coerce', utc=True)
+                    df['Month'] = df['Date'].dt.to_period('M')
+
+                    agent = CategorizerAgent()
+                    full_df = agent.execute_cycle(
+                        acc["bank_name"], user_uuid, from_date, to_date)
+
+                    if full_df is not None and not full_df.empty:
+                        full_df['Date'] = pd.to_datetime(
+                            full_df['Date'], errors='coerce', utc=True)
+                        full_df['Month'] = full_df['Date'].dt.to_period('M')
+
+                        # SAFETY FIX: dropna() prevents NaTType from reaching strftime
+                        for period in sorted(full_df['Month'].dropna().unique()):
+                            month_str = period.strftime('%Y-%m')
+                            month_df = full_df[full_df['Month'] == period]
+
+                            inc = float(
+                                month_df[month_df['Category'].str.lower() == 'income']['Amount'].abs().sum())
+                            exp = float(
+                                month_df[month_df['Category'].str.lower() != 'income']['Amount'].abs().sum())
+
+                            bank_data.append({
+                                "Month": month_str,
+                                "Income": round(inc, 2),
+                                "Expense": round(exp, 2),
+                                "Net_Balance": round(inc - exp, 2)
+                            })
+
+                response_data.append({
+                    "bank_name": acc["bank_name"],
+                    "data": bank_data
+                })
+
+        elif tool_name in ["classify_financial_data", "create_bargraph_chart_and_save", "find_total_spent_for_given_category"]:
+            from_date = params.get("from_date", "2010-01-01")
+            to_date = params.get(
+                "to_date", datetime.now().strftime("%Y-%m-%d"))
+            agent = CategorizerAgent()
+
+            for acc in resolved_accounts:
+                df = agent.execute_cycle(
+                    acc["bank_name"], user_uuid, from_date, to_date)
+                bank_data = []
+
+                if df is not None and not df.empty:
+                    categories = df['Category'].unique()
+                    for cat in categories:
+                        cat_df = df[df['Category'] == cat]
+                        total_amt = float(cat_df['Amount'].abs().sum())
+                        tx_count = len(cat_df)
+                        bank_data.append({
+                            "Category": str(cat),
+                            "Total_Amount": round(total_amt, 2),
+                            "Transaction_Count": tx_count
+                        })
+                    bank_data = sorted(
+                        bank_data, key=lambda x: x["Total_Amount"], reverse=True)
+
+                response_data.append({
+                    "bank_name": acc["bank_name"],
+                    "data": bank_data
+                })
+
+        elif tool_name == "plot_health_radar":
+            analyzer = FinancialHealthAnalyzer(user_uuid)
+            runway = min(analyzer.calculate_liquid_runway() / 180 * 100, 100)
+            nw_vel = max(
+                min((analyzer.calculate_net_worth_velocity() + 1000) / 2000 * 100, 100), 0)
+            mpc_score = max((1.0 - analyzer.calculate_mpc()) * 100, 0)
+            absorption = min(
+                analyzer.calculate_shock_absorption() / 5 * 100, 100)
+            drag_score = max(100 - (analyzer.calculate_interest_drag() * 5), 0)
+
+            overall_data = [
+                {"Metric": "Liquid Runway", "Score": round(runway, 2)},
+                {"Metric": "Wealth Velocity", "Score": round(nw_vel, 2)},
+                {"Metric": "Savings Efficiency", "Score": round(mpc_score, 2)},
+                {"Metric": "Shock Absorption", "Score": round(absorption, 2)},
+                {"Metric": "Debt Control", "Score": round(drag_score, 2)}
+            ]
+            response_data.append({
+                "bank_name": "Overall Portfolio",
+                "data": overall_data
+            })
+
+        elif tool_name == "plot_expenses":
+            plot_type = str(params.get("plot_time_type", "monthly")).lower()
+            from_date = params.get("from_date", "2010-01-01")
+            to_date = params.get(
+                "to_date", datetime.now().strftime("%Y-%m-%d"))
+
+            for acc in resolved_accounts:
+                ea = ExpenseAnalysis(
+                    identifier=acc["bank_name"], user_uuid=user_uuid)
+                bank_data = []
+
+                if ea.fetch_data(from_date, to_date):
+                    if plot_type == 'daily':
+                        df = ea.get_daily_spend_data()
+                    elif plot_type == 'weekly':
+                        df = ea.get_weekly_spend_data()
+                    else:
+                        df = ea.get_monthly_spend_data()
+
+                    if df is not None and not df.empty:
+                        for _, row in df.iterrows():
+                            date_val = row['Date'] if 'Date' in df.columns else row['date']
+                            amt_val = row['Amount'] if 'Amount' in df.columns else row['amount']
+
+                            # SAFETY FIX: Ensure date is not null before formatting
+                            if pd.notnull(date_val):
+                                bank_data.append({
+                                    "Date": pd.to_datetime(date_val).strftime('%Y-%m-%d'),
+                                    "Amount": round(float(amt_val), 2)
+                                })
+
+                response_data.append({
+                    "bank_name": acc["bank_name"],
+                    "data": bank_data
+                })
+
+        elif tool_name in ["generate_expense_forecast", "generate_financial_forecast"]:
+            agent = ForecasterAgent()
+            days = params.get("days", 30)
+
+            for acc in resolved_accounts:
+                a_id = acc["account_id"]
+                bank_data = []
+
+                if tool_name == "generate_financial_forecast":
+                    real_balance = agent.fetch_live_balance(a_id, user_uuid)
+                    S0, mu, _ = agent.fetch_and_calculate_parameters(
+                        a_id, real_balance, user_uuid, 60)
+                    df_temp = agent.run_hybrid_simulation(
+                        a_id, S0, mu, days=days, paths=1000)
+
+                    if not df_temp.empty:
+                        exp_vals = df_temp.iloc[0].values.tolist()
+                        care_vals = df_temp.iloc[1].values.tolist()
+                        opt_vals = df_temp.iloc[2].values.tolist()
+
+                        for i in range(days):
+                            bank_data.append({
+                                "Day": f"Day {i}",
+                                "Expected Balance": round(exp_vals[i], 2),
+                                "Careless Scenario (5%)": round(care_vals[i], 2),
+                                "Optimal Scenario (95%)": round(opt_vals[i], 2)
+                            })
+
+                else:
+                    E0, mu_E = agent.fetch_expense_parameters(
+                        a_id, user_uuid, lookback_days=60)
+                    df_temp = agent.run_expense_simulation(
+                        a_id, E0, mu_E, days=days, paths=1000)
+
+                    if not df_temp.empty:
+                        convergent_path = df_temp.iloc[0].values.tolist()
+                        for i in range(days):
+                            bank_data.append({
+                                "Day": f"Day {i}",
+                                "Projected Daily Spend (£)": round(convergent_path[i], 2)
+                            })
+
+                response_data.append({
+                    "bank_name": acc["bank_name"],
+                    "data": bank_data
+                })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+    execution_time = int((time.time() - start_time) * 1000)
+
+    return jsonify({
+        "status": "success",
+        "metadata": {
+            "execution_time_ms": execution_time,
+            "tool_executed": tool_name,
+            "query_type": query_type,
+            "resolved_accounts": resolved_accounts
+        },
+        "data": response_data
+    })

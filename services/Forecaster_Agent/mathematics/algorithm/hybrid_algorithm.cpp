@@ -1,13 +1,14 @@
 #include "algorithm.h"
-#include <fstream>
 #include <string>
 #include <functional>
+#include <vector>
+#include <algorithm>
+#include <cmath>
 
 extern "C"
 {
-    int run_hybrid_forecast(double S0, double mu, int days, int paths, const char *account_id, const char *output_file_path)
+    int run_hybrid_forecast(double S0, double mu, int buffer_size, int paths, const char *account_id, double *mean_out, double *careless_out, double *optimal_out)
     {
-
         HestonParams hp = {S0, 0.04, 2.0, 0.04, 0.1, -0.5};
         JumpParams jp = {0.1, -0.05, 0.1};
         double dt = 1.0;
@@ -15,40 +16,53 @@ extern "C"
         std::hash<std::string> hasher;
         int seed = static_cast<int>(hasher(std::string(account_id)));
 
-        std::vector<std::vector<double>> final_paths = heston_jump_mc(hp, jp, mu, dt, days, paths, seed);
+        std::vector<std::vector<double>> final_paths = heston_jump_mc(hp, jp, mu, dt, buffer_size - 1, paths, seed);
 
-        std::ofstream file(output_file_path);
-        if (!file.is_open())
-        {
+        if (final_paths.empty())
             return 1;
-        }
 
-        for (size_t i = 0; i < final_paths.size(); ++i)
+        int path_len = final_paths[0].size();
+        int days_to_copy = std::min(buffer_size, path_len);
+
+        for (int j = 0; j < days_to_copy; ++j)
         {
-            for (size_t j = 0; j < final_paths[i].size(); ++j)
+            std::vector<double> day_vals(paths);
+            double sum = 0.0;
+            for (int i = 0; i < paths; ++i)
             {
-                file << final_paths[i][j] << (j == final_paths[i].size() - 1 ? "" : ",");
+                day_vals[i] = final_paths[i][j];
+                sum += final_paths[i][j];
             }
-            file << "\n";
+
+            mean_out[j] = sum / paths;
+
+            std::sort(day_vals.begin(), day_vals.end());
+            int p05_idx = std::max(0, std::min(static_cast<int>(0.05 * paths), paths - 1));
+            int p95_idx = std::max(0, std::min(static_cast<int>(0.95 * paths), paths - 1));
+
+            careless_out[j] = day_vals[p05_idx];
+            optimal_out[j] = day_vals[p95_idx];
         }
-        file.close();
 
         return 0;
     }
 
-    int run_converged_expense_forecast(double E0, double mu, int days, int paths, const char *account_id, const char *output_path)
+    int run_converged_expense_forecast(double E0, double mu, int buffer_size, int paths, const char *account_id, double *expected_out)
     {
         HestonParams hp = {E0, 0.04, 2.0, 0.04, 0.1, -0.5};
         JumpParams jp = {0.1, -0.05, 0.1};
         double dt = 1.0;
+        int sim_days = buffer_size - 1;
 
         std::hash<std::string> hasher;
         int seed = static_cast<int>(hasher(std::string(account_id)));
 
-        std::vector<std::vector<double>> final_paths = heston_jump_mc(hp, jp, mu, dt, days, paths, seed);
+        std::vector<std::vector<double>> final_paths = heston_jump_mc(hp, jp, mu, dt, sim_days, paths, seed);
+        if (final_paths.empty())
+            return 1;
 
         double historical_expected_total = 0.0;
-        for (int t = 1; t <= days; ++t)
+        for (int t = 1; t <= sim_days; ++t)
         {
             historical_expected_total += E0 * exp(mu * t);
         }
@@ -60,7 +74,7 @@ extern "C"
         for (size_t i = 0; i < final_paths.size(); ++i)
         {
             double path_sum = 0.0;
-            for (size_t j = 1; j <= days; ++j)
+            for (size_t j = 1; j <= sim_days && j < final_paths[i].size(); ++j)
             {
                 path_sum += final_paths[i][j];
             }
@@ -75,16 +89,13 @@ extern "C"
             }
         }
 
-        std::ofstream file(output_path);
-        if (!file.is_open())
-            return 1;
+        int path_len = final_paths[best_path_idx].size();
+        int days_to_copy = std::min(buffer_size, path_len);
 
-        for (size_t j = 0; j < final_paths[best_path_idx].size(); ++j)
+        for (int j = 0; j < days_to_copy; ++j)
         {
-            file << final_paths[best_path_idx][j] << (j == final_paths[best_path_idx].size() - 1 ? "" : ",");
+            expected_out[j] = final_paths[best_path_idx][j];
         }
-        file << "\n";
-        file.close();
 
         return 0;
     }

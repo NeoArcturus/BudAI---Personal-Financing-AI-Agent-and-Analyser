@@ -27,11 +27,11 @@ class ForecasterAgent:
                                FROM banks b 
                                LEFT JOIN accounts a
                                ON b.bank_uuid = a.bank_uuid
-                               WHERE a.account_id=?""", (account_id))
+                               WHERE a.account_id=?""", (account_id,))  # FIXED COMMA HERE
                 row = cursor.fetchone()
 
                 user = UserAccounts(user_uuid)
-                bank_name = row[0]
+                bank_name = row[0] if row else account_id
                 df = user.get_transactions(
                     bank_name_or_id=bank_name, user_uuid=user_uuid)
         except Exception:
@@ -70,13 +70,18 @@ class ForecasterAgent:
     def fetch_expense_parameters(self, account_id, user_uuid, lookback_days=60):
         try:
             with sqlite3.connect(self.db_path) as conn:
-                query = """
-                    SELECT t.* FROM transactions t 
-                    JOIN banks b ON t.bank_uuid = b.bank_uuid 
-                    WHERE t.amount < 0 AND b.bank_name = ? AND t.user_uuid = ?
-                """
-                df = pd.read_sql_query(
-                    query, conn, params=(account_id, user_uuid))
+                cursor = conn.cursor()
+                cursor.execute("""SELECT b.bank_name 
+                               FROM banks b 
+                               LEFT JOIN accounts a
+                               ON b.bank_uuid = a.bank_uuid
+                               WHERE a.account_id=?""", (account_id,))  # FIXED COMMA HERE
+                row = cursor.fetchone()
+
+                user = UserAccounts(user_uuid)
+                bank_name = row[0] if row else account_id
+                df = user.get_transactions(
+                    bank_name_or_id=bank_name, user_uuid=user_uuid)
         except Exception:
             df = pd.DataFrame()
 
@@ -102,8 +107,10 @@ class ForecasterAgent:
             mu_E = 0.001
         return E0, mu_E
 
-    def run_hybrid_simulation(self, account_id, S0, mu, days=30, paths=1000000):
-        return run_hybrid_engine(S0, mu, days, paths, str(account_id))
+    def run_hybrid_simulation(self, account_id, S0, mu, days=60, paths=1000):
+        df = run_hybrid_engine(S0, mu, days, paths, account_id)
+        return df
 
-    def run_expense_simulation(self, account_id, E0, mu_E, days=30, paths=1000000):
-        return run_converged_expense_engine(E0, mu_E, days, paths, str(account_id))
+    def run_expense_simulation(self, account_id, E0, mu, days=30, paths=1000):
+        df = run_converged_expense_engine(E0, mu, days, paths, account_id)
+        return df

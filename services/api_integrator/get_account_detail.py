@@ -28,6 +28,8 @@ class UserAccounts:
                 break
             time.sleep(2 ** attempt)
 
+        print("Response:", res)
+
         if res is not None and res.status_code == 401 and provider_id:
             token_gen = AccessTokenGenerator(self.db_path)
             new_token = token_gen.refresh_token(provider_id, self.user_id)
@@ -142,7 +144,6 @@ class UserAccounts:
             return []
 
     def get_account_balance(self, bank_name_or_id, user_uuid, account_type="TRANSACTION"):
-        """Fetches the balance directly from the local DB to prevent TrueLayer API rate-limiting."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("""

@@ -4,6 +4,8 @@ BudAI is an autonomous, privacy-first financial intelligence system designed to 
 
 The system operates as a **Hybrid Agentic Ecosystem**, utilizing a strict, stoic conversational AI orchestrator to trigger highly specialized, independent background engines while maintaining strict multi-account data isolation.
 
+BudAI is structured as a modular pipeline that separates user interaction, API orchestration, financial intelligence agents, high-performance computation, and persistent storage. The frontend communicates with a lightweight Flask gateway that validates requests, resolves banking contexts, and routes structured instructions to internal AI tools. These tools coordinate specialized agents responsible for categorization, forecasting, and financial health analysis. Heavy numerical simulations are delegated to a compiled C++ engine, while structured financial data and authentication states are maintained in a secure SQLite persistence layer. External telemetry such as banking synchronization and language model inference integrates seamlessly into this pipeline while preserving a privacy-first, locally executed architecture.
+
 ---
 
 # Agentic Architecture & The Frontend
@@ -13,6 +15,8 @@ BudAI operates through a central conversational router (BudAI Chat) that delegat
 ## The Agentic UI (Next.js)
 
 The frontend is a dynamic Next.js dashboard that visualizes the AI's outputs. It features a "Smart Sync" chat interface that automatically detects which bank account (e.g., Revolut, Wise) the user is viewing or discussing, passing this context seamlessly to the backend API to prevent data bleed.
+
+The interface also renders visual analytics including financial charts, transaction distributions, and forecasting outputs produced by backend agents.
 
 ---
 
@@ -24,6 +28,8 @@ Powered by LangChain's AgentExecutor and running locally via Ollama (optimized f
 
 It relies on highly strict prompt engineering to prevent "thought leaking" and JSON hallucination, ensuring it only delivers accurate, data-driven insights without emotional fluff or emojis.
 
+The orchestrator acts primarily as a **task router**, selecting specialized tools rather than performing heavy computation itself.
+
 ## Independent TrueLayer Resolution
 
 Agents no longer rely on the orchestrator for authentication.
@@ -34,22 +40,30 @@ The `UserAccount` class allows each sub-agent to autonomously:
 - Resolve natural language bank names (like "Monzo") into exact `account_id`s
 - Connect to the TrueLayer API independently
 
+This design prevents cross-account data leakage and ensures strict isolation between financial contexts.
+
 ## Categorization Agent
 
-Acts as the sensory organ. It:
+Acts as the sensory organ of the system. It:
 
-- Fetches raw bank data
-- Standardizes it
+- Fetches raw bank transaction data
+- Standardizes financial records
 - Performs a two-phase categorization process utilizing a local XGBoost classifier
+
+This agent converts unstructured transaction descriptions into structured financial categories.
 
 ## Forecaster Agent (C++/Python)
 
-The mathematical engine. It:
+The forecasting engine models financial behavior using stochastic simulations.
+
+It:
 
 - Calculates drift and volatility from real balances
 - Uses a custom C++ engine to run Monte Carlo simulations
 - Generates visual convergence charts
 - Produces narrative financial forecasts
+
+These forecasts estimate potential financial trajectories under multiple behavioral scenarios.
 
 ---
 

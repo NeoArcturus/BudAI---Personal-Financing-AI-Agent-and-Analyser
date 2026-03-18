@@ -21,21 +21,41 @@ class AccessTokenGenerator:
         self.cipher_suite = Fernet(enc_key)
 
     def get_auth_link(self, user_uuid):
-        state_uuid = str(uuid.uuid4())
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                "INSERT INTO auth_states (state_uuid, user_uuid) VALUES (?, ?)", (state_uuid, user_uuid))
         params = {
             "response_type": "code",
             "client_id": self.client_id,
             "scope": "info accounts balance cards transactions direct_debits standing_orders offline_access",
             "redirect_uri": self.redirect_uri,
             "providers": "uk-ob-all uk-oauth-all",
-            "state": state_uuid
+            "state": user_uuid
         }
         return f"{self.auth_base_url}?{urlencode(params)}"
 
-    def generate_token_from_code(self, code, user_uuid):
+    def get_reauth_link(self, refresh_token, user_uuid):
+        url = "https://auth.truelayer.com/v1/reauthuri"
+        payload = {
+            "refresh_token": refresh_token,
+            "response_type": "code",
+            "redirect_uri": self.redirect_uri
+        }
+
+        try:
+            response = requests.post(url, json=payload)
+            if response.status_code == 200:
+                data = response.json()
+                if data["success"] == True:
+                    print(
+                        f"[BACKEND LOG] Re-auth URI successfully generated: {data["result"]}")
+                    return data["result"]
+            else:
+                print(
+                    f"[ERROR] TrueLayer reauthuri returned {response.status_code}: {response.text}")
+        except Exception as e:
+            print(f"[ERROR] TrueLayer reauthuri generation failed: {e}")
+
+        return None
+
+    def generate_token_from_code(self, code, state):
         payload = {
             "grant_type": "authorization_code",
             "client_id": self.client_id,
@@ -45,10 +65,12 @@ class AccessTokenGenerator:
         }
         response = requests.post(self.token_url, data=payload)
         res = response.json()
+
         if "access_token" in res:
             headers = {"Authorization": f"Bearer {res['access_token']}"}
             me_res = requests.get(
                 "https://api.truelayer.com/data/v1/me", headers=headers).json()
+
             provider_id = me_res['results'][0]['provider']['provider_id']
             provider_name = me_res['results'][0]['provider']['display_name']
             provider_logo_uri = me_res['results'][0]['provider']['logo_uri']
@@ -56,38 +78,44 @@ class AccessTokenGenerator:
             consent_status_updated_at = me_res['results'][0]['consent_status_updated_at']
             consent_created_at = me_res['results'][0]['consent_created_at']
             consent_expires_at = me_res['results'][0]['consent_expires_at']
+
             enc_access = self.cipher_suite.encrypt(
                 res["access_token"].encode())
             enc_refresh = self.cipher_suite.encrypt(
                 res["refresh_token"].encode())
-            bank_uuid = str(uuid.uuid4())
 
             with sqlite3.connect(self.db_path) as conn:
-                conn.execute("""
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    SELECT bank_uuid, user_uuid FROM banks 
+                    WHERE truelayer_provider_id = ?
+                """, (provider_id,))
+                existing_row = cursor.fetchone()
+
+                if existing_row:
+                    bank_uuid = existing_row[0]
+                    user_uuid = existing_row[1]
+                else:
+                    bank_uuid = str(uuid.uuid4())
+                    user_uuid = state
+
+                cursor.execute("""
                     INSERT OR REPLACE INTO banks (bank_uuid, truelayer_provider_id, user_uuid, bank_name, bank_logo_uri, access_token, refresh_token, consent_status, consent_status_updated_at, consent_created_at, consent_expires_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (bank_uuid, provider_id, user_uuid, provider_name, provider_logo_uri, enc_access, enc_refresh, consent_status, consent_status_updated_at, consent_created_at, consent_expires_at))
+                conn.commit()
+
+            print(
+                f"[AUTH LOG] Bank {provider_name} successfully linked/updated.")
             return True
+        else:
+            print(f"[AUTH ERROR] TrueLayer token exchange failed: {res}")
 
         return False
 
     def validate_callback(self, code, state):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT user_uuid FROM auth_states WHERE state_uuid = ?", (state,))
-            row = cursor.fetchone()
-
-        if not row:
-            return False
-
-        user_uuid = row[0]
-        if self.generate_token_from_code(code, user_uuid):
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute(
-                    "DELETE FROM auth_states WHERE state_uuid = ?", (state,))
-            return True
-        return False
+        return self.generate_token_from_code(code, state)
 
     def refresh_token(self, provider_id, user_uuid):
         with sqlite3.connect(self.db_path) as conn:
@@ -113,56 +141,13 @@ class AccessTokenGenerator:
             enc_refresh = self.cipher_suite.encrypt(
                 res.get("refresh_token", refresh_token).encode())
             with sqlite3.connect(self.db_path) as conn:
-                conn.execute("""
+                cursor = conn.cursor()
+                cursor.execute("""
                     UPDATE banks SET access_token = ?, refresh_token = ? WHERE truelayer_provider_id = ? AND user_uuid = ?
                 """, (enc_access, enc_refresh, provider_id, user_uuid))
+                conn.commit()
             return res["access_token"]
         return None
-
-    def extend_connection(self, refresh_token, user_has_reconfirmed_consent=True):
-        payload = {
-            "grant_type": "refresh_token",
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "user_has_reconfirmed_consent": user_has_reconfirmed_consent,
-            "refresh_token": refresh_token,
-            "redirect_uri": self.redirect_uri,
-            "user": {
-                "id": str(uuid.uuid4()),
-                "name": "Arnav Mishra",
-                "email": "arnavpragya04@gmail.com"
-            }
-        }
-        extend_url = "https://api.truelayer.com/data/v1/connections/extend"
-        response = requests.post(extend_url, json=payload)
-        return response.json()
-
-    def extend_providers(self, provider_ids, user_uuid):
-        results = []
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            for p_id in provider_ids:
-                cursor.execute(
-                    "SELECT refresh_token FROM banks WHERE truelayer_provider_id = ? AND user_uuid = ?", (p_id, user_uuid))
-                row = cursor.fetchone()
-                if not row:
-                    continue
-
-                raw_refresh = self.cipher_suite.decrypt(row[0]).decode()
-                res = self.extend_connection(raw_refresh, True)
-
-                if res.get("action_needed") == "no_action_needed":
-                    enc_access = self.cipher_suite.encrypt(
-                        res["access_token"].encode())
-                    enc_refresh = self.cipher_suite.encrypt(
-                        res["refresh_token"].encode())
-                    conn.execute(
-                        "UPDATE banks SET access_token=?, refresh_token=? WHERE truelayer_provider_id=?", (enc_access, enc_refresh, p_id))
-                    results.append({"provider_id": p_id, "status": "success"})
-                elif res.get("action_needed") == "authentication_needed":
-                    results.append({"provider_id": p_id, "status": "requires_reauth",
-                                   "redirect_url": res.get("user_input_link")})
-        return results
 
     def revoke_provider(self, provider_id, user_uuid):
         results = []
@@ -179,8 +164,7 @@ class AccessTokenGenerator:
             if not row:
                 return [{"status": "not_found", "error": "No connected accounts found"}]
 
-            enc_access = row[0]
-            bank_uuid = row[1]
+            enc_access, bank_uuid = row[0], row[1]
 
             try:
                 raw_access = self.cipher_suite.decrypt(enc_access).decode()
@@ -191,20 +175,21 @@ class AccessTokenGenerator:
 
                 if response.status_code in [204, 401, 200]:
                     if provider_id:
-                        conn.execute(
+                        cursor.execute(
                             "DELETE FROM transactions WHERE bank_uuid = ?", (bank_uuid,))
-                        conn.execute(
+                        cursor.execute(
                             "DELETE FROM accounts WHERE bank_uuid = ?", (bank_uuid,))
-                        conn.execute(
+                        cursor.execute(
                             "DELETE FROM banks WHERE bank_uuid = ?", (bank_uuid,))
                     else:
-                        conn.execute(
+                        cursor.execute(
                             "DELETE FROM transactions WHERE user_uuid = ?", (user_uuid,))
-                        conn.execute(
+                        cursor.execute(
                             "DELETE FROM accounts WHERE user_uuid = ?", (user_uuid,))
-                        conn.execute(
+                        cursor.execute(
                             "DELETE FROM banks WHERE user_uuid = ?", (user_uuid,))
 
+                    conn.commit()
                     results.append({"status": "revoked"})
                 else:
                     results.append(

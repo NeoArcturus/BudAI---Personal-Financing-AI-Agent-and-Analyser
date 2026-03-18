@@ -1,3 +1,4 @@
+// _components/BudAIChat.tsx
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
@@ -20,6 +21,7 @@ interface BudAIChatProps {
     type: TabType | string,
     customTitle?: string,
     aiTargetId?: string,
+    extraParam?: string,
   ) => void;
   activeAccountId: string | null;
   accounts: Account[];
@@ -97,54 +99,52 @@ export default function BudAIChat({
         const chunk = decoder.decode(value, { stream: true });
         aiText += chunk;
 
-        // Clean out any trigger tags (both parameterized and unparameterized) so they don't render in the chat
-        const cleanText = aiText
-          .replace(/\[TRIGGER_[A-Z_]+_CHART(?:[:][^\]]+)?\]/g, "")
-          .trim();
+        const triggerRegex =
+          /\[TRIGGER_([A-Z_]+)_CHART(?:[:]([^\]:]+))?(?:[:]([^\]]+))?\]/g;
+        let cleanedReply = aiText;
+        let match;
+
+        while ((match = triggerRegex.exec(aiText)) !== null) {
+          const rawType = match[1].toLowerCase();
+          const targetId = match[2];
+          const extraParam = match[3];
+
+          console.log(match);
+
+          let triggeredAction = "";
+
+          if (rawType === "categorized")
+            triggeredAction = "categorized_doughnut";
+          else if (rawType === "balance") triggeredAction = "balance_forecast";
+          else if (rawType === "expense") triggeredAction = "expense_forecast";
+          else if (rawType === "cash_flow") triggeredAction = "cash_flow_mixed";
+          else if (rawType === "health_radar") triggeredAction = "health_radar";
+          else if (rawType.startsWith("historical")) {
+            const lowerText = aiText.toLowerCase();
+            let timeType = "monthly";
+            if (lowerText.includes("daily")) timeType = "daily";
+            else if (lowerText.includes("weekly")) timeType = "weekly";
+            triggeredAction = `historical_${timeType}`;
+          }
+
+          if (triggeredAction) {
+            onAiAction(triggeredAction, undefined, targetId, extraParam);
+          }
+          cleanedReply = cleanedReply.replace(match[0], "");
+        }
 
         setMessages((prev) => {
           const newMessages = [...prev];
-          newMessages[newMessages.length - 1].text = cleanText;
+          newMessages[newMessages.length - 1].text = cleanedReply.trim();
           return newMessages;
         });
       }
 
-      // Check for parameterized trigger tags, e.g., [TRIGGER_CATEGORIZED_CHART:14748516...]
-      const triggerRegex = /\[TRIGGER_(.*?)_CHART(?:[:](.*?))?\]/;
-      const match = aiText.match(triggerRegex);
-
-      if (match) {
-        const triggerType = match[1]; // e.g., "CATEGORIZED", "HISTORICAL"
-        const targetId = match[2]; // e.g., "14748516b23747cf73ec7416a0b21a68" or undefined if missing
-
-        let triggeredAction = "";
-
-        if (triggerType === "CATEGORIZED")
-          triggeredAction = "categorized_doughnut";
-        else if (triggerType === "BALANCE")
-          triggeredAction = "balance_forecast";
-        else if (triggerType === "EXPENSE")
-          triggeredAction = "expense_forecast";
-        else if (triggerType === "CASH_FLOW")
-          triggeredAction = "cash_flow_mixed";
-        else if (triggerType === "HEALTH_RADAR")
-          triggeredAction = "health_radar";
-        else if (triggerType === "HISTORICAL") {
-          const lowerText = aiText.toLowerCase();
-          let timeType = "monthly";
-          if (lowerText.includes("daily")) timeType = "daily";
-          else if (lowerText.includes("weekly")) timeType = "weekly";
-          triggeredAction = `historical_${timeType}`;
-        }
-
-        if (triggeredAction) {
-          onAiAction(triggeredAction, undefined, targetId);
-        }
-      } else if (actionType) {
+      if (actionType && !aiText.includes("[TRIGGER_")) {
         onAiAction(actionType);
       }
-    } catch (e) {
-      console.error("Error during AI communication:", e);
+    } catch (e: unknown) {
+      console.log(e);
       setMessages((prev) => [
         ...prev,
         { role: "assistant", text: "Critical Engine Error." },

@@ -1,5 +1,4 @@
 import pandas as pd
-import os
 from services.api_integrator.get_account_detail import UserAccounts
 
 
@@ -13,11 +12,6 @@ class ExpenseAnalysis:
         self.user_uuid = user_uuid
         self.user_account = UserAccounts(user_id=user_uuid)
         self.classified_data = None
-        self.base_dir = os.path.dirname(os.path.abspath(__file__))
-        self.root_dir = os.path.abspath(
-            os.path.join(self.base_dir, '..', '..'))
-        self.csv_dir = os.path.join(self.root_dir, "saved_media", "csvs")
-        os.makedirs(self.csv_dir, exist_ok=True)
 
     def fetch_data(self, from_date, to_date):
         df = self.user_account.get_transactions(
@@ -53,21 +47,18 @@ class ExpenseAnalysis:
         self.classified_data = df[cols_to_keep].copy()
         return True
 
-    def _export_pivoted_data(self, freq_str, prefix):
+    def _get_pivoted_data(self, freq_str):
         df = self.classified_data.copy()
         df.set_index('Date', inplace=True)
         resampled = df['Amount'].resample(freq_str).sum().reset_index()
         resampled['Date'] = resampled['Date'].dt.date
-        csv_path = os.path.join(
-            self.csv_dir, f"{prefix}_{self.identifier}.csv")
-        resampled.to_csv(csv_path, index=False)
-        return csv_path
+        return resampled
 
-    def export_weekly_spend_data(self):
-        return self._export_pivoted_data('W-MON', 'weekly_spend')
+    def get_daily_spend_data(self):
+        return self._get_pivoted_data('D')
 
-    def export_monthly_spend_data(self):
-        return self._export_pivoted_data('ME', 'monthly_spend')
+    def get_weekly_spend_data(self):
+        return self._get_pivoted_data('W-MON')
 
-    def export_daily_spend_data(self):
-        return self._export_pivoted_data('D', 'daily_spend')
+    def get_monthly_spend_data(self):
+        return self._get_pivoted_data('ME')

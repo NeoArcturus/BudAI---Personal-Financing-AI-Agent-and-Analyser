@@ -48,3 +48,21 @@ export type TabType =
 export type NativeChartConfig = ChartConfiguration<
   "line" | "bar" | "doughnut" | "radar"
 >;
+
+export interface BankChartData {
+  bank_name: string;
+  data: Record<string, string | number>[];
+}
+
+export interface ChartConfig {
+  type: string;
+  data: BankChartData[];
+}
+
+export interface ToolParameters {
+  bank_name_or_id: string;
+  from_date?: string;
+  to_date?: string;
+  days?: number;
+  plot_time_type?: string;
+}

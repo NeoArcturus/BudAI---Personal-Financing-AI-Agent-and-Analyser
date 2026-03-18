@@ -104,4 +104,4 @@ if __name__ == '__main__':
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown())
 
-    app.run(port=8080, threaded=True, debug=False)
+    app.run(port=8080, threaded=True, debug=True)

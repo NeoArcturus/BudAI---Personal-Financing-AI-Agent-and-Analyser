@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import sys
 import uuid
+from datetime import datetime
 from diskcache import Cache
 from services.Categorizer_Agent.training.model_trainer import CategorizerTrainer
 from services.Categorizer_Agent.categorizer.preprocessor import Preprocessor
@@ -29,17 +30,6 @@ class CategorizerAgent:
                 raise ValueError(
                     "CategorizerAgent strictly handles a single account identifier.")
 
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT a.account_id 
-                    FROM accounts a 
-                    JOIN banks b ON a.bank_uuid = b.bank_uuid 
-                    WHERE (b.bank_name = ? OR a.account_id = ?) AND a.user_uuid = ?
-                """, (identifier, identifier, user_uuid))
-                row = cursor.fetchone()
-                acc_id = row[0] if row else identifier
-
             user_acc = UserAccounts(user_id=user_uuid, db_path=self.db_path)
             raw_df = user_acc.get_transactions(
                 identifier, user_uuid, start_date, end_date)
@@ -60,38 +50,58 @@ class CategorizerAgent:
             else:
                 clean_df, embeddings = proc.preprocess_for_inference()
 
+            print("Ready for categorization")
+            print(clean_df)
             final_df = self.categorizer.predict(
                 clean_df, embeddings, xgb_model_path, enc_path)
+            print("Categorized data:")
+            print(final_df)
 
-            root_dir = os.path.abspath(os.path.join(self.base_dir, '..', '..'))
-            csv_dir = os.path.join(root_dir, "saved_media", "csvs")
-            os.makedirs(csv_dir, exist_ok=True)
-            csv_path = os.path.join(
-                csv_dir, "categorized_data_" + str(acc_id) + ".csv")
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT a.account_id 
+                    FROM accounts a 
+                    JOIN banks b ON a.bank_uuid = b.bank_uuid 
+                    WHERE (b.bank_name = ? OR a.account_id = ?) AND a.user_uuid = ?
+                """, (identifier, identifier, user_uuid))
+                row = cursor.fetchone()
+                actual_acc_id = row[0] if row else identifier
 
-            final_df.to_csv(csv_path, index=False)
-            self._update_sql_memory(final_df, identifier, user_uuid, csv_path)
+            self._update_sql_memory(final_df, actual_acc_id, user_uuid)
             return final_df
         except ValueError as ve:
             raise ve
         except Exception as e:
-            raise e
+            print("An error occured while saving data in the database!")
+            print(e)
 
-    def _update_sql_memory(self, df, account_id, user_uuid, csv_path):
+    def _update_sql_memory(self, df, account_id, user_uuid):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT bank_uuid FROM banks WHERE bank_name = ? AND user_uuid = ?", (account_id, user_uuid))
+            cursor.execute("""
+                SELECT b.bank_uuid 
+                FROM banks b 
+                JOIN accounts a ON b.bank_uuid = a.bank_uuid 
+                WHERE a.account_id = ? AND a.user_uuid = ?
+            """, (account_id, user_uuid))
             row = cursor.fetchone()
             bank_uuid = row[0] if row else None
 
             for i, r in df.iterrows():
                 tx_id = str(uuid.uuid4())
-                acc_id_val = r.get('account_id')
+                acc_id_val = r.get('account_id', account_id)
+                date_val = r.get('Date') or r.get(
+                    'date') or datetime.now().strftime("%Y-%m-%d")
+                amt_val = r.get('Amount') or r.get('amount') or 0.0
+                cat_val = r.get('Category', 'Uncategorized')
+                desc_val = r.get('Description') or r.get('description') or ''
+
                 cursor.execute("""
-                    INSERT OR REPLACE INTO transactions (transaction_uuid, user_uuid, bank_uuid, account_id, csv_file_path)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (tx_id, user_uuid, bank_uuid, acc_id_val, csv_path))
+                    INSERT OR REPLACE INTO transactions 
+                    (transaction_uuid, user_uuid, bank_uuid, account_id, date, amount, category, description)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (tx_id, user_uuid, bank_uuid, acc_id_val, date_val, amt_val, cat_val, desc_val))
             conn.commit()
 
     def get_classification_report(self):
@@ -99,4 +109,4 @@ class CategorizerAgent:
         if os.path.exists(report_path):
             with open(report_path, "r") as f:
                 return f.read()
-        return "Classification report not available."
+        return "Classification report not found."
