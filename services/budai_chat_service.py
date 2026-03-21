@@ -1,4 +1,3 @@
-import sqlite3
 import queue
 import threading
 from langchain_core.messages import HumanMessage, AIMessage
@@ -7,6 +6,8 @@ from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_ollama import ChatOllama
 from langchain_core.callbacks import BaseCallbackHandler
 from datetime import datetime
+from config import SessionLocal
+from models.database_models import ChatHistory
 
 from services.tools import (
     generate_financial_forecast,
@@ -32,24 +33,23 @@ llm = ChatOllama(
 
 def get_session_history(user_uuid: str):
     history = []
-    with sqlite3.connect("budai_memory.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT role, content FROM chat_history WHERE user_uuid = ? ORDER BY timestamp ASC", (user_uuid,))
-        for role, content in cursor.fetchall():
-            if role == "user":
-                history.append(HumanMessage(content=content))
+    with SessionLocal() as session:
+        records = session.query(ChatHistory).filter(
+            ChatHistory.user_uuid == user_uuid).order_by(ChatHistory.timestamp.asc()).all()
+        for r in records:
+            if r.role == "user":
+                history.append(HumanMessage(content=r.content))
             else:
-                history.append(AIMessage(content=content))
+                history.append(AIMessage(content=r.content))
     return history
 
 
 def save_message(user_uuid: str, role: str, content: str):
-    with sqlite3.connect("budai_memory.db") as conn:
-        conn.execute(
-            "INSERT INTO chat_history (user_uuid, role, content) VALUES (?, ?, ?)",
-            (user_uuid, role, content)
-        )
+    with SessionLocal() as session:
+        new_msg = ChatHistory(
+            user_uuid=user_uuid, role=role, content=content)
+        session.add(new_msg)
+        session.commit()
 
 
 def execute_chat_stream(user_input: str, user_uuid: str, user_name: str, active_account_id: str):

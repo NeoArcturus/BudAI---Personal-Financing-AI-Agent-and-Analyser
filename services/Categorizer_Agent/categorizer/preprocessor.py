@@ -65,6 +65,9 @@ class Preprocessor:
         self.df.rename(columns=manual_map, inplace=True)
         self.df.columns = [c.capitalize() if c.lower(
         ) in ['amount', 'date'] else c for c in self.df.columns]
+
+        self.df = self.df.loc[:, ~self.df.columns.duplicated()].copy()
+
         available_cols = [
             c for c in self.standard_columns if c in self.df.columns]
         self.df = self.df[available_cols].copy()

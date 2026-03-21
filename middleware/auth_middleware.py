@@ -1,32 +1,19 @@
-from functools import wraps
-from flask import request, jsonify
-import sqlite3
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from config import get_db
+from models.database_models import User
+import jwt
+
+security = HTTPBearer()
 
 
-def token_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        if not token:
-            return jsonify({'message': 'Token is missing'}), 401
-
-        token_str = token.split(" ")[1] if "Bearer " in token else token
-
-        try:
-            with sqlite3.connect("budai_memory.db") as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT user_uuid, name FROM users WHERE user_uuid = ?", (token_str,))
-                user = cursor.fetchone()
-
-            if not user:
-                return jsonify({'message': 'Token is invalid'}), 401
-
-            request.user_uuid = user[0]
-            request.user_name = user[1]
-
-        except Exception as e:
-            return jsonify({'message': str(e)}), 500
-
-        return f(*args, **kwargs)
-    return decorated
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    token = credentials.credentials
+    try:
+        user = db.query(User).filter(User.user_uuid == token).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return user
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

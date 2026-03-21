@@ -1,10 +1,11 @@
 import pandas as pd
 import numpy as np
 import os
-import sqlite3
 import json
 import uuid
+from sqlalchemy import text
 from datetime import datetime, timedelta
+from config import SessionLocal
 from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
 from services.Forecaster_Agent.ForecasterAgent import ForecasterAgent
 from services.Analyser_Agent.expense_analysis import ExpenseAnalysis
@@ -105,28 +106,26 @@ class PlotHealthRadarInput(BaseModel):
 
 def _cache_chart_data(payload_data):
     cache_id = f"CACHE_{uuid.uuid4().hex}"
-    with sqlite3.connect("budai_memory.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS chart_cache (
+    with SessionLocal() as session:
+        session.execute(text('''CREATE TABLE IF NOT EXISTS chart_cache (
                             cache_id TEXT PRIMARY KEY,
                             chart_data TEXT,
-                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-        cursor.execute('INSERT INTO chart_cache (cache_id, chart_data) VALUES (?, ?)',
-                       (cache_id, json.dumps(payload_data)))
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'''))
+        session.execute(text('INSERT INTO chart_cache (cache_id, chart_data) VALUES (:cache_id, :chart_data)'),
+                        {"cache_id": cache_id, "chart_data": json.dumps(payload_data)})
+        session.commit()
     return cache_id
 
 
 def _check_and_handle_sca_error(e, acc, user_uuid):
     if isinstance(e, PermissionError) and "SECURITY LOCK" in str(e):
-        with sqlite3.connect("budai_memory.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
+        with SessionLocal() as session:
+            row = session.execute(text("""
                 SELECT b.truelayer_provider_id, b.refresh_token
                 FROM banks b
                 LEFT JOIN accounts a ON a.bank_uuid = b.bank_uuid
-                WHERE (b.bank_name = ? OR a.account_id = ?) AND b.user_uuid = ?
-            """, (acc, acc, user_uuid))
-            row = cursor.fetchone()
+                WHERE (b.bank_name = :acc OR a.account_id = :acc) AND b.user_uuid = :user_uuid
+            """), {"acc": acc, "user_uuid": user_uuid}).fetchone()
 
         token_gen = AccessTokenGenerator()
         auth_link = None
@@ -160,22 +159,18 @@ def _parse_accounts(bank_name_or_id, user_uuid):
     bank_name_or_id = str(bank_name_or_id).replace("'", "").replace("\’", "")
 
     if str(bank_name_or_id).upper() == "ALL":
-        with sqlite3.connect("budai_memory.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT b.bank_name FROM banks b WHERE b.user_uuid = ?", (user_uuid,))
-            accounts = [row[0] for row in cursor.fetchall()]
+        with SessionLocal() as session:
+            accounts = [row[0] for row in session.execute(
+                text("SELECT b.bank_name FROM banks b WHERE b.user_uuid = :user_uuid"), {"user_uuid": user_uuid}).fetchall()]
         return accounts, "ALL"
     else:
-        with sqlite3.connect("budai_memory.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
+        with SessionLocal() as session:
+            row = session.execute(text("""
                 SELECT a.account_id, b.bank_name
                 FROM accounts a
                 JOIN banks b ON a.bank_uuid = b.bank_uuid
-                WHERE (b.bank_name = ? OR a.account_id = ?) AND a.user_uuid = ?
-            """, (bank_name_or_id, bank_name_or_id, user_uuid))
-            row = cursor.fetchone()
+                WHERE (b.bank_name = :bank_name_or_id OR a.account_id = :bank_name_or_id) AND a.user_uuid = :user_uuid
+            """), {"bank_name_or_id": bank_name_or_id, "user_uuid": user_uuid}).fetchone()
 
             if row:
                 return [row[1]], row[0]
@@ -613,7 +608,6 @@ def plot_expenses(plot_time_type: str, from_date: str, to_date: str, bank_name_o
                     date_val = row['date'] if 'date' in df_temp.columns else row['Date']
                     amt_val = row['amount'] if 'amount' in df_temp.columns else row['Amount']
 
-                    # SAFETY FIX: Ensure date is not null before formatting
                     if pd.notnull(date_val):
                         bank_data.append({
                             "Date": pd.to_datetime(date_val).strftime('%Y-%m-%d'),
@@ -861,19 +855,24 @@ def plot_cash_flow_mixed(bank_name_or_id: str, user_uuid: str) -> str:
                 if sca_msg:
                     return sca_msg
 
-        with sqlite3.connect("budai_memory.db") as conn:
+        with SessionLocal() as session:
             if str(bank_name_or_id).upper() == "ALL":
-                query = "SELECT date, amount, b.bank_name FROM transactions t JOIN banks b ON t.bank_uuid = b.bank_uuid WHERE t.user_uuid = ?"
-                df = pd.read_sql_query(query, conn, params=(user_uuid,))
+                query = text(
+                    "SELECT date, amount, b.bank_name FROM transactions t JOIN banks b ON t.bank_uuid = b.bank_uuid WHERE t.user_uuid = :user_uuid")
+                df = pd.read_sql_query(query, session.connection(), params={
+                                       "user_uuid": user_uuid})
             else:
-                seq = ','.join(['?']*len(accounts))
-                query = f"""
+                seq = ','.join([':acc' + str(i) for i in range(len(accounts))])
+                query = text(f"""
                     SELECT t.date, t.amount, b.bank_name FROM transactions t
                     JOIN banks b ON t.bank_uuid = b.bank_uuid
-                    WHERE b.bank_name IN ({seq}) AND t.user_uuid = ?
-                """
+                    WHERE b.bank_name IN ({seq}) AND t.user_uuid = :user_uuid
+                """)
+                params = {"user_uuid": user_uuid}
+                for i, acc in enumerate(accounts):
+                    params[f"acc{i}"] = acc
                 df = pd.read_sql_query(
-                    query, conn, params=(*accounts, user_uuid))
+                    query, session.connection(), params=params)
 
         if df.empty:
             return "No transactions found to generate cash flow."
@@ -888,7 +887,6 @@ def plot_cash_flow_mixed(bank_name_or_id: str, user_uuid: str) -> str:
 
             bank_data = []
 
-            # SAFETY FIX: Ensure date is not null before formatting
             for period in sorted(acc_df['Month'].dropna().unique()):
                 month_str = period.strftime('%Y-%m')
                 month_df = acc_df[acc_df['Month'] == period]

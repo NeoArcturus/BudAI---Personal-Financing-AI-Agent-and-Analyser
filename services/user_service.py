@@ -1,22 +1,22 @@
-import sqlite3
 import uuid
+from config import SessionLocal
+from models.database_models import User
 
 
 class UserService:
-    def __init__(self, db_path="budai_memory.db"):
-        self.db_path = db_path
+    def __init__(self, db_path=None):
+        pass
 
     def authenticate_or_create_user(self, email, password):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT user_uuid FROM users WHERE name = ? AND password = ?", (email, password))
-            user = cursor.fetchone()
+        with SessionLocal() as session:
+            user = session.query(User).filter(
+                User.name == email, User.password == password).first()
 
             if user:
-                return user[0]
+                return user.user_uuid
 
             new_uuid = str(uuid.uuid4())
-            conn.execute(
-                "INSERT INTO users (user_uuid, name, password) VALUES (?, ?, ?)", (new_uuid, email, password))
+            new_user = User(user_uuid=new_uuid, name=email, password=password)
+            session.add(new_user)
+            session.commit()
             return new_uuid

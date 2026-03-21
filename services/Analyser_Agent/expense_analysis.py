@@ -28,6 +28,9 @@ class ExpenseAnalysis:
             return False
 
         df.rename(columns={time_col: 'Date', amt_col: 'Amount'}, inplace=True)
+
+        df = df.loc[:, ~df.columns.duplicated()].copy()
+
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce', utc=True)
 
         mask = (df['Date'] >= pd.to_datetime(from_date, utc=True)) & (

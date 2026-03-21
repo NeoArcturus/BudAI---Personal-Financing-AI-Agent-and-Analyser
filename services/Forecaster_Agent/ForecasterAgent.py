@@ -1,34 +1,33 @@
 import os
 import pandas as pd
 import numpy as np
-import sqlite3
+from sqlalchemy import text
+from config import SessionLocal
 from services.api_integrator.get_account_detail import UserAccounts
 from services.Forecaster_Agent.mathematics.mathematics import run_hybrid_engine, run_converged_expense_engine
 
 
 class ForecasterAgent:
-    def __init__(self, db_path="budai_memory.db"):
-        self.db_path = db_path
+    def __init__(self, db_path=None):
+        pass
 
     def fetch_live_balance(self, identifier, user_uuid):
         if str(identifier).upper() == "ALL" or "," in identifier:
             raise ValueError(
                 "ForecasterAgent strictly handles a single account identifier.")
 
-        user_acc = UserAccounts(user_id=user_uuid, db_path=self.db_path)
+        user_acc = UserAccounts(user_id=user_uuid)
         balance = user_acc.get_account_balance(identifier, user_uuid)
         return float(balance) if balance is not None else 0.0
 
     def fetch_and_calculate_parameters(self, account_id, current_balance, user_uuid, lookback_days=60):
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""SELECT b.bank_name 
+            with SessionLocal() as session:
+                row = session.execute(text("""SELECT b.bank_name 
                                FROM banks b 
                                LEFT JOIN accounts a
                                ON b.bank_uuid = a.bank_uuid
-                               WHERE a.account_id=?""", (account_id,))  # FIXED COMMA HERE
-                row = cursor.fetchone()
+                               WHERE a.account_id=:account_id"""), {"account_id": account_id}).fetchone()
 
                 user = UserAccounts(user_uuid)
                 bank_name = row[0] if row else account_id
@@ -69,14 +68,12 @@ class ForecasterAgent:
 
     def fetch_expense_parameters(self, account_id, user_uuid, lookback_days=60):
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""SELECT b.bank_name 
+            with SessionLocal() as session:
+                row = session.execute(text("""SELECT b.bank_name 
                                FROM banks b 
                                LEFT JOIN accounts a
                                ON b.bank_uuid = a.bank_uuid
-                               WHERE a.account_id=?""", (account_id,))  # FIXED COMMA HERE
-                row = cursor.fetchone()
+                               WHERE a.account_id=:account_id"""), {"account_id": account_id}).fetchone()
 
                 user = UserAccounts(user_uuid)
                 bank_name = row[0] if row else account_id

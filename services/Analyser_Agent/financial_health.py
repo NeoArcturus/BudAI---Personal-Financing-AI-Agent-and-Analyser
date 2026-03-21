@@ -1,22 +1,26 @@
-import sqlite3
 import pandas as pd
 import numpy as np
+from sqlalchemy import text
+from config import SessionLocal
 from services.api_integrator.get_account_detail import UserAccounts
 
 
 class FinancialHealthAnalyzer:
-    def __init__(self, user_uuid, db_path="budai_memory.db"):
+    def __init__(self, user_uuid, db_path=None):
         self.user_uuid = user_uuid
-        self.db_path = db_path
 
     def _fetch_transactions(self):
-        with sqlite3.connect(self.db_path) as conn:
-            query = "SELECT * FROM transactions WHERE user_uuid = ?"
+        with SessionLocal() as session:
             try:
-                df = pd.read_sql_query(query, conn, params=(self.user_uuid,))
+                query = text(
+                    "SELECT * FROM transactions WHERE user_uuid = :user_uuid")
+                df = pd.read_sql_query(query, session.connection(), params={
+                                       "user_uuid": self.user_uuid})
                 if df.empty:
                     return df
                 df.columns = [c.lower() for c in df.columns]
+                df = df.loc[:, ~df.columns.duplicated()].copy()
+
                 if 'timestamp' in df.columns and 'date' not in df.columns:
                     df['date'] = df['timestamp']
                 return df
@@ -25,11 +29,9 @@ class FinancialHealthAnalyzer:
 
     def _fetch_total_liquidity(self):
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT bank_name FROM banks WHERE user_uuid = ?", (self.user_uuid,))
-                banks = cursor.fetchall()
+            with SessionLocal() as session:
+                banks = session.execute(
+                    text("SELECT bank_name FROM banks WHERE user_uuid = :user_uuid"), {"user_uuid": self.user_uuid}).fetchall()
             total = 0.0
             for b in banks:
                 try:
@@ -73,12 +75,10 @@ class FinancialHealthAnalyzer:
 
     def avalanche_debt_optimization(self, monthly_surplus=0.0):
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT account_name, balance, interest_rate, min_payment FROM liabilities WHERE user_uuid = ?", (self.user_uuid,))
-                debts = cursor.fetchall()
-        except sqlite3.OperationalError:
+            with SessionLocal() as session:
+                debts = session.execute(
+                    text("SELECT account_name, balance, interest_rate, min_payment FROM liabilities WHERE user_uuid = :user_uuid"), {"user_uuid": self.user_uuid}).fetchall()
+        except Exception:
             return []
 
         sorted_debts = sorted(debts, key=lambda x: x[2], reverse=True)
@@ -156,13 +156,11 @@ class FinancialHealthAnalyzer:
 
     def calculate_interest_drag(self):
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT SUM(balance * (interest_rate / 100) / 12) FROM liabilities WHERE user_uuid = ?", (self.user_uuid,))
-                res = cursor.fetchone()
+            with SessionLocal() as session:
+                res = session.execute(
+                    text("SELECT SUM(balance * (interest_rate / 100) / 12) FROM liabilities WHERE user_uuid = :user_uuid"), {"user_uuid": self.user_uuid}).fetchone()
                 monthly_interest = float(res[0]) if res and res[0] else 0.0
-        except sqlite3.OperationalError:
+        except Exception:
             monthly_interest = 0.0
 
         df = self._fetch_transactions()

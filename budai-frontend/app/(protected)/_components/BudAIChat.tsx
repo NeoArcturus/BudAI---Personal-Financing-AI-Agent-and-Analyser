@@ -1,4 +1,3 @@
-// _components/BudAIChat.tsx
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
@@ -109,8 +108,6 @@ export default function BudAIChat({
           const targetId = match[2];
           const extraParam = match[3];
 
-          console.log(match);
-
           let triggeredAction = "";
 
           if (rawType === "categorized")
@@ -155,9 +152,9 @@ export default function BudAIChat({
   };
 
   return (
-    <div className="flex flex-col w-full h-full bg-[#161B22] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
-      <div className="p-4 border-b border-slate-800 bg-[#1c2128] flex items-center shrink-0">
-        <span className="font-bold text-xs tracking-widest text-[#00FFAA] flex items-center gap-2">
+    <div className="flex flex-col w-full h-full bg-[#132017] overflow-hidden">
+      <div className="p-4 border-b border-[#1A2D21] bg-[#1A2D21] flex items-center shrink-0">
+        <span className="font-bold text-xs tracking-widest text-[#69F0AE] flex items-center gap-2">
           <Sparkles size={14} /> BUDAI CHAT
         </span>
       </div>
@@ -177,11 +174,11 @@ export default function BudAIChat({
                 onClick={() =>
                   handleSend("Classify my recent transactions.", "categorized")
                 }
-                className="bg-[#0D1117] border border-slate-800 p-3 rounded-xl hover:border-[#00FFAA]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
+                className="bg-[#0A120D] border border-[#233A2B] p-3 rounded-xl hover:border-[#69F0AE]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
               >
                 <ShieldCheck
                   size={16}
-                  className="text-[#00FFAA] group-hover:scale-110"
+                  className="text-[#69F0AE] group-hover:scale-110"
                 />{" "}
                 Categorize Data
               </button>
@@ -193,11 +190,11 @@ export default function BudAIChat({
                     "balance_forecast",
                   )
                 }
-                className="bg-[#0D1117] border border-slate-800 p-3 rounded-xl hover:border-[#00FFAA]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
+                className="bg-[#0A120D] border border-[#233A2B] p-3 rounded-xl hover:border-[#69F0AE]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
               >
                 <TrendingUp
                   size={16}
-                  className="text-[#00FFAA] group-hover:scale-110"
+                  className="text-[#69F0AE] group-hover:scale-110"
                 />{" "}
                 Balance Forecast
               </button>
@@ -209,11 +206,11 @@ export default function BudAIChat({
                     "expense_forecast",
                   )
                 }
-                className="bg-[#0D1117] border border-slate-800 p-3 rounded-xl hover:border-[#00FFAA]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
+                className="bg-[#0A120D] border border-[#233A2B] p-3 rounded-xl hover:border-[#69F0AE]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
               >
                 <Activity
                   size={16}
-                  className="text-[#00FFAA] group-hover:scale-110"
+                  className="text-[#69F0AE] group-hover:scale-110"
                 />{" "}
                 Expense Forecast
               </button>
@@ -222,11 +219,11 @@ export default function BudAIChat({
                 onClick={() =>
                   handleSend("Plot my monthly expenses.", "historical_monthly")
                 }
-                className="bg-[#0D1117] border border-slate-800 p-3 rounded-xl hover:border-[#00FFAA]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
+                className="bg-[#0A120D] border border-[#233A2B] p-3 rounded-xl hover:border-[#69F0AE]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
               >
                 <CalendarDays
                   size={16}
-                  className="text-[#00FFAA] group-hover:scale-110"
+                  className="text-[#69F0AE] group-hover:scale-110"
                 />{" "}
                 Monthly History
               </button>
@@ -238,11 +235,11 @@ export default function BudAIChat({
                     "historical_daily",
                   )
                 }
-                className="bg-[#0D1117] border border-slate-800 p-3 rounded-xl hover:border-[#00FFAA]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
+                className="bg-[#0A120D] border border-[#233A2B] p-3 rounded-xl hover:border-[#69F0AE]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
               >
                 <BarChart2
                   size={16}
-                  className="text-[#00FFAA] group-hover:scale-110"
+                  className="text-[#69F0AE] group-hover:scale-110"
                 />{" "}
                 Daily Spending
               </button>
@@ -251,11 +248,11 @@ export default function BudAIChat({
                 onClick={() =>
                   handleSend("What is my highest spending category?", undefined)
                 }
-                className="bg-[#0D1117] border border-slate-800 p-3 rounded-xl hover:border-[#00FFAA]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
+                className="bg-[#0A120D] border border-[#233A2B] p-3 rounded-xl hover:border-[#69F0AE]/50 transition-all text-left flex items-center gap-2 text-xs text-slate-300 group"
               >
                 <Flame
                   size={16}
-                  className="text-[#00FFAA] group-hover:scale-110"
+                  className="text-[#69F0AE] group-hover:scale-110"
                 />{" "}
                 Highest Spend
               </button>
@@ -268,10 +265,10 @@ export default function BudAIChat({
               className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed ${m.role === "user" ? "bg-[#00FFAA] text-black font-semibold rounded-br-none shadow-lg" : "bg-[#1c2128] text-slate-200 border border-slate-700/50 rounded-bl-none shadow-md"}`}
+                className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed ${m.role === "user" ? "bg-[#69F0AE] text-[#0A120D] font-semibold rounded-br-none shadow-lg" : "bg-[#1A2D21] text-slate-200 border border-[#233A2B] rounded-bl-none shadow-md"}`}
               >
                 {m.role === "assistant" ? (
-                  <div className="prose prose-invert max-w-none prose-sm prose-p:leading-relaxed prose-pre:bg-[#0D1117] prose-li:marker:text-[#00FFAA]">
+                  <div className="prose prose-invert max-w-none prose-sm prose-p:leading-relaxed prose-pre:bg-[#0A120D] prose-li:marker:text-[#69F0AE]">
                     <ReactMarkdown>{m.text}</ReactMarkdown>
                   </div>
                 ) : (
@@ -282,24 +279,24 @@ export default function BudAIChat({
           ))
         )}
         {loading && (
-          <div className="flex items-center gap-2 text-[#00FFAA] text-xs font-mono px-2">
+          <div className="flex items-center gap-2 text-[#69F0AE] text-xs font-mono px-2">
             <Loader2 className="w-4 h-4 animate-spin" /> BudAI is thinking...
           </div>
         )}
       </div>
 
-      <div className="p-4 bg-[#1c2128] border-t border-slate-800 shrink-0">
+      <div className="p-4 bg-[#1A2D21] border-t border-[#1A2D21] shrink-0">
         <div className="relative w-full">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder="Command BudAI..."
-            className="w-full bg-[#0D1117] border border-slate-700 rounded-xl py-3 pl-4 pr-12 text-sm text-white focus:border-[#00FFAA] outline-none transition-all"
+            className="w-full bg-[#0A120D] border border-[#233A2B] rounded-xl py-3 pl-4 pr-12 text-sm text-white focus:border-[#69F0AE] outline-none transition-all"
           />
           <button
             onClick={() => handleSend()}
-            className="absolute right-2 top-1.5 p-1.5 bg-[#00FFAA] text-black rounded-lg hover:scale-105 transition-transform"
+            className="absolute right-2 top-1.5 p-1.5 bg-[#69F0AE] text-[#0A120D] rounded-lg hover:scale-105 transition-transform"
           >
             <Send size={16} />
           </button>

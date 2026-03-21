@@ -1,22 +1,20 @@
 import requests
-import os
-import pandas as pd
-import sqlite3
+import traceback
 import time
+import uuid
+import pandas as pd
+from datetime import datetime
 from cryptography.fernet import Fernet
 from services.api_integrator.access_token_generator import AccessTokenGenerator
-from dotenv import load_dotenv
+from config import SessionLocal, TRUELAYER_BASE_URL, ENCRYPTION_KEY
+from models.database_models import Account, Bank, Transaction
 
 
 class UserAccounts:
-    def __init__(self, user_id=None, db_path="budai_memory.db"):
-        load_dotenv()
-        self.base_url = "https://api.truelayer.com/data/v1/accounts"
+    def __init__(self, user_id=None):
+        self.base_url = f"{TRUELAYER_BASE_URL}/data/v1/accounts"
         self.user_id = user_id
-        self.db_path = db_path
-        enc_key = os.getenv(
-            "ENCRYPTION_KEY", b'cw_8H_1M4bX_3nF8vO5n3Y7A8xQ3_1m8aT2vP5_v5r8=')
-        self.cipher_suite = Fernet(enc_key)
+        self.cipher_suite = Fernet(ENCRYPTION_KEY)
 
     def _make_request(self, url, token, provider_id, params=None, max_retries=3):
         headers = {"accept": "application/json",
@@ -28,10 +26,8 @@ class UserAccounts:
                 break
             time.sleep(2 ** attempt)
 
-        print("Response:", res)
-
         if res is not None and res.status_code == 401 and provider_id:
-            token_gen = AccessTokenGenerator(self.db_path)
+            token_gen = AccessTokenGenerator()
             new_token = token_gen.refresh_token(provider_id, self.user_id)
             if new_token:
                 headers["Authorization"] = f"Bearer {new_token}"
@@ -44,18 +40,24 @@ class UserAccounts:
                     "SECURITY LOCK: The bank blocked access to historical data (older than 90 days).")
         return res
 
-    def initialise_accounts(self, bank_name, user_uuid):
+    def initialise_accounts(self, bank_uuid, user_uuid):
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT bank_uuid, access_token, truelayer_provider_id FROM banks WHERE bank_name = ? AND user_uuid = ?", (bank_name, user_uuid))
-                row = cursor.fetchone()
-                if not row:
+            with SessionLocal() as session:
+                bank = session.query(Bank).filter_by(
+                    bank_uuid=bank_uuid, user_uuid=user_uuid).first()
+
+                if not bank:
+                    print(
+                        f"[BACKEND LOG] Bank UUID {bank_uuid} not found during initialization.")
                     return False
-                bank_uuid = row[0]
-                access_token = self.cipher_suite.decrypt(row[1]).decode()
-                provider_id = row[2]
+
+                access_token_raw = bank.access_token
+                if isinstance(access_token_raw, memoryview):
+                    access_token_raw = access_token_raw.tobytes()
+
+                access_token = self.cipher_suite.decrypt(
+                    access_token_raw).decode()
+                provider_id = bank.truelayer_provider_id
 
                 account_res = self._make_request(
                     self.base_url, access_token, provider_id)
@@ -64,12 +66,19 @@ class UserAccounts:
                     results = account_res.json().get("results", [])
                     if not results:
                         return False
+
                     for acc_det in results:
                         acc_id = acc_det.get("account_id")
-                        account_number_info = acc_det.get("account_number", {})
-                        sort_code = account_number_info.get("sort_code")
-                        acc_no = account_number_info.get("number")
-                        acc_type = acc_det.get("account_type", "TRANSACTION")
+
+                        account_number_info = acc_det.get("account_number")
+                        if isinstance(account_number_info, list) and len(account_number_info) > 0:
+                            account_number_info = account_number_info[0]
+                        if not isinstance(account_number_info, dict):
+                            account_number_info = {}
+
+                        sort_code = str(
+                            account_number_info.get("sort_code", ""))
+                        acc_no = str(account_number_info.get("number", ""))
 
                         acc_balance = 0.0
                         bal_res = self._make_request(
@@ -79,192 +88,216 @@ class UserAccounts:
                             acc_balance = bal_data.get(
                                 "available", bal_data.get("current", 0.0))
 
-                        conn.execute("""
-                            INSERT OR REPLACE INTO accounts (account_id, user_uuid, bank_uuid, account_number, sort_code, account_type, account_balance) 
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """, (acc_id, user_uuid, bank_uuid, acc_no, sort_code, acc_type, acc_balance))
-                    conn.commit()
+                        # ORM INSERTION
+                        existing_acc = session.query(Account).filter_by(
+                            account_id=acc_id).first()
+
+                        if existing_acc:
+                            existing_acc.user_uuid = user_uuid
+                            existing_acc.bank_uuid = bank_uuid
+                            existing_acc.account_number = acc_no
+                            existing_acc.sort_code = sort_code
+                            existing_acc.account_balance = float(acc_balance)
+                        else:
+                            new_acc = Account(
+                                account_id=acc_id,
+                                user_uuid=user_uuid,
+                                bank_uuid=bank_uuid,
+                                account_number=acc_no,
+                                sort_code=sort_code,
+                                account_balance=float(acc_balance)
+                            )
+                            session.add(new_acc)
+
+                        # Commit the account first so transaction foreign keys don't fail
+                        session.commit()
+
+                        # --- SYNC 2025 TRANSACTIONS IMMEDIATELY ---
+                        print(
+                            f"[SYNC] Fetching 2025 transactions for {acc_id}...")
+                        tx_url = f"{self.base_url}/{acc_id}/transactions"
+                        tx_params = {"from": "2025-01-01", "to": "2025-12-31"}
+                        tx_res = self._make_request(
+                            tx_url, access_token, provider_id, params=tx_params)
+
+                        if tx_res is not None and tx_res.status_code == 200:
+                            tx_data = tx_res.json().get("results", [])
+                            for tx in tx_data:
+                                tx_id = tx.get("transaction_id",
+                                               str(uuid.uuid4()))
+                                date_str = tx.get("timestamp")
+
+                                if date_str:
+                                    try:
+                                        date_val = datetime.fromisoformat(
+                                            date_str.replace("Z", "+00:00"))
+                                    except Exception:
+                                        date_val = datetime.utcnow()
+                                else:
+                                    date_val = datetime.utcnow()
+
+                                amount = float(tx.get("amount", 0.0))
+                                original_desc = str(tx.get("description", ""))
+                                classification_list = tx.get(
+                                    "transaction_classification", [])
+
+                                if isinstance(classification_list, list) and classification_list:
+                                    classification_str = " ".join(
+                                        [str(c) for c in classification_list])
+                                    desc_val = f"{original_desc} {classification_str}".strip(
+                                    )
+                                else:
+                                    desc_val = original_desc
+
+                                existing_tx = session.query(Transaction).filter_by(
+                                    transaction_uuid=tx_id).first()
+                                if not existing_tx:
+                                    new_tx = Transaction(
+                                        transaction_uuid=tx_id,
+                                        user_uuid=user_uuid,
+                                        bank_uuid=bank_uuid,
+                                        account_id=acc_id,
+                                        date=date_val,
+                                        amount=amount,
+                                        category="Uncategorized",
+                                        description=desc_val
+                                    )
+                                    session.add(new_tx)
+                            session.commit()
+
                     return True
                 return False
-        except Exception:
+        except Exception as e:
+            print("[CRITICAL ERROR] Initialising Accounts:")
+            traceback.print_exc()
             return False
 
     def get_all_accounts(self):
         all_accounts = []
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT bank_name FROM banks WHERE user_uuid = ?", (self.user_id,))
-                banks = cursor.fetchall()
+            with SessionLocal() as session:
+                banks = session.query(Bank).filter_by(
+                    user_uuid=self.user_id).all()
 
             for bank in banks:
-                self.initialise_accounts(bank[0], self.user_id)
+                self.initialise_accounts(bank.bank_uuid, self.user_id)
 
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT b.truelayer_provider_id, b.access_token, b.consent_status, b.bank_name, 
-                           a.account_id, a.account_number, a.sort_code, a.account_balance
-                    FROM banks b
-                    LEFT JOIN accounts a ON b.bank_uuid = a.bank_uuid
-                    WHERE b.user_uuid = ?
-                """, (self.user_id,))
-                rows = cursor.fetchall()
+            with SessionLocal() as session:
+                updated_banks = session.query(Bank).filter_by(
+                    user_uuid=self.user_id).all()
+                for b in updated_banks:
+                    if b.consent_status == 'revoked':
+                        all_accounts.append({
+                            "account_id": b.truelayer_provider_id,
+                            "provider_name": b.bank_name,
+                            "account_number": "****",
+                            "sort_code": "00-00-00",
+                            "currency": "GBP",
+                            "balance": 0.0,
+                            "status": "revoked",
+                            "provider_id": b.truelayer_provider_id
+                        })
+                        continue
 
-            for provider_id, enc_token, status, bank_name, acc_id, acc_num, sort_code, db_balance in rows:
-                if status == 'revoked':
-                    all_accounts.append({
-                        "account_id": acc_id or provider_id,
-                        "provider_name": bank_name,
-                        "account_number": "****",
-                        "sort_code": "00-00-00",
-                        "currency": "GBP",
-                        "balance": 0.0,
-                        "status": "revoked",
-                        "provider_id": provider_id
-                    })
-                    continue
-
-                balance_val = db_balance if db_balance is not None else 0.0
-
-                all_accounts.append({
-                    "account_id": acc_id,
-                    "provider_name": bank_name,
-                    "account_number": acc_num[-4:] if acc_num else "****",
-                    "sort_code": sort_code or "",
-                    "currency": "GBP",
-                    "balance": balance_val,
-                    "status": "active",
-                    "provider_id": provider_id
-                })
+                    for acc in b.accounts:
+                        all_accounts.append({
+                            "account_id": acc.account_id,
+                            "provider_name": b.bank_name,
+                            "account_number": acc.account_number[-4:] if acc.account_number else "****",
+                            "sort_code": acc.sort_code or "",
+                            "currency": "GBP",
+                            "balance": acc.account_balance or 0.0,
+                            "status": "active",
+                            "provider_id": b.truelayer_provider_id
+                        })
 
             return all_accounts
         except Exception:
+            traceback.print_exc()
             return []
 
     def get_account_balance(self, bank_name_or_id, user_uuid, account_type="TRANSACTION"):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT a.account_balance 
-                FROM accounts a 
-                JOIN banks b ON a.bank_uuid = b.bank_uuid 
-                WHERE (b.bank_name = ? OR a.account_id = ?) AND a.user_uuid = ? AND a.account_type = ?
-            """, (bank_name_or_id, bank_name_or_id, user_uuid, account_type))
-            row = cursor.fetchone()
+        with SessionLocal() as session:
+            acc = session.query(Account).join(Bank).filter(
+                (Bank.bank_name == bank_name_or_id) | (
+                    Account.account_id == bank_name_or_id),
+                Account.user_uuid == user_uuid
+            ).first()
 
-        if row and row[0] is not None:
-            return float(row[0])
-
+        if acc and acc.account_balance is not None:
+            return float(acc.account_balance)
         return 0.0
 
-    def get_transactions(self, bank_name_or_id, user_uuid, start_date=None, end_date=None, account_type="TRANSACTION"):
-        print(
-            f"[BACKEND LOG] get_transactions | input_identifier: {bank_name_or_id} | user_uuid: {user_uuid} | start_date: {start_date} | end_date: {end_date}")
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT a.account_id, b.access_token, b.truelayer_provider_id 
-                FROM accounts a 
-                JOIN banks b ON a.bank_uuid = b.bank_uuid 
-                WHERE (b.bank_name = ? OR a.account_id = ?) AND a.user_uuid = ? AND a.account_type = ?
-            """, (bank_name_or_id, bank_name_or_id, user_uuid, account_type))
-            row = cursor.fetchone()
+    def get_transactions(self, bank_name_or_id, user_uuid, start_date=None, end_date=None):
+        try:
+            with SessionLocal() as session:
+                query = session.query(Transaction).join(Account).join(Bank).filter(
+                    (Bank.bank_name == bank_name_or_id) | (
+                        Account.account_id == bank_name_or_id),
+                    Transaction.user_uuid == user_uuid
+                )
 
-            if not row:
-                return pd.DataFrame()
+                if start_date:
+                    query = query.filter(Transaction.date >= start_date)
+                if end_date:
+                    query = query.filter(Transaction.date <= end_date)
 
-            acc_id = row[0]
-            access_token = self.cipher_suite.decrypt(row[1]).decode()
-            provider_id = row[2]
+                txs = query.all()
 
-            transaction_url = self.base_url + f"/{acc_id}/transactions"
+                if not txs:
+                    return pd.DataFrame()
 
-            params = {}
-            if start_date:
-                params["from"] = start_date
-            if end_date:
-                params["to"] = end_date
-
-            res = self._make_request(
-                transaction_url, access_token, provider_id, params=params)
-
-            if res is not None and res.status_code == 200:
-                transactions_data = res.json().get("results", [])
-                print(
-                    f"[BACKEND LOG] TrueLayer returned {len(transactions_data)} transactions for Bank: {bank_name_or_id} and user: {user_uuid}")
                 transactions = []
-
-                for transaction in transactions_data:
-                    date = transaction.get("timestamp")
-                    amt = transaction.get("amount")
-
-                    original_desc = str(transaction.get("description", ""))
-                    classification_list = transaction.get(
-                        "transaction_classification", [])
-
-                    if isinstance(classification_list, list) and classification_list:
-                        classification_str = " ".join(
-                            [str(c) for c in classification_list])
-                        transaction["description"] = f"{original_desc} {classification_str}".strip(
-                        )
-                        transaction["truelayer_classification"] = classification_str
-
-                    transaction["bank_name"] = bank_name_or_id
-                    transaction["account_id"] = acc_id
-                    transactions.append(transaction)
+                for tx in txs:
+                    transactions.append({
+                        "transaction_id": tx.transaction_uuid,
+                        "timestamp": tx.date.isoformat() if tx.date else None,
+                        "date": tx.date.isoformat() if tx.date else None,
+                        "amount": tx.amount,
+                        "description": tx.description,
+                        "Category": tx.category,
+                        "bank_uuid": tx.bank_uuid,
+                        "account_id": tx.account_id
+                    })
 
                 return pd.DataFrame(transactions)
-
-            status = res.status_code if res is not None else "None"
-            err_text = res.text if res is not None else "No Response Object"
-            print(
-                f"[BACKEND LOG] get_transactions | TrueLayer API failed with status: {status} | Error: {err_text}")
-
+        except Exception:
+            traceback.print_exc()
             return pd.DataFrame()
 
     def get_transactions_by_account(self, account_id):
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT b.access_token, b.truelayer_provider_id FROM banks b
-                    JOIN accounts a ON b.bank_uuid = a.bank_uuid
-                    WHERE a.account_id = ? AND b.user_uuid = ?
-                """, (account_id, self.user_id))
-                row = cursor.fetchone()
+            with SessionLocal() as session:
+                txs = session.query(Transaction).filter_by(
+                    account_id=account_id, user_uuid=self.user_id).order_by(Transaction.date.desc()).all()
+                if not txs:
+                    return []
 
-            if row:
-                access_token = self.cipher_suite.decrypt(row[0]).decode()
-                provider_id = row[1]
-                res = self._make_request(
-                    f"{self.base_url}/{account_id}/transactions", access_token, provider_id)
-
-                if res is not None and res.status_code == 200:
-                    transactions = res.json().get("results", [])
-                    df = pd.DataFrame(transactions)
-                    if not df.empty:
-                        return df.fillna("").to_dict(orient="records")
-            return []
+                results = []
+                for tx in txs:
+                    results.append({
+                        "transaction_id": tx.transaction_uuid,
+                        "timestamp": tx.date.isoformat() if tx.date else None,
+                        "amount": tx.amount,
+                        "description": tx.description,
+                        "category": tx.category
+                    })
+                return results
         except Exception:
+            traceback.print_exc()
             return []
 
     def revoke_provider_connection(self, provider_id):
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT bank_uuid FROM banks WHERE truelayer_provider_id = ? AND user_uuid = ?", (provider_id, self.user_id))
-                row = cursor.fetchone()
-                if row:
-                    bank_uuid = row[0]
-                    conn.execute(
-                        "DELETE FROM transactions WHERE bank_uuid = ?", (bank_uuid,))
-                    conn.execute(
-                        "DELETE FROM accounts WHERE bank_uuid = ?", (bank_uuid,))
-                    conn.execute(
-                        "DELETE FROM banks WHERE bank_uuid = ?", (bank_uuid,))
+            with SessionLocal() as session:
+                bank = session.query(Bank).filter_by(
+                    truelayer_provider_id=provider_id, user_uuid=self.user_id).first()
+                if bank:
+                    for acc in bank.accounts:
+                        session.delete(acc)
+                    session.delete(bank)
+                    session.commit()
             return True
         except Exception:
+            traceback.print_exc()
             return False
