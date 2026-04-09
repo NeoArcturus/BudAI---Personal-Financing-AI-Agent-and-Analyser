@@ -12,6 +12,7 @@ from config import (
     ENCRYPTION_KEY
 )
 import datetime
+import pandas as pd
 
 from models.database_models import Bank
 
@@ -81,9 +82,20 @@ class AccessTokenGenerator:
             provider_logo_uri = me_res['results'][0]['provider']['logo_uri']
             consent_status = me_res['results'][0]['consent_status']
 
-            updated_at = me_res['results'][0].get('consent_status_updated_at')
-            created_at = me_res['results'][0].get('consent_created_at')
-            expires_at = me_res['results'][0].get('consent_expires_at')
+            def parse_tl_date(date_str):
+                if not date_str:
+                    return None
+                try:
+                    return pd.to_datetime(date_str).to_pydatetime()
+                except Exception:
+                    return datetime.now()
+
+            updated_at = parse_tl_date(
+                me_res['results'][0].get('consent_status_updated_at'))
+            created_at = parse_tl_date(
+                me_res['results'][0].get('consent_created_at'))
+            expires_at = parse_tl_date(
+                me_res['results'][0].get('consent_expires_at'))
 
             print(updated_at, created_at, expires_at)
 

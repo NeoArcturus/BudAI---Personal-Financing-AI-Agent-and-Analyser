@@ -1,8 +1,8 @@
-// app/dashboard/_components/SidebarRight.tsx
 "use client";
 
 import React from "react";
 import { Globe } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const SidebarRight: React.FC = () => {
   return (
@@ -16,10 +16,10 @@ export const SidebarRight: React.FC = () => {
             key={item}
             className="bg-[#0D1117] p-5 rounded-2xl border border-slate-800"
           >
-            <div className="h-4 w-1/4 bg-slate-800 rounded mb-3"></div>
-            <div className="h-4 w-full bg-slate-800 rounded mb-2"></div>
-            <div className="h-4 w-5/6 bg-slate-800 rounded"></div>
-            <p className="text-[10px] text-slate-500 mt-4 uppercase">
+            <Skeleton className="h-4 w-1/4 bg-slate-800/50 mb-3" />
+            <Skeleton className="h-4 w-full bg-slate-800/50 mb-2" />
+            <Skeleton className="h-4 w-5/6 bg-slate-800/50" />
+            <p className="text-[10px] text-slate-500 mt-4 uppercase font-bold tracking-widest">
               Geopolitical Event
             </p>
           </div>

@@ -11,8 +11,18 @@ from tqdm import tqdm
 class Preprocessor:
     def __init__(self, dataframe, st_model_path):
         self.df = dataframe.copy()
-        self.standard_columns = ["Date", "Amount", "Currency",
-                                 "Description", "Target Name", "Truelayer_classification"]
+        self.standard_columns = [
+            "transaction_id",
+            "transaction_uuid",
+            "account_id",
+            "Date",
+            "Amount",
+            "Currency",
+            "Description",
+            "Target Name",
+            "Truelayer_classification",
+            "Category",
+        ]
 
         self.rules = {
             "Food & Dining": r"(?i)\b(tesco|lidl|asda|greggs|pret|sainsbury|morrisons|aldi|mcdonalds|kfc|starbucks|costa|co-op|vending|chillionrice|subway|grill|restaurant|cafe|pizza|burger|kitchen|food|deliveroo|just eat|uber eats)\b",
@@ -60,7 +70,8 @@ class Preprocessor:
         manual_map = {
             "timestamp": "Date", "transaction_date": "Date", "Merchant": "Target Name",
             "Narrative": "Description", "Reference": "Payment Reference",
-            "amount": "Amount", "description": "Description", "truelayer_classification": "Truelayer_classification"
+            "amount": "Amount", "description": "Description", "truelayer_classification": "Truelayer_classification",
+            "transaction_uuid": "transaction_uuid", "transaction_id": "transaction_id", "account_id": "account_id"
         }
         self.df.rename(columns=manual_map, inplace=True)
         self.df.columns = [c.capitalize() if c.lower(

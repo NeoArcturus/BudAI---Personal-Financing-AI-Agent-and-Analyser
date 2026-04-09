@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BudAI Frontend
+
+This is the frontend app for BudAI, built with Next.js 16, React 19, Tailwind CSS 4, and Chart.js.
+
+## Tech Stack
+
+- Next.js 16 (App Router)
+- React 19
+- TypeScript 5
+- Tailwind CSS 4
+- Chart.js
+
+## Prerequisites
+
+- Node.js 20+ recommended
+- npm
+- BudAI backend running on `http://localhost:8080`
 
 ## Getting Started
 
-First, run the development server:
+From this folder (`budai-frontend`):
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000` in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Available Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `npm run dev` - start local dev server
+- `npm run build` - build for production
+- `npm run start` - start production server
+- `npm run lint` - run ESLint
 
-## Learn More
+## Backend Dependency
 
-To learn more about Next.js, take a look at the following resources:
+The frontend currently calls the backend with hardcoded URLs pointing to:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `http://localhost:8080/api/auth/...`
+- `http://localhost:8080/api/accounts/...`
+- `http://localhost:8080/api/chat/`
+- `http://localhost:8080/api/media/execute`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Make sure the backend is up before using login, bank linking, account views, chat, or analytics charts.
 
-## Deploy on Vercel
+## Key Frontend Routes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `/` - landing/auth entry
+- `/login` - user login
+- `/register` - user registration
+- Protected pages under `app/(protected)/` (dashboard and finance views)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project Structure
+
+```text
+budai-frontend/
+├── app/
+│   ├── (auth)/
+│   ├── (protected)/
+│   ├── context/
+│   ├── layout.tsx
+│   └── page.tsx
+├── public/
+├── package.json
+├── next.config.ts
+└── tsconfig.json
+```
+
+## Notes
+
+- Auth token is stored in browser local storage as `budai_token`.
+- Protected layout includes left navigation + right-side BudAI chat panel.
+- If backend API host changes, update frontend fetch URLs accordingly.

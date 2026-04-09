@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { apiFetch } from "@/lib/api";
 
 export default function Home() {
   const router = useRouter();
@@ -18,20 +19,19 @@ export default function Home() {
     setError("");
 
     try {
-      const res = await fetch("http://localhost:8080/api/auth/login", {
+      const res = await apiFetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
 
-      if (data.token) {
+      if (res.ok && data.token) {
         localStorage.setItem("budai_token", data.token);
         localStorage.setItem("budai_user_name", email.split("@")[0]);
         router.push("/home");
       } else {
-        setError("Invalid credentials. Please try again.");
+        setError(data.detail || "Invalid credentials. Please try again.");
       }
     } catch (err) {
       console.error("Authentication Error", err);

@@ -10,14 +10,24 @@ from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
 from services.Forecaster_Agent.ForecasterAgent import ForecasterAgent
 from services.Analyser_Agent.expense_analysis import ExpenseAnalysis
 from langchain_core.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from services.api_integrator.get_account_detail import UserAccounts
 from services.Analyser_Agent.financial_health import FinancialHealthAnalyzer
 from cryptography.fernet import Fernet
 from services.api_integrator.access_token_generator import AccessTokenGenerator
 
 
-class GenerateFinancialForecastInput(BaseModel):
+class BaseToolInput(BaseModel):
+    @model_validator(mode='before')
+    @classmethod
+    def unnest_args(cls, data: object) -> object:
+        if isinstance(data, dict):
+            if 'arguments' in data and isinstance(data['arguments'], dict):
+                return data['arguments']
+        return data
+
+
+class GenerateFinancialForecastInput(BaseToolInput):
     bank_name_or_id: str = Field(...,
                                  description="MUST be 'ALL' unless explicitly named.")
     user_uuid: str = Field(
@@ -26,7 +36,7 @@ class GenerateFinancialForecastInput(BaseModel):
         60, description="The number of days into the future to forecast.")
 
 
-class ClassifyFinancialDataInput(BaseModel):
+class ClassifyFinancialDataInput(BaseToolInput):
     from_date: str = Field(...,
                            description="Starting date for transactions in YYYY-MM-DD format.")
     to_date: str = Field(...,
@@ -37,7 +47,7 @@ class ClassifyFinancialDataInput(BaseModel):
         ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
 
 
-class FindTotalSpentInput(BaseModel):
+class FindTotalSpentInput(BaseToolInput):
     category_name: str = Field(...,
                                description="Name of the category, or 'all'.")
     bank_name_or_id: str = Field(...,
@@ -46,21 +56,28 @@ class FindTotalSpentInput(BaseModel):
         ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
 
 
-class FindHighestSpendingCategoryInput(BaseModel):
+class FindHighestSpendingCategoryInput(BaseToolInput):
     bank_name_or_id: str = Field(...,
                                  description="MUST be 'ALL' unless explicitly named.")
     user_uuid: str = Field(
         ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
 
 
-class CreateBargraphChartInput(BaseModel):
+class CreateBargraphChartInput(BaseToolInput):
     bank_name_or_id: str = Field(...,
                                  description="MUST be 'ALL' unless explicitly named.")
     user_uuid: str = Field(
         ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
 
 
-class PlotExpensesInput(BaseModel):
+class CreatePieChartInput(BaseToolInput):
+    bank_name_or_id: str = Field(...,
+                                 description="MUST be 'ALL' unless explicitly named.")
+    user_uuid: str = Field(
+        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
+
+
+class PlotExpensesInput(BaseToolInput):
     plot_time_type: str = Field(...,
                                 description="MUST be exactly 'Daily', 'Weekly', or 'Monthly'.")
     from_date: str = Field(...,
@@ -73,7 +90,7 @@ class PlotExpensesInput(BaseModel):
         ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
 
 
-class GenerateExpenseForecastInput(BaseModel):
+class GenerateExpenseForecastInput(BaseToolInput):
     bank_name_or_id: str = Field(...,
                                  description="MUST be 'ALL' unless explicitly named.")
     user_uuid: str = Field(
@@ -82,29 +99,30 @@ class GenerateExpenseForecastInput(BaseModel):
         30, description="The number of days into the future to forecast.")
 
 
-class AnalyzeCriticalSurvivalMetricsInput(BaseModel):
+class AnalyzeCriticalSurvivalMetricsInput(BaseToolInput):
     user_uuid: str = Field(
         ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
 
 
-class AnalyzeWealthAccelerationMetricsInput(BaseModel):
+class AnalyzeWealthAccelerationMetricsInput(BaseToolInput):
     user_uuid: str = Field(
         ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
 
 
-class PlotCashFlowMixedInput(BaseModel):
+class PlotCashFlowMixedInput(BaseToolInput):
     bank_name_or_id: str = Field(...,
                                  description="MUST be 'ALL' unless explicitly named.")
     user_uuid: str = Field(
         ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
 
 
-class PlotHealthRadarInput(BaseModel):
+class PlotHealthRadarInput(BaseToolInput):
     user_uuid: str = Field(
         ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
 
 
 def _cache_chart_data(payload_data):
+    """Caches chart data into the local SQLite database to be retrieved instantly by the frontend."""
     cache_id = f"CACHE_{uuid.uuid4().hex}"
     with SessionLocal() as session:
         session.execute(text('''CREATE TABLE IF NOT EXISTS chart_cache (
@@ -118,6 +136,7 @@ def _cache_chart_data(payload_data):
 
 
 def _check_and_handle_sca_error(e, acc, user_uuid):
+    """Checks if a TrueLayer API error is an SCA lock, and if so, returns an actionable authentication link."""
     if isinstance(e, PermissionError) and "SECURITY LOCK" in str(e):
         with SessionLocal() as session:
             row = session.execute(text("""
@@ -153,6 +172,7 @@ def _check_and_handle_sca_error(e, acc, user_uuid):
 
 
 def _parse_accounts(bank_name_or_id, user_uuid):
+    """Resolves the requested bank names into actual identifiers available in the database."""
     if not bank_name_or_id or str(bank_name_or_id).lower() in ["none", ""]:
         return [], ""
 
@@ -179,6 +199,7 @@ def _parse_accounts(bank_name_or_id, user_uuid):
 
 
 def _get_combined_categorized_data(accounts, suffix, user_uuid):
+    """Runs the categorization pipeline across all requested accounts and returns a merged dataframe."""
     combined_df = pd.DataFrame()
     agent = CategorizerAgent()
 
@@ -545,6 +566,63 @@ def create_bargraph_chart_and_save(bank_name_or_id: str, user_uuid: str) -> str:
                 f"Top Expense Categories to mention: {top_str}\n"
                 f"Analytical Context: Instruct the UI to render the chart and summarize the top 3 spending categories to the user.\n"
                 f"[TRIGGER_CATEGORIZED_CHART:{cache_id}]\n")
+    except Exception as e:
+        if "⚠️ **SCA" in str(e):
+            return str(e)
+        return f"CRITICAL TOOL ERROR: {str(e)}"
+
+
+@tool(args_schema=CreatePieChartInput)
+def create_pie_chart_and_save(bank_name_or_id: str, user_uuid: str) -> str:
+    """Generate a visual pie/doughnut chart representing the proportional distribution of the user's categorized spending."""
+    try:
+        if str(bank_name_or_id).upper() == "ALL":
+            accounts, suffix = _parse_accounts("ALL", user_uuid)
+        else:
+            raw_banks = [b.strip()
+                         for b in str(bank_name_or_id).split(",") if b.strip()]
+            accounts = []
+            suffixes = []
+            for rb in raw_banks:
+                accs, suff = _parse_accounts(rb, user_uuid)
+                accounts.extend(accs)
+                suffixes.append(suff)
+            suffix = ",".join(suffixes)
+
+        df = _get_combined_categorized_data(accounts, suffix, user_uuid)
+
+        if df is None or df.empty:
+            return "No categorized data available to chart. The categorizer could not process the transactions."
+
+        payload = []
+        for acc in accounts:
+            acc_df = df[df['bank_name'] ==
+                        acc] if 'bank_name' in df.columns else df
+            bank_data = []
+            for cat in acc_df['Category'].unique():
+                cat_df = acc_df[acc_df['Category'] == cat]
+                bank_data.append({
+                    "Category": str(cat),
+                    "Total_Amount": round(float(cat_df['Amount'].abs().sum()), 2),
+                    "Transaction_Count": len(cat_df)
+                })
+            bank_data.sort(key=lambda x: x["Total_Amount"], reverse=True)
+            payload.append({"bank_name": acc, "data": bank_data})
+
+        cache_id = _cache_chart_data(payload)
+
+        expenses_df = df[df['Category'].str.lower() != 'income'].copy()
+        grouped = expenses_df.groupby('Category')['Amount'].apply(
+            lambda x: x.abs().sum()).reset_index()
+        grouped = grouped.sort_values(by='Amount', ascending=False)
+        top_categories = grouped.head(3).to_dict('records')
+        top_str = ", ".join(
+            [f"{c['Category']} (£{c['Amount']:.2f})" for c in top_categories])
+
+        return (f"--- DATA SUMMARY FOR BUDAI ---\n"
+                f"Top Expense Categories to mention: {top_str}\n"
+                f"Analytical Context: Instruct the UI to render the pie chart and summarize the top 3 spending categories to the user.\n"
+                f"[TRIGGER_CATEGORIZED_DOUGHNUT_CHART:{cache_id}]\n")
     except Exception as e:
         if "⚠️ **SCA" in str(e):
             return str(e)

@@ -1,7 +1,6 @@
 import pandas as pd
 import os
 import sys
-import uuid
 from datetime import datetime
 from diskcache import Cache
 from sqlalchemy import text
@@ -16,13 +15,100 @@ sys.path.append(os.path.abspath(os.path.join(
 
 
 class CategorizerAgent:
-    def __init__(self, db_path=None):
+    def __init__(self):
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self.model_dir = os.path.join(self.base_dir, "saved_model")
         self.enc_dir = os.path.join(self.base_dir, "saved_label_enc")
         self.local_st_path = os.path.join(self.model_dir, "st_model_local")
         self.cache = Cache('./agent_cache')
         self.categorizer = Categorizer()
+        self._ensure_feedback_table()
+
+    def _ensure_feedback_table(self):
+        with SessionLocal() as session:
+            session.execute(text("""
+                CREATE TABLE IF NOT EXISTS transaction_label_feedback (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_uuid TEXT NOT NULL,
+                    transaction_uuid TEXT NOT NULL,
+                    corrected_label TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_uuid, transaction_uuid)
+                )
+            """))
+            session.commit()
+
+    def save_manual_label(self, user_uuid, transaction_uuid, corrected_label):
+        self._ensure_feedback_table()
+        with SessionLocal() as session:
+            session.execute(text("""
+                INSERT INTO transaction_label_feedback (user_uuid, transaction_uuid, corrected_label, updated_at)
+                VALUES (:user_uuid, :transaction_uuid, :corrected_label, CURRENT_TIMESTAMP)
+                ON CONFLICT(user_uuid, transaction_uuid)
+                DO UPDATE SET corrected_label = excluded.corrected_label, updated_at = CURRENT_TIMESTAMP
+            """), {
+                "user_uuid": user_uuid,
+                "transaction_uuid": transaction_uuid,
+                "corrected_label": corrected_label
+            })
+            session.execute(text("""
+                UPDATE transactions
+                SET category = :corrected_label
+                WHERE user_uuid = :user_uuid AND transaction_uuid = :transaction_uuid
+            """), {
+                "user_uuid": user_uuid,
+                "transaction_uuid": transaction_uuid,
+                "corrected_label": corrected_label
+            })
+            session.commit()
+
+    def retrain_from_feedback(self, user_uuid):
+        self._ensure_feedback_table()
+        with SessionLocal() as session:
+            rows = session.execute(text("""
+                SELECT
+                    t.transaction_uuid,
+                    t.account_id,
+                    t.date,
+                    t.amount,
+                    t.description,
+                    t.category,
+                    f.corrected_label
+                FROM transactions t
+                LEFT JOIN transaction_label_feedback f
+                    ON f.transaction_uuid = t.transaction_uuid AND f.user_uuid = t.user_uuid
+                WHERE t.user_uuid = :user_uuid
+            """), {"user_uuid": user_uuid}).fetchall()
+
+        if not rows:
+            return {"trained": False, "reason": "No transactions available for training."}
+
+        records = []
+        for row in rows:
+            tx_id, acc_id, date_val, amount, description, category, corrected_label = row
+            final_label = corrected_label or category or "Uncategorized"
+            records.append({
+                "transaction_id": tx_id,
+                "transaction_uuid": tx_id,
+                "account_id": acc_id,
+                "timestamp": date_val.isoformat() if hasattr(date_val, "isoformat") else str(date_val),
+                "amount": amount,
+                "description": description,
+                "Category": final_label
+            })
+
+        raw_df = pd.DataFrame(records)
+        proc = Preprocessor(raw_df, self.local_st_path)
+        train_df, embeddings = proc.preprocess_for_inference()
+        if "Category" not in train_df.columns:
+            return {"trained": False, "reason": "No labels found for training."}
+
+        train_df["Category"] = raw_df["Category"].values
+        trainer = CategorizerTrainer(
+            train_df, embeddings, self.model_dir, self.enc_dir)
+        trainer.train()
+        return {"trained": True, "samples": len(train_df)}
 
     def execute_cycle(self, identifier, user_uuid, start_date, end_date):
         try:
@@ -54,6 +140,22 @@ class CategorizerAgent:
             print(clean_df)
             final_df = self.categorizer.predict(
                 clean_df, embeddings, xgb_model_path, enc_path)
+
+            # Apply user-corrected labels as final source of truth.
+            with SessionLocal() as session:
+                feedback_rows = session.execute(text("""
+                    SELECT transaction_uuid, corrected_label
+                    FROM transaction_label_feedback
+                    WHERE user_uuid = :user_uuid
+                """), {"user_uuid": user_uuid}).fetchall()
+            feedback_map = {row[0]: row[1] for row in feedback_rows}
+            if "transaction_id" in final_df.columns:
+                final_df["Category"] = final_df.apply(
+                    lambda r: feedback_map.get(
+                        str(r.get("transaction_id")), r.get("Category")),
+                    axis=1
+                )
+
             print("Categorized data:")
             print(final_df)
 

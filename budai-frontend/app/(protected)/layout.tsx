@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { BudAIProvider, useBudAI } from "@/app/context/AppContext";
 import { SidebarLeft } from "@/app/(protected)/_components/SidebarLeft";
 import BudAIChat from "@/app/(protected)/_components/BudAIChat";
+import { apiFetch, clearSession } from "@/lib/api";
 
 function SplitBrainLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -21,7 +22,7 @@ function SplitBrainLayout({ children }: { children: React.ReactNode }) {
   );
 
   const handleLogout = () => {
-    localStorage.clear();
+    clearSession();
     router.push("/login");
   };
 
@@ -33,17 +34,13 @@ function SplitBrainLayout({ children }: { children: React.ReactNode }) {
     if (!window.confirm("Are you sure you want to disconnect this bank?"))
       return;
     setRevokingProviderId(providerId);
-    const token = localStorage.getItem("budai_token") || "";
     try {
-      const res = await fetch(
-        `http://localhost:8080/api/accounts/${providerId}`,
+      const res = await apiFetch(
+        `/api/accounts/${providerId}`,
         {
           method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
         },
+        true,
       );
       if (res.ok) window.location.reload();
     } catch (err) {
@@ -57,13 +54,7 @@ function SplitBrainLayout({ children }: { children: React.ReactNode }) {
     e.preventDefault();
     e.stopPropagation();
     try {
-      const token = localStorage.getItem("budai_token") || "";
-      const res = await fetch(
-        "http://localhost:8080/api/auth/truelayer/status",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const res = await apiFetch("/api/auth/truelayer/status", {}, true);
       const data = await res.json();
       if (data.auth_url) window.location.href = data.auth_url;
     } catch (err) {

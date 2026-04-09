@@ -1,65 +1,62 @@
-from flask import Blueprint, request, jsonify, redirect
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
+from typing import List, Optional
 from services.api_integrator.access_token_generator import AccessTokenGenerator
 from services.user_service import UserService
-from middleware.auth_middleware import token_required
+from middleware.auth_middleware import get_current_user
 
-auth_bp = Blueprint('auth', __name__)
-callback_bp = Blueprint('callback', __name__)
+auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
+callback_router = APIRouter(tags=["callback"])
 
 
-@auth_bp.route('/login', methods=['POST'])
-def login():
-    data = request.json
-    email = data.get("email")
-    password = data.get("password")
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
+
+class ExtendConnectionsRequest(BaseModel):
+    provider_ids: List[str] = []
+
+
+class RevokeConnectionRequest(BaseModel):
+    provider_id: Optional[str] = None
+
+
+@auth_router.post('/login')
+def login(request_data: LoginRequest):
     user_service = UserService()
-    user_uuid = user_service.authenticate_or_create_user(email, password)
+    user_uuid = user_service.authenticate_or_create_user(
+        request_data.email, request_data.password)
+    return {"token": user_uuid, "status": "success"}
 
-    return jsonify({"token": user_uuid, "status": "success"})
 
-
-@auth_bp.route('/truelayer/status', methods=['GET'])
-@token_required
-def truelayer_status():
+@auth_router.get('/truelayer/status')
+def truelayer_status(current_user=Depends(get_current_user)):
     token_gen = AccessTokenGenerator()
-    return jsonify({"auth_url": token_gen.get_auth_link(request.user_uuid)})
+    return {"auth_url": token_gen.get_auth_link(current_user.user_uuid)}
 
 
-@callback_bp.route('/callback', methods=['GET'])
-def truelayer_callback():
-    code = request.args.get('code')
-    state = request.args.get('state')
-
+@callback_router.get('/callback')
+def truelayer_callback(code: str, state: str):
     token_gen = AccessTokenGenerator()
     if token_gen.validate_callback(code, state):
-        return redirect("http://localhost:3000/dashboard")
+        return RedirectResponse(url="http://localhost:3000/home")
+    raise HTTPException(
+        status_code=400, detail="Authentication failed or session expired")
 
-    return jsonify({"error": "Authentication failed or session expired"}), 400
 
-
-@auth_bp.route('/connections/extend', methods=['POST'])
-@token_required
-def extend_user_connections():
-    data = request.json
-    provider_ids = data.get('provider_ids', [])
-
+@auth_router.post('/connections/extend')
+def extend_user_connections(request_data: ExtendConnectionsRequest, current_user=Depends(get_current_user)):
     token_gen = AccessTokenGenerator()
-    results = token_gen.extend_providers(provider_ids, request.user_uuid)
+    results = token_gen.extend_providers(
+        request_data.provider_ids, current_user.user_uuid)
+    return {"results": results}
 
-    return jsonify({"results": results})
 
-
-@auth_bp.route('/connections/revoke', methods=['POST'])
-@token_required
-def revoke_truelayer_access():
-    data = request.json or {}
-    provider_id = data.get("provider_id")
-
+@auth_router.post('/connections/revoke')
+def revoke_truelayer_access(request_data: RevokeConnectionRequest, current_user=Depends(get_current_user)):
     token_gen = AccessTokenGenerator()
-    results = token_gen.revoke_provider(provider_id, request.user_uuid)
-
-    if results and results[0].get("status") == "not_found":
-        return jsonify({"error": results[0].get("error")}), 404
-
-    return jsonify({"results": results})
+    results = token_gen.revoke_provider(
+        request_data.provider_id, current_user.user_uuid)
+    return {"results": results}

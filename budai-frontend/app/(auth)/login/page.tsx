@@ -4,27 +4,33 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Lock, Mail } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
     try {
-      const res = await fetch("http://localhost:8080/api/auth/login", {
+      const res = await apiFetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (res.ok && data.token) {
         localStorage.setItem("budai_token", data.token);
+        localStorage.setItem("budai_user_name", email.split("@")[0] || "User");
         router.push("/home");
+      } else {
+        setError(data.detail || "Invalid credentials.");
       }
     } catch (err) {
       console.log(err);
+      setError("Unable to connect. Please try again.");
     }
   };
 
@@ -33,6 +39,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md bg-[#132017] border border-[#1A2D21] p-8 rounded-3xl shadow-2xl">
         <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
         <p className="text-slate-400 mb-8">Sign in to BudAI to continue.</p>
+        {error && (
+          <div className="mb-4 text-red-500 text-sm font-bold bg-red-500/10 py-2 rounded-lg border border-red-500/50">
+            {error}
+          </div>
+        )}
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <div className="relative">
             <Mail

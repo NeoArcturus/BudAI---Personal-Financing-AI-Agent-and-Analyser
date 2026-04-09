@@ -23,6 +23,11 @@ class CategorizerTrainer:
     def train(self):
         if 'Category' not in self.df.columns or self.df.empty:
             return
+        self.df = self.df.dropna(subset=["Category", "Description"]).copy()
+        self.df = self.df[self.df["Category"].astype(str).str.strip() != ""]
+        self.df = self.df[~self.df["Category"].astype(str).str.lower().isin(["uncategorized", "needs review"])]
+        if self.df.empty:
+            return
         with tqdm(total=4, desc="Training Brain") as pbar:
             le = LabelEncoder()
             y = le.fit_transform(self.df['Category'])
@@ -35,9 +40,15 @@ class CategorizerTrainer:
             pbar.update(1)
 
             indices = np.arange(len(y))
-            if len(np.unique(y)) > 1:
+            class_counts = np.bincount(y)
+            can_stratify = np.all(class_counts >= 2)
+            if len(np.unique(y)) > 1 and len(y) >= 10:
                 idx_train, idx_val = train_test_split(
-                    indices, test_size=0.2, random_state=42)
+                    indices,
+                    test_size=0.2,
+                    random_state=42,
+                    stratify=y if can_stratify else None
+                )
             else:
                 idx_train, idx_val = indices, indices
             pbar.update(1)

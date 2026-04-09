@@ -1,4 +1,5 @@
 import { Transaction } from "@/types";
+import { Badge } from "@/components/ui/badge";
 
 interface TransactionFeedProps {
   transactions: Transaction[];
@@ -11,15 +12,15 @@ export default function TransactionFeed({
 }: TransactionFeedProps) {
   if (!transactions || transactions.length === 0) {
     return (
-      <div className="text-slate-500 text-sm text-center py-8">
-        No transactions found.
+      <div className="text-slate-500 text-sm text-center py-12 bg-[#0D1117] rounded-xl border border-slate-800 border-dashed">
+        No transactions found for this period.
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex justify-between items-center text-[10px] font-bold tracking-widest text-slate-500 uppercase px-4 pb-2 border-b border-slate-800">
+    <div className="space-y-2">
+      <div className="flex justify-between items-center text-[10px] font-bold tracking-widest text-slate-500 uppercase px-4 pb-2 border-b border-slate-800 mb-4">
         <div className={showCategory ? "w-1/2" : "w-3/4"}>
           Transaction Details
         </div>
@@ -31,10 +32,8 @@ export default function TransactionFeed({
         const description = tx.description || tx.Description || "Unknown";
         const dateStr = tx.timestamp || tx.date || "";
         const category = tx.category || tx.Category || "Uncategorized";
-
         const amount = tx.amount ?? tx.Amount ?? 0;
         const isNegative = amount < 0;
-        const displayAmount = Math.abs(amount).toFixed(2);
 
         return (
           <div
@@ -55,16 +54,21 @@ export default function TransactionFeed({
 
             {showCategory && (
               <div className="w-1/4 flex justify-center">
-                <span className="bg-[#0D1117] border border-slate-700 px-3 py-1 rounded-full text-[10px] uppercase tracking-wider text-[#00FFAA] font-bold shadow-inner truncate max-w-full text-center">
-                  {category === "Uncategorized" ? "" : category}
-                </span>
+                {category !== "Uncategorized" && (
+                  <Badge
+                    variant="outline"
+                    className="text-[#00FFAA] border-slate-700 bg-[#0D1117] font-bold text-[10px] uppercase tracking-wider"
+                  >
+                    {category}
+                  </Badge>
+                )}
               </div>
             )}
 
             <div
               className={`w-1/4 text-right font-mono font-bold text-base ${isNegative ? "text-red-400" : "text-[#00FFAA]"}`}
             >
-              {isNegative ? "-" : "+"}£{displayAmount}
+              {isNegative ? "-" : "+"}£{Math.abs(amount).toFixed(2)}
             </div>
           </div>
         );

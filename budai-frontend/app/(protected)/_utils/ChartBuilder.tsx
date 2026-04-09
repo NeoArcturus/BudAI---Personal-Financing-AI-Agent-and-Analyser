@@ -1,6 +1,31 @@
 import { NativeChartConfig, ToolParameters, BankChartData } from "@/types";
 import { ChartDataset } from "chart.js";
 
+interface ChartAnimationContext {
+  type: string;
+  mode: string;
+  dataIndex: number;
+  datasetIndex: number;
+  index: number;
+  chart: {
+    scales: {
+      y: {
+        getPixelForValue: (value: number) => number;
+      };
+    };
+    getDatasetMeta: (index: number) => {
+      data: {
+        getProps: (props: string[], final: boolean) => { y: number };
+      }[];
+    };
+  };
+}
+
+interface ProgressiveAnimationContext extends ChartAnimationContext {
+  xStarted?: boolean;
+  yStarted?: boolean;
+}
+
 const baseOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -45,14 +70,104 @@ const baseOptions = {
   },
 };
 
+// Extended 16-color palette to prevent repetition in charts with many categories
 const colorPalette = [
-  "#00FFAA",
-  "#3b82f6",
-  "#ef4444",
-  "#f59e0b",
-  "#a855f7",
-  "#ec4899",
+  "#00FFAA", // Bright Green
+  "#3b82f6", // Blue
+  "#ef4444", // Red
+  "#f59e0b", // Yellow/Amber
+  "#a855f7", // Purple
+  "#ec4899", // Pink
+  "#14b8a6", // Teal
+  "#f97316", // Orange
+  "#6366f1", // Cyan
+  "#8b5cf6", // Violet
+  "#84cc16", // Emerald
+  "#eab308", // Lime
+  "#0ea5e9", // Indigo
+  "#d946ef", // Fuchsia
+  "#10b981", // Light Teal
+  "#f43f5e", // Rose
 ];
+
+const getColorForMetric = (
+  metricName: string,
+  defaultIndex: number,
+): string => {
+  const lower = metricName.toLowerCase();
+  if (
+    lower.includes("balance") ||
+    lower.includes("flow") ||
+    lower.includes("optimal")
+  )
+    return "#00FFAA";
+  if (
+    lower.includes("expense") ||
+    lower.includes("spend") ||
+    lower.includes("careless")
+  )
+    return "#ef4444";
+  if (lower.includes("income")) return "#3b82f6";
+  return colorPalette[defaultIndex % colorPalette.length];
+};
+
+const getProgressiveAnimation = (dataLength: number) => {
+  const totalDuration = 2000;
+  const delayBetweenPoints = totalDuration / Math.max(1, dataLength);
+
+  return {
+    x: {
+      type: "number",
+      easing: "linear",
+      duration: delayBetweenPoints,
+      from: NaN,
+      delay(ctx: ProgressiveAnimationContext) {
+        if (ctx.type !== "data" || ctx.xStarted) {
+          return 0;
+        }
+        ctx.xStarted = true;
+        return ctx.index * delayBetweenPoints;
+      },
+    },
+    y: {
+      type: "number",
+      easing: "linear",
+      duration: delayBetweenPoints,
+      from(ctx: ProgressiveAnimationContext) {
+        return ctx.index === 0
+          ? ctx.chart.scales.y.getPixelForValue(0)
+          : ctx.chart
+              .getDatasetMeta(ctx.datasetIndex)
+              .data[ctx.index - 1].getProps(["y"], true).y;
+      },
+      delay(ctx: ProgressiveAnimationContext) {
+        if (ctx.type !== "data" || ctx.yStarted) {
+          return 0;
+        }
+        ctx.yStarted = true;
+        return ctx.index * delayBetweenPoints;
+      },
+    },
+  };
+};
+
+const getDelayedAnimation = () => {
+  let delayed = false;
+  return {
+    duration: 1000,
+    easing: "easeOutQuart",
+    onComplete: () => {
+      delayed = true;
+    },
+    delay: (context: ChartAnimationContext) => {
+      let delay = 0;
+      if (context.type === "data" && context.mode === "default" && !delayed) {
+        delay = context.dataIndex * 50 + context.datasetIndex * 50;
+      }
+      return delay;
+    },
+  };
+};
 
 export const buildChartConfig = (
   type: string,
@@ -66,22 +181,30 @@ export const buildChartConfig = (
         payloadData.flatMap((b) => b.data.map((d) => String(d.Category))),
       ),
     );
-    const datasets = payloadData.map((b, i) => ({
-      label: `${b.bank_name} Spent (£)`,
-      data: allLabels.map((l) => {
-        const pt = b.data.find((d) => String(d.Category) === l);
-        return pt ? Number(pt.Total_Amount) : 0;
-      }),
-      backgroundColor: colorPalette[i % colorPalette.length],
-      borderRadius: 6,
-      hoverBackgroundColor: `${colorPalette[i % colorPalette.length]}cc`,
-    }));
+    const datasets = payloadData.map((b, i) => {
+      const metricColor =
+        payloadData.length > 1
+          ? colorPalette[i % colorPalette.length]
+          : getColorForMetric("expense", i);
+
+      return {
+        label: `${b.bank_name} Spent (£)`,
+        data: allLabels.map((l) => {
+          const pt = b.data.find((d) => String(d.Category) === l);
+          return pt ? Number(pt.Total_Amount) : 0;
+        }),
+        backgroundColor: metricColor,
+        borderRadius: 6,
+        hoverBackgroundColor: `${metricColor}cc`,
+      };
+    });
 
     return {
       type: "bar",
       data: { labels: allLabels, datasets },
       options: {
         ...baseOptions,
+        animation: getDelayedAnimation() as unknown as Record<string, unknown>,
         plugins: {
           ...baseOptions.plugins,
           title: {
@@ -127,6 +250,7 @@ export const buildChartConfig = (
       options: {
         ...baseOptions,
         cutout: "75%",
+        animation: getDelayedAnimation() as unknown as Record<string, unknown>,
         scales: { x: { display: false }, y: { display: false } },
         plugins: {
           ...baseOptions.plugins,
@@ -176,12 +300,12 @@ export const buildChartConfig = (
             type: "line",
             label: "Net Flow (£)",
             data: netBalance,
-            borderColor: "#3b82f6",
-            backgroundColor: "rgba(59, 130, 246, 0.1)",
+            borderColor: getColorForMetric("balance", 0),
+            backgroundColor: `${getColorForMetric("balance", 0)}1A`,
             borderWidth: 3,
             tension: 0.4,
             fill: true,
-            pointBackgroundColor: "#3b82f6",
+            pointBackgroundColor: getColorForMetric("balance", 0),
             pointRadius: 3,
             pointHoverRadius: 6,
           },
@@ -189,20 +313,21 @@ export const buildChartConfig = (
             type: "bar",
             label: "Income (£)",
             data: income,
-            backgroundColor: "#00FFAA",
+            backgroundColor: getColorForMetric("income", 1),
             borderRadius: 4,
           },
           {
             type: "bar",
             label: "Expenses (£)",
             data: expense,
-            backgroundColor: "#ef4444",
+            backgroundColor: getColorForMetric("expense", 2),
             borderRadius: 4,
           },
         ],
       },
       options: {
         ...baseOptions,
+        animation: getDelayedAnimation() as unknown as Record<string, unknown>,
         plugins: {
           ...baseOptions.plugins,
           title: {
@@ -241,6 +366,7 @@ export const buildChartConfig = (
       },
       options: {
         ...baseOptions,
+        animation: getDelayedAnimation() as unknown as Record<string, unknown>,
         scales: {
           x: { display: false },
           y: { display: false },
@@ -275,6 +401,10 @@ export const buildChartConfig = (
 
     if (type === "balance_forecast") {
       payloadData.forEach((b, i) => {
+        const metricColor =
+          payloadData.length > 1
+            ? colorPalette[i % colorPalette.length]
+            : getColorForMetric("balance", i);
         datasets.push({
           label: `${b.bank_name} Expected`,
           data: allDays.map((day) =>
@@ -282,8 +412,8 @@ export const buildChartConfig = (
               b.data.find((d) => d.Day === day)?.["Expected Balance"] || 0,
             ),
           ),
-          borderColor: colorPalette[i % colorPalette.length],
-          backgroundColor: `${colorPalette[i % colorPalette.length]}1A`,
+          borderColor: metricColor,
+          backgroundColor: `${metricColor}1A`,
           fill: false,
           tension: 0.4,
           pointRadius: 0,
@@ -293,6 +423,10 @@ export const buildChartConfig = (
       });
     } else {
       payloadData.forEach((b, i) => {
+        const metricColor =
+          payloadData.length > 1
+            ? colorPalette[i % colorPalette.length]
+            : getColorForMetric("spend", i);
         datasets.push({
           label: `${b.bank_name} Spend`,
           data: allDays.map((day) =>
@@ -302,8 +436,8 @@ export const buildChartConfig = (
               ] || 0,
             ),
           ),
-          borderColor: colorPalette[i % colorPalette.length],
-          backgroundColor: `${colorPalette[i % colorPalette.length]}1A`,
+          borderColor: metricColor,
+          backgroundColor: `${metricColor}1A`,
           fill: true,
           tension: 0.4,
           pointRadius: 0,
@@ -318,6 +452,10 @@ export const buildChartConfig = (
       data: { labels: allDays, datasets },
       options: {
         ...baseOptions,
+        animation: getProgressiveAnimation(allDays.length) as unknown as Record<
+          string,
+          unknown
+        >,
         plugins: {
           ...baseOptions.plugins,
           title: {
@@ -339,16 +477,21 @@ export const buildChartConfig = (
     const datasets: ChartDataset<"line">[] = [];
 
     payloadData.forEach((b, idx) => {
+      const metricColor =
+        payloadData.length > 1
+          ? colorPalette[idx % colorPalette.length]
+          : getColorForMetric("expense", idx);
+
       datasets.push({
         label: b.bank_name,
         data: allDates.map((date) =>
           Number(b.data.find((d) => d.Date === date)?.Amount || 0),
         ),
-        borderColor: colorPalette[idx % colorPalette.length],
+        borderColor: metricColor,
         fill: false,
         tension: 0.4,
         pointRadius: 2,
-        pointBackgroundColor: colorPalette[idx % colorPalette.length],
+        pointBackgroundColor: metricColor,
         pointHitRadius: 10,
         pointHoverRadius: 6,
       });
@@ -359,6 +502,9 @@ export const buildChartConfig = (
       data: { labels: allDates, datasets },
       options: {
         ...baseOptions,
+        animation: getProgressiveAnimation(
+          allDates.length,
+        ) as unknown as Record<string, unknown>,
         plugins: {
           ...baseOptions.plugins,
           title: {

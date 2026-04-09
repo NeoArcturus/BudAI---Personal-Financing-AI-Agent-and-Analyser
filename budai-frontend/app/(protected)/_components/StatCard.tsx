@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface StatCardProps {
   title: string;
@@ -10,14 +11,16 @@ interface StatCardProps {
 
 export default function StatCard({ title, value, icon }: StatCardProps) {
   return (
-    <div className="bg-[#161B22] border border-slate-800 rounded-2xl p-6 transition-all hover:border-[#00FFAA]/20">
-      <div className="flex items-center gap-3 mb-3">
+    <Card className="bg-[#161B22] border-slate-800 transition-all hover:border-[#00FFAA]/20">
+      <CardHeader className="flex flex-row items-center space-y-0 pb-2 gap-3">
         {icon}
-        <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">
+        <CardTitle className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">
           {title}
-        </p>
-      </div>
-      <h2 className="text-2xl font-mono font-bold text-white">{value}</h2>
-    </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-mono font-bold text-white">{value}</div>
+      </CardContent>
+    </Card>
   );
 }

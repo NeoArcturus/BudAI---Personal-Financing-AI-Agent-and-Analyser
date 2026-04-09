@@ -26,14 +26,26 @@ class Categorizer:
 
         gbm_predictions = model.predict(X_infer)
         gbm_labels = le.inverse_transform(gbm_predictions)
+        gbm_proba = model.predict_proba(X_infer)
+        gbm_conf = np.max(gbm_proba, axis=1)
 
         final_labels = []
+        final_confidences = []
+        model_labels = []
+        needs_review_threshold = 0.62
+        income_keywords = ("salary", "payroll", "wage", "interest", "bonus")
+        transfer_like_keywords = ("refund", "reversal", "chargeback", "transfer", "cashback")
+
         for i, row in df.iterrows():
             amt = float(row['Amount'])
             text_lower = str(row.get('Description', '')).lower()
+            model_label = gbm_labels[i]
+            model_conf = float(gbm_conf[i])
+            model_labels.append(model_label)
 
-            if amt > 0.001:
+            if amt > 0.001 and any(k in text_lower for k in income_keywords) and not any(k in text_lower for k in transfer_like_keywords):
                 final_labels.append("Income")
+                final_confidences.append(max(model_conf, 0.92))
                 continue
 
             matched_cat = None
@@ -42,7 +54,17 @@ class Categorizer:
                     matched_cat = category
                     break
 
-            final_labels.append(matched_cat if matched_cat else gbm_labels[i])
+            if matched_cat:
+                final_labels.append(matched_cat)
+                final_confidences.append(max(model_conf, 0.95))
+            elif model_conf < needs_review_threshold:
+                final_labels.append("Needs Review")
+                final_confidences.append(model_conf)
+            else:
+                final_labels.append(model_label)
+                final_confidences.append(model_conf)
 
         df.loc[:, 'Category'] = final_labels
+        df.loc[:, 'Model_Prediction'] = model_labels
+        df.loc[:, 'Confidence'] = final_confidences
         return df

@@ -3,27 +3,32 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Lock, Mail, User } from "lucide-react";
+import { Lock, Mail } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
     try {
-      const res = await fetch("http://localhost:8080/api/auth/register", {
+      const res = await apiFetch("/api/auth/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ email, password }),
       });
+      const data = await res.json();
       if (res.ok) {
         router.push("/login");
+      } else {
+        setError(data.detail || "Registration failed.");
       }
     } catch (err) {
       console.log(err);
+      setError("Unable to connect. Please try again.");
     }
   };
 
@@ -34,21 +39,12 @@ export default function RegisterPage() {
         <p className="text-slate-400 mb-8">
           Join BudAI and optimize your wealth.
         </p>
-        <form onSubmit={handleRegister} className="flex flex-col gap-4">
-          <div className="relative">
-            <User
-              className="absolute left-4 top-3.5 text-slate-500"
-              size={18}
-            />
-            <input
-              type="text"
-              placeholder="Full Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-[#0A120D] border border-[#1A2D21] text-white rounded-xl py-3 pl-12 pr-4 focus:border-[#69F0AE] outline-none transition-all"
-              required
-            />
+        {error && (
+          <div className="mb-4 text-red-500 text-sm font-bold bg-red-500/10 py-2 rounded-lg border border-red-500/50">
+            {error}
           </div>
+        )}
+        <form onSubmit={handleRegister} className="flex flex-col gap-4">
           <div className="relative">
             <Mail
               className="absolute left-4 top-3.5 text-slate-500"

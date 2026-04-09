@@ -10,6 +10,7 @@ import {
   BankChartData,
 } from "@/types";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
+import { apiFetch } from "@/lib/api";
 
 interface BudAIContextType {
   accounts: Account[];
@@ -39,7 +40,11 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
     null,
   );
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [userName] = useState<string>("User");
+  const [userName] = useState<string>(
+    typeof window !== "undefined"
+      ? localStorage.getItem("budai_user_name") || "User"
+      : "User",
+  );
 
   useEffect(() => {
     const token = localStorage.getItem("budai_token");
@@ -47,9 +52,7 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
       router.push("/login");
       return;
     }
-    fetch("http://localhost:8080/api/accounts/", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    apiFetch("/api/accounts/", {}, true)
       .then((res) => res.json())
       .then((data) => {
         if (data.accounts) setAccounts(data.accounts);
@@ -99,7 +102,6 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
       setActiveAccountId(targetId);
     }
 
-    const token = localStorage.getItem("budai_token") || "";
     let toolName = "";
     const params: ToolParameters = { bank_name_or_id: targetId };
 
@@ -139,14 +141,22 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     try {
-      const res = await fetch("http://localhost:8080/api/media/execute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      // const res = await apiFetch(
+      //   "/api/media/execute",
+      //   {
+      //   method: "POST",
+      //   body: JSON.stringify({ tool_name: toolName, parameters: params }),
+      //   },
+      //   true,
+      // );
+      const res = await apiFetch(
+        "/api/media/execute",
+        {
+          method: "POST",
+          body: JSON.stringify({ tool_name: toolName, parameters: params }),
         },
-        body: JSON.stringify({ tool_name: toolName, parameters: params }),
-      });
+        true,
+      );
       if (!res.ok) throw new Error("Chart generation failed");
       const jsonRes = (await res.json()) as { data: BankChartData[] };
       const newConfig = buildChartConfig(

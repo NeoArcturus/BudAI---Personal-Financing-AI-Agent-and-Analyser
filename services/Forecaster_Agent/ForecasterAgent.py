@@ -58,6 +58,8 @@ class ForecasterAgent:
         recent_data['Returns'] = np.log(
             recent_data['Safe_Balance'] / recent_data['Safe_Balance'].shift(1))
         mu = recent_data['Returns'].mean()
+        mu = float(np.clip(mu, -0.02, 0.02))
+
         sigma = recent_data['Returns'].std()
 
         if np.isnan(mu):
@@ -102,6 +104,8 @@ class ForecasterAgent:
 
         if np.isnan(mu_E):
             mu_E = 0.001
+
+        mu_E = float(np.clip(mu_E, -0.02, 0.02))
         return E0, mu_E
 
     def run_hybrid_simulation(self, account_id, S0, mu, days=60, paths=1000):

@@ -8,11 +8,12 @@ from cryptography.fernet import Fernet
 from services.api_integrator.access_token_generator import AccessTokenGenerator
 from config import SessionLocal, TRUELAYER_BASE_URL, ENCRYPTION_KEY
 from models.database_models import Account, Bank, Transaction
+from sqlalchemy import text
 
 
 class UserAccounts:
     def __init__(self, user_id=None):
-        self.base_url = f"{TRUELAYER_BASE_URL}/data/v1/accounts"
+        self.base_url = f"{TRUELAYER_BASE_URL}/accounts"
         self.user_id = user_id
         self.cipher_suite = Fernet(ENCRYPTION_KEY)
 
@@ -263,6 +264,72 @@ class UserAccounts:
                 return pd.DataFrame(transactions)
         except Exception:
             traceback.print_exc()
+            return pd.DataFrame()
+
+    def get_bank_transactions(self, bank_name_or_id: str, user_uuid: str, from_date: str, to_date: str):
+        try:
+            print(
+                "[TRUELAYER API BACKEND LOG] Entering get_bank_transactions function...")
+            print(
+                f"Params: bank_name_or_id: {bank_name_or_id}, user_uuid: {user_uuid}, from_date: {from_date}, to_date: {to_date}")
+            transactions = self.get_transactions(
+                bank_name_or_id, user_uuid, start_date=from_date, end_date=to_date)
+
+            needs_api_fetch = True
+
+            if transactions is not None and not transactions.empty:
+                temp_dates = pd.to_datetime(
+                    transactions['date'], errors='coerce', utc=True)
+                oldest_db_record = temp_dates.min()
+                requested_start = pd.to_datetime(from_date, utc=True)
+
+                if oldest_db_record <= requested_start + pd.Timedelta(days=5):
+                    needs_api_fetch = False
+
+            if not needs_api_fetch:
+                return transactions
+
+            with SessionLocal() as session:
+                query = text("""
+                                SELECT a.account_id, b.access_token, b.truelayer_provider_id
+                                FROM banks b
+                                JOIN accounts a ON b.bank_uuid = a.bank_uuid
+                                WHERE (b.bank_name = :identifier OR a.account_id = :identifier) 
+                                AND a.user_uuid = :user_uuid
+                            """)
+                rows = session.execute(
+                    query, {"identifier": bank_name_or_id, "user_uuid": user_uuid}).fetchall()
+
+                if not rows:
+                    print("[TRUELAYER API BACKEND LOG] Account does not exist!")
+                    return pd.DataFrame()
+
+            all_txs = []
+
+            for row in rows:
+                print(f"[TRUELAYER API BACKEND LOG] Row data: {row}")
+                account_id = row[0]
+                access_token = self.cipher_suite.decrypt(row[1]).decode()
+                provider_id = row[2]
+
+                url = self.base_url + f"/{account_id}/transactions"
+                params = {"from": from_date, "to": to_date}
+
+                result = self._make_request(
+                    url=url, token=access_token, provider_id=provider_id, params=params)
+
+                print(
+                    f"[TRUELAYER API BACKEND LOG] API request result status code: {result.status_code}")
+                if result and result.status_code == 200:
+                    data = result.json()
+                    transactions_list = data.get(
+                        'results', data) if isinstance(data, dict) else data
+                    all_txs.extend(transactions_list)
+
+            return pd.DataFrame(all_txs)
+
+        except Exception as e:
+            print(f"Error fetching bank transactions: {e}")
             return pd.DataFrame()
 
     def get_transactions_by_account(self, account_id):

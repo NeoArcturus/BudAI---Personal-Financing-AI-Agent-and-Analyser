@@ -2,6 +2,7 @@
 
 import React from "react";
 import { TabType } from "@/types";
+import { Button } from "@/components/ui/button";
 
 interface QuickActionPanelProps {
   isGenerating: boolean;
@@ -14,54 +15,29 @@ export const QuickActionPanel: React.FC<QuickActionPanelProps> = ({
   activeAccountId,
   onTriggerChart,
 }) => {
-  // Hide buttons if "ALL" accounts view is active
-  if (activeAccountId === "ALL" || !activeAccountId) {
-    return null;
-  }
+  if (activeAccountId === "ALL" || !activeAccountId) return null;
 
   const quickActionCharts = [
-    "historical_monthly",
-    "categorized",
-    "cash_flow_mixed",
-    "health_radar",
-    "expense_forecast",
-    "balance_forecast",
+    { id: "historical_monthly", label: "Monthly History" },
+    { id: "categorized", label: "Category Breakdown" },
+    { id: "cash_flow_mixed", label: "Income vs Expenses" },
+    { id: "health_radar", label: "Health Radar" },
+    { id: "expense_forecast", label: "Expense Forecast" },
+    { id: "balance_forecast", label: "Balance Projection" },
   ];
-
-  const getChartDisplayName = (chartId: string) => {
-    switch (chartId) {
-      case "historical_daily":
-        return "Daily Spend";
-      case "historical_weekly":
-        return "Weekly Spend";
-      case "historical_monthly":
-        return "Monthly History";
-      case "categorized":
-        return "Category Breakdown";
-      case "cash_flow_mixed":
-        return "Income vs Expenses";
-      case "health_radar":
-        return "Health Radar";
-      case "expense_forecast":
-        return "Expense Forecast";
-      case "balance_forecast":
-        return "Balance Projection";
-      default:
-        return "View Chart";
-    }
-  };
 
   return (
     <div className="flex flex-wrap gap-2 p-4 border-b border-slate-800 bg-[#0D1117]/50 items-center justify-center z-10">
-      {quickActionCharts.map((chartId) => (
-        <button
-          key={chartId}
-          onClick={() => onTriggerChart(chartId)}
+      {quickActionCharts.map((chart) => (
+        <Button
+          key={chart.id}
+          variant="outline"
+          onClick={() => onTriggerChart(chart.id)}
           disabled={isGenerating}
-          className="bg-[#161B22] border border-slate-700 hover:border-[#00FFAA] text-slate-300 hover:text-[#00FFAA] transition-all px-4 py-2 rounded-xl text-xs font-bold disabled:opacity-50"
+          className="bg-[#161B22] border-slate-700 hover:border-[#00FFAA] text-slate-300 hover:text-[#00FFAA] hover:bg-[#00FFAA]/10 transition-all text-[10px] font-bold uppercase tracking-widest"
         >
-          {getChartDisplayName(chartId)}
-        </button>
+          {chart.label}
+        </Button>
       ))}
     </div>
   );

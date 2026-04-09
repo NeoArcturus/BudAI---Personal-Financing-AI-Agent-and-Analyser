@@ -3,12 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 import sqlite3
 import atexit
-from config import Base, engine, DATABASE_URL
+from config import Base, engine, DATABASE_URL, ALLOWED_ORIGINS
 
 from controllers.auth_controller import auth_router, callback_router
 from controllers.account_controller import account_router
 from controllers.chat_controller import chat_router
 from controllers.media_controller import media_router
+from controllers.categorizer_controller import categorizer_router
 from services.api_integrator.access_token_generator import AccessTokenGenerator
 
 Base.metadata.create_all(bind=engine)
@@ -17,7 +18,7 @@ app = FastAPI(title="BudAI API Core", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,6 +29,7 @@ app.include_router(callback_router)
 app.include_router(account_router)
 app.include_router(chat_router)
 app.include_router(media_router)
+app.include_router(categorizer_router)
 
 
 def refresh_all_tokens():

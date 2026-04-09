@@ -16,7 +16,7 @@ def get_accounts(current_user: User = Depends(get_current_user)):
         return {"accounts": all_accounts}
     except Exception:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise HTTPException(status_code=500, detail="Failed to fetch accounts.")
 
 
 @account_router.get("/{account_id}/transactions")
@@ -27,7 +27,7 @@ def get_transactions(account_id: str, current_user: User = Depends(get_current_u
         return {"transactions": transactions}
     except Exception:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise HTTPException(status_code=500, detail="Failed to fetch transactions.")
 
 
 @account_router.delete("/{provider_id}")
@@ -40,4 +40,4 @@ def revoke_connection(provider_id: str, current_user: User = Depends(get_current
         raise HTTPException(
             status_code=500, detail="Failed to revoke connection")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to revoke provider connection: {str(e)}")

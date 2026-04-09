@@ -1,29 +1,37 @@
-from flask import Blueprint, jsonify, request
+from fastapi import APIRouter, Depends, HTTPException
 import sqlite3
 import pandas as pd
 import time
 import json
 from datetime import datetime, timedelta
-from middleware.auth_middleware import token_required
+from sqlalchemy import text
+from typing import Any, Dict, Optional
+from pydantic import BaseModel
+
+from middleware.auth_middleware import get_current_user
+from config import SessionLocal
 
 from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
 from services.Analyser_Agent.financial_health import FinancialHealthAnalyzer
 from services.Forecaster_Agent.ForecasterAgent import ForecasterAgent
 from services.Analyser_Agent.expense_analysis import ExpenseAnalysis
 
-media_bp = Blueprint('media', __name__)
+media_router = APIRouter(prefix="/api/media", tags=["media"])
+
+
+class MediaExecuteRequest(BaseModel):
+    tool_name: str
+    parameters: Dict[str, Any] = {}
 
 
 def resolve_bank_accounts(bank_name_or_id, user_uuid):
-    with sqlite3.connect("budai_memory.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
+    with SessionLocal() as session:
+        all_accounts = session.execute(text("""
             SELECT b.bank_name, a.account_id 
             FROM banks b 
             JOIN accounts a ON b.bank_uuid = a.bank_uuid 
-            WHERE a.user_uuid = ?
-        """, (user_uuid,))
-        all_accounts = cursor.fetchall()
+            WHERE a.user_uuid = :user_uuid
+        """), {"user_uuid": user_uuid}).fetchall()
 
         if not all_accounts:
             return []
@@ -47,30 +55,28 @@ def resolve_bank_accounts(bank_name_or_id, user_uuid):
         return resolved
 
 
-@media_bp.route('/execute', methods=['POST'])
-@token_required
-def execute_tool():
+@media_router.post('/execute')
+def execute_tool(request_data: MediaExecuteRequest, current_user=Depends(get_current_user)):
     start_time = time.time()
-    data_req = request.json or {}
+    tool_name = request_data.tool_name
+    params = request_data.parameters
+    user_uuid = current_user.user_uuid
 
-    tool_name = data_req.get("tool_name")
-    params = data_req.get("parameters", {})
-    user_uuid = request.user_uuid
+    print(f"[BACKEND LOG] Tool calling the chart: {tool_name}")
 
-    print("[BACKEND LOG] Tool calling the chart:", tool_name)
+    bank_name_or_id = params.get("bank_name_or_id", "")
 
     # --- INSTANT CACHE FETCH ENGINE ---
-    bank_name_or_id = params.get("bank_name_or_id", "")
     if isinstance(bank_name_or_id, str) and bank_name_or_id.startswith("CACHE_"):
-        with sqlite3.connect("budai_memory.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT chart_data FROM chart_cache WHERE cache_id = ?", (bank_name_or_id,))
-            row = cursor.fetchone()
+        with SessionLocal() as session:
+            row = session.execute(
+                text("SELECT chart_data FROM chart_cache WHERE cache_id = :cache_id"),
+                {"cache_id": bank_name_or_id}
+            ).fetchone()
             if row:
                 cached_payload = json.loads(row[0])
                 execution_time = int((time.time() - start_time) * 1000)
-                return jsonify({
+                return {
                     "status": "success",
                     "metadata": {
                         "execution_time_ms": execution_time,
@@ -79,13 +85,14 @@ def execute_tool():
                         "resolved_accounts": [{"bank_name": "Cached Data"}]
                     },
                     "data": cached_payload
-                })
+                }
 
     # --- FALLBACK: ON-THE-FLY GENERATION FOR UI QUICK ACTIONS ---
     resolved_accounts = resolve_bank_accounts(bank_name_or_id, user_uuid)
 
     if not resolved_accounts:
-        return jsonify({"error": "No accounts found for user."}), 404
+        raise HTTPException(
+            status_code=404, detail="No accounts found for user.")
 
     query_type = "SINGLE_BANK" if len(
         resolved_accounts) == 1 else "MULTIPLE_BANKS"
@@ -98,49 +105,35 @@ def execute_tool():
             to_date = datetime.now().strftime("%Y-%m-%d")
 
             for acc in resolved_accounts:
-                ea = ExpenseAnalysis(
-                    identifier=acc["bank_name"], user_uuid=user_uuid)
-                ea.fetch_data(from_date, to_date)
-                df = ea.get_monthly_spend_data()
-
                 bank_data = []
-                if df is not None and not df.empty:
-                    # FIX: Strip duplicate columns
-                    df = df.loc[:, ~df.columns.duplicated()].copy()
+                agent = CategorizerAgent()
+                full_df = agent.execute_cycle(
+                    acc["bank_name"], user_uuid, from_date, to_date)
 
-                    df['Date'] = pd.to_datetime(
-                        df['Date'], errors='coerce', utc=True)
-                    df['Month'] = df['Date'].dt.to_period('M')
+                if full_df is not None and not full_df.empty:
+                    # FIX: Strip duplicate columns generated by ML joins to prevent Pandas ambiguity crashes
+                    full_df = full_df.loc[:, ~
+                                          full_df.columns.duplicated()].copy()
 
-                    agent = CategorizerAgent()
-                    full_df = agent.execute_cycle(
-                        acc["bank_name"], user_uuid, from_date, to_date)
+                    full_df['Date'] = pd.to_datetime(
+                        full_df['Date'], errors='coerce', utc=True)
+                    full_df['Month'] = full_df['Date'].dt.to_period('M')
 
-                    if full_df is not None and not full_df.empty:
-                        # FIX: Strip duplicate columns to prevent duplicate key error in pd.to_datetime
-                        full_df = full_df.loc[:, ~
-                                              full_df.columns.duplicated()].copy()
+                    for period in sorted(full_df['Month'].dropna().unique()):
+                        month_str = period.strftime('%Y-%m')
+                        month_df = full_df[full_df['Month'] == period]
 
-                        full_df['Date'] = pd.to_datetime(
-                            full_df['Date'], errors='coerce', utc=True)
-                        full_df['Month'] = full_df['Date'].dt.to_period('M')
+                        inc = float(
+                            month_df[month_df['Category'].str.lower() == 'income']['Amount'].abs().sum())
+                        exp = float(
+                            month_df[month_df['Category'].str.lower() != 'income']['Amount'].abs().sum())
 
-                        # SAFETY FIX: dropna() prevents NaTType from reaching strftime
-                        for period in sorted(full_df['Month'].dropna().unique()):
-                            month_str = period.strftime('%Y-%m')
-                            month_df = full_df[full_df['Month'] == period]
-
-                            inc = float(
-                                month_df[month_df['Category'].str.lower() == 'income']['Amount'].abs().sum())
-                            exp = float(
-                                month_df[month_df['Category'].str.lower() != 'income']['Amount'].abs().sum())
-
-                            bank_data.append({
-                                "Month": month_str,
-                                "Income": round(inc, 2),
-                                "Expense": round(exp, 2),
-                                "Net_Balance": round(inc - exp, 2)
-                            })
+                        bank_data.append({
+                            "Month": month_str,
+                            "Income": round(inc, 2),
+                            "Expense": round(exp, 2),
+                            "Net_Balance": round(inc - exp, 2)
+                        })
 
                 response_data.append({
                     "bank_name": acc["bank_name"],
@@ -226,10 +219,11 @@ def execute_tool():
                         df = df.loc[:, ~df.columns.duplicated()].copy()
 
                         for _, row in df.iterrows():
-                            date_val = row['Date'] if 'Date' in df.columns else row['date']
-                            amt_val = row['Amount'] if 'Amount' in df.columns else row['amount']
+                            date_val = row['Date'] if 'Date' in df.columns else row.get(
+                                'date')
+                            amt_val = row['Amount'] if 'Amount' in df.columns else row.get(
+                                'amount')
 
-                            # SAFETY FIX: Ensure date is not null before formatting
                             if pd.notnull(date_val):
                                 bank_data.append({
                                     "Date": pd.to_datetime(date_val).strftime('%Y-%m-%d'),
@@ -291,11 +285,11 @@ def execute_tool():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
     execution_time = int((time.time() - start_time) * 1000)
 
-    return jsonify({
+    return {
         "status": "success",
         "metadata": {
             "execution_time_ms": execution_time,
@@ -304,4 +298,4 @@ def execute_tool():
             "resolved_accounts": resolved_accounts
         },
         "data": response_data
-    })
+    }
