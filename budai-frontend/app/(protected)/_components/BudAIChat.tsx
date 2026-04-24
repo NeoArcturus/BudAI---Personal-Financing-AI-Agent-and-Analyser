@@ -8,6 +8,7 @@ import {
   TrendingUp,
   Activity,
   BarChart2,
+  CheckCheck,
 } from "lucide-react";
 import { ChatMessage, Account, TabType } from "@/types";
 import { apiFetch } from "@/lib/api";
@@ -23,12 +24,24 @@ interface BudAIChatProps {
   accounts: Account[];
 }
 
+const TypingIndicator = () => (
+  <div className="flex space-x-1.5 p-2 items-center h-6">
+    <div className="w-1.5 h-1.5 bg-[#69F0AE] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+    <div className="w-1.5 h-1.5 bg-[#69F0AE] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+    <div className="w-1.5 h-1.5 bg-[#69F0AE] rounded-full animate-bounce"></div>
+  </div>
+);
+
+interface LocalMessage extends ChatMessage {
+  timestamp?: Date;
+}
+
 export default function BudAIChat({
   onAiAction,
   activeAccountId,
   accounts,
 }: BudAIChatProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -46,7 +59,10 @@ export default function BudAIChat({
     const textToSend = overrideText || input;
     if (!textToSend.trim() || loading) return;
 
-    setMessages((prev) => [...prev, { role: "user", text: textToSend }]);
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", text: textToSend, timestamp: new Date() },
+    ]);
     setInput("");
     setLoading(true);
 
@@ -74,7 +90,7 @@ export default function BudAIChat({
             input: textToSend,
             active_account_id: bankName,
             user_id: localStorage.getItem("budai_token"),
-            chat_history: messages,
+            chat_history: messages.map(({ role, text }) => ({ role, text })), // strip UI fields for backend
           }),
         },
         true,
@@ -86,7 +102,10 @@ export default function BudAIChat({
       const decoder = new TextDecoder();
       let aiText = "";
 
-      setMessages((prev) => [...prev, { role: "assistant", text: "" }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: "", timestamp: new Date() },
+      ]);
 
       while (true) {
         const { done, value } = await reader.read();
@@ -146,11 +165,20 @@ export default function BudAIChat({
       console.log(e);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", text: "Critical Engine Error." },
+        {
+          role: "assistant",
+          text: "Critical Engine Error.",
+          timestamp: new Date(),
+        },
       ]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatTime = (date?: Date) => {
+    if (!date) return "";
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
   return (
@@ -171,30 +199,33 @@ export default function BudAIChat({
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-4">
-        <div className="flex flex-col gap-4 pb-4">
+      <div
+        ref={scrollRef}
+        className="flex-1 min-h-0 overflow-y-auto p-4 scroll-smooth"
+      >
+        <div className="flex flex-col gap-5 pb-4">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center p-6 mt-12">
-              <div className="w-16 h-16 rounded-full bg-[#69F0AE]/10 flex items-center justify-center mb-6">
+            <div className="flex flex-col items-center justify-center h-full text-center p-6 mt-12 animate-in fade-in duration-500">
+              <div className="w-16 h-16 rounded-full bg-[#69F0AE]/10 flex items-center justify-center mb-6 shadow-[0_0_15px_rgba(105,240,174,0.2)]">
                 <Sparkles className="text-[#69F0AE] w-8 h-8" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-2 font-mono">
+              <h3 className="text-xl font-bold text-white mb-2 font-mono tracking-tight">
                 Hello, I am BudAI.
               </h3>
-              <p className="text-sm text-slate-400 mb-8 max-w-xs">
+              <p className="text-sm text-slate-400 mb-8 max-w-xs leading-relaxed">
                 I can analyze your spending, forecast your balances, and track
                 your financial health. Ask me anything.
               </p>
 
-              <div className="flex flex-col gap-2 w-full max-w-sm">
+              <div className="flex flex-col gap-3 w-full max-w-sm">
                 <button
                   onClick={() =>
                     handleSend("Categorize my expenses for the last 30 days")
                   }
-                  className="flex items-center gap-3 p-3 bg-[#1A2D21]/50 border border-[#1A2D21] rounded-xl text-left hover:bg-[#1A2D21] hover:border-[#69F0AE]/30 transition-all group"
+                  className="flex items-center gap-3 p-3.5 bg-[#1A2D21]/50 border border-[#1A2D21] rounded-xl text-left hover:bg-[#1A2D21] hover:border-[#69F0AE]/40 active:scale-95 transition-all duration-200 group shadow-sm hover:shadow-md"
                 >
                   <BarChart2 className="text-[#69F0AE] group-hover:scale-110 transition-transform w-5 h-5 shrink-0" />
-                  <span className="text-sm text-slate-300 font-medium">
+                  <span className="text-sm text-slate-200 font-medium tracking-wide">
                     Analyze my spending
                   </span>
                 </button>
@@ -204,10 +235,10 @@ export default function BudAIChat({
                       "Predict my account balances for the next 60 days",
                     )
                   }
-                  className="flex items-center gap-3 p-3 bg-[#1A2D21]/50 border border-[#1A2D21] rounded-xl text-left hover:bg-[#1A2D21] hover:border-[#69F0AE]/30 transition-all group"
+                  className="flex items-center gap-3 p-3.5 bg-[#1A2D21]/50 border border-[#1A2D21] rounded-xl text-left hover:bg-[#1A2D21] hover:border-[#69F0AE]/40 active:scale-95 transition-all duration-200 group shadow-sm hover:shadow-md"
                 >
                   <TrendingUp className="text-[#69F0AE] group-hover:scale-110 transition-transform w-5 h-5 shrink-0" />
-                  <span className="text-sm text-slate-300 font-medium">
+                  <span className="text-sm text-slate-200 font-medium tracking-wide">
                     Forecast my balance
                   </span>
                 </button>
@@ -215,10 +246,10 @@ export default function BudAIChat({
                   onClick={() =>
                     handleSend("Show me my financial health radar")
                   }
-                  className="flex items-center gap-3 p-3 bg-[#1A2D21]/50 border border-[#1A2D21] rounded-xl text-left hover:bg-[#1A2D21] hover:border-[#69F0AE]/30 transition-all group"
+                  className="flex items-center gap-3 p-3.5 bg-[#1A2D21]/50 border border-[#1A2D21] rounded-xl text-left hover:bg-[#1A2D21] hover:border-[#69F0AE]/40 active:scale-95 transition-all duration-200 group shadow-sm hover:shadow-md"
                 >
                   <Activity className="text-[#69F0AE] group-hover:scale-110 transition-transform w-5 h-5 shrink-0" />
-                  <span className="text-sm text-slate-300 font-medium">
+                  <span className="text-sm text-slate-200 font-medium tracking-wide">
                     Check financial health
                   </span>
                 </button>
@@ -228,22 +259,39 @@ export default function BudAIChat({
             messages.map((msg, i) => (
               <div
                 key={i}
-                className={`flex flex-col gap-1 ${msg.role === "user" ? "items-end" : "items-start"}`}
+                className={`flex flex-col gap-1.5 animate-in slide-in-from-bottom-2 fade-in duration-300 ${
+                  msg.role === "user" ? "items-end" : "items-start"
+                }`}
               >
-                <span className="text-[10px] font-mono tracking-wider text-[#69F0AE]/60 uppercase">
-                  {msg.role === "user" ? "You" : "BudAI"}
-                </span>
-                <div
-                  className={`max-w-[85%] rounded-xl px-4 py-2 text-sm leading-relaxed ${
-                    msg.role === "user"
-                      ? "bg-[#69F0AE]/20 text-white border border-[#69F0AE]/30"
-                      : "bg-[#0A120D] text-white/90 border border-[#1A2D21]"
-                  }`}
-                >
-                  {msg.text || (
-                    <Loader2 className="w-3 h-3 animate-spin text-[#69F0AE]" />
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono tracking-wider text-[#69F0AE]/60 uppercase">
+                    {msg.role === "user" ? "You" : "BudAI"}
+                  </span>
+                  {msg.timestamp && (
+                    <span className="text-[9px] text-slate-500 font-mono">
+                      {formatTime(msg.timestamp)}
+                    </span>
                   )}
                 </div>
+
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 text-[15px] leading-relaxed shadow-sm ${
+                    msg.role === "user"
+                      ? "bg-linear-to-br from-[#1A3D28] to-[#132A1C] text-white border border-[#69F0AE]/30 rounded-br-sm"
+                      : "bg-linear-to-br from-[#0D1812] to-[#0A120D] text-white/95 border border-[#1A2D21] rounded-bl-sm"
+                  }`}
+                >
+                  {msg.text || <TypingIndicator />}
+                </div>
+
+                {msg.role === "assistant" && msg.text && (
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <CheckCheck className="w-3 h-3 text-[#69F0AE]/50" />
+                    <span className="text-[9px] text-[#69F0AE]/50 font-mono">
+                      Read
+                    </span>
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -260,24 +308,24 @@ export default function BudAIChat({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder="Command BudAI..."
-            className="flex-1 bg-transparent border-none outline-none text-sm text-white placeholder:text-[#69F0AE]/25 font-mono caret-[#69F0AE]"
+            className="flex-1 bg-transparent border-none outline-none text-[15px] text-white placeholder:text-[#69F0AE]/25 font-mono caret-[#69F0AE]"
           />
           <button
             onClick={() => handleSend()}
             disabled={loading || !input.trim()}
-            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-[#69F0AE]/10 border border-[#69F0AE]/20 hover:bg-[#69F0AE]/20 hover:border-[#69F0AE]/40 disabled:opacity-20 disabled:cursor-not-allowed transition-all duration-150 group"
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-[#69F0AE]/10 border border-[#69F0AE]/20 hover:bg-[#69F0AE]/20 hover:border-[#69F0AE]/40 active:scale-95 disabled:opacity-20 disabled:cursor-not-allowed transition-all duration-150 group"
           >
             {loading ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin text-[#69F0AE]" />
             ) : (
               <Send
-                size={13}
+                size={14}
                 className="text-[#69F0AE] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-150"
               />
             )}
           </button>
         </div>
-        <p className="text-[9px] text-[#69F0AE]/20 font-mono text-center mt-2 tracking-widest uppercase">
+        <p className="text-[9px] text-[#69F0AE]/30 font-mono text-center mt-2.5 tracking-[0.2em] uppercase">
           BudAI may make mistakes · Verify important figures
         </p>
       </div>
