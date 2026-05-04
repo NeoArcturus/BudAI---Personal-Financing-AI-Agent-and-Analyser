@@ -1,3 +1,5 @@
+import os
+import json
 import joblib
 import numpy as np
 import re
@@ -5,16 +7,15 @@ import pandas as pd
 
 
 class Categorizer:
+
     def __init__(self):
-        self.rules = {
-            "Food & Dining": r"(?i)\b(tesco|lidl|asda|greggs|pret|sainsbury|morrisons|aldi|mcdonalds|kfc|starbucks|costa|co-op|vending|chillionrice|subway|grill|restaurant|cafe|pizza|burger|kitchen|food|deliveroo|just eat|uber eats)\b",
-            "Transportation": r"(?i)\b(uber|trainline|tfl|transport for london|bus|rail|stagecoach|bee network|taxi|bolt|national express|beryl|transport|coach|train|ticket|avanti|west coast|ctylink)\b",
-            "Bills & Utilities": r"(?i)\b(lebara|vodafone|ee|o2|british gas|octopus|council tax|water|energy|mobile|circuit laundry|utility|broadband)\b",
-            "Shopping": r"(?i)\b(amazon|prime|ebay|argos|zara|h&m|ikea|currys|adidas|nike|freeprints|shop|store|flexistore)\b",
-            "Entertainment": r"(?i)\b(netflix|spotify|cinema|vue|odeon|steam|playstation|xbox|tower bridge|obscura|pub|bar|club|wake|hotstar)\b",
-            "Health & Wellness": r"(?i)\b(boots|pharmacy|gym|nhs|dentist|barber|clinic|health|hospital|medical)\b",
-            "Transfers & Investments": r"(?i)\b(paypal|revolut|transfer|monzo|savings|investment|sent|added to)\b"
-        }
+        rules_path = os.path.join(os.path.dirname(
+            __file__), "..", "budai_category_rules.json")
+        with open(rules_path, "r") as f:
+            rules_data = json.load(f)
+
+        self.rules = rules_data["rules"]
+        self.scam_fraud_keywords = self.rules.get("High-Risk / Anomaly", "")
 
     def predict(self, df, embeddings, gbm_model_path, enc_path):
         model = joblib.load(gbm_model_path)
@@ -34,14 +35,34 @@ class Categorizer:
         model_labels = []
         needs_review_threshold = 0.62
         income_keywords = ("salary", "payroll", "wage", "interest", "bonus")
-        transfer_like_keywords = ("refund", "reversal", "chargeback", "transfer", "cashback")
+        transfer_like_keywords = (
+            "refund", "reversal", "chargeback", "transfer", "cashback")
+
+        expenses = df[df['Amount'] < 0]['Amount'].abs()
+        if not expenses.empty and len(expenses) > 5:
+            mean_exp = expenses.mean()
+            std_exp = expenses.std()
+            anomaly_threshold = max(mean_exp + (3 * std_exp), 500.0)
+        else:
+            anomaly_threshold = float('inf')
 
         for i, row in df.iterrows():
             amt = float(row['Amount'])
+            abs_amt = abs(amt)
             text_lower = str(row.get('Description', '')).lower()
             model_label = gbm_labels[i]
             model_conf = float(gbm_conf[i])
             model_labels.append(model_label)
+
+            is_scam_keyword = re.search(
+                self.scam_fraud_keywords, text_lower) if self.scam_fraud_keywords else False
+            is_statistical_anomaly = (amt < 0) and (
+                abs_amt >= anomaly_threshold)
+
+            if is_scam_keyword or is_statistical_anomaly:
+                final_labels.append("High-Risk / Anomaly")
+                final_confidences.append(0.99)
+                continue
 
             if amt > 0.001 and any(k in text_lower for k in income_keywords) and not any(k in text_lower for k in transfer_like_keywords):
                 final_labels.append("Income")

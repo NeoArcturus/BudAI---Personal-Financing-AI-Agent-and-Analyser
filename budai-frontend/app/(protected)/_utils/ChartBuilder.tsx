@@ -70,24 +70,23 @@ const baseOptions = {
   },
 };
 
-// Extended 16-color palette to prevent repetition in charts with many categories
 const colorPalette = [
-  "#00FFAA", // Bright Green
-  "#3b82f6", // Blue
-  "#ef4444", // Red
-  "#f59e0b", // Yellow/Amber
-  "#a855f7", // Purple
-  "#ec4899", // Pink
-  "#14b8a6", // Teal
-  "#f97316", // Orange
-  "#6366f1", // Cyan
-  "#8b5cf6", // Violet
-  "#84cc16", // Emerald
-  "#eab308", // Lime
-  "#0ea5e9", // Indigo
-  "#d946ef", // Fuchsia
-  "#10b981", // Light Teal
-  "#f43f5e", // Rose
+  "#00FFAA",
+  "#3b82f6",
+  "#ef4444",
+  "#f59e0b",
+  "#a855f7",
+  "#ec4899",
+  "#14b8a6",
+  "#f97316",
+  "#6366f1",
+  "#8b5cf6",
+  "#84cc16",
+  "#eab308",
+  "#0ea5e9",
+  "#d946ef",
+  "#10b981",
+  "#f43f5e",
 ];
 
 const getColorForMetric = (
@@ -134,11 +133,17 @@ const getProgressiveAnimation = (dataLength: number) => {
       easing: "linear",
       duration: delayBetweenPoints,
       from(ctx: ProgressiveAnimationContext) {
-        return ctx.index === 0
-          ? ctx.chart.scales.y.getPixelForValue(0)
-          : ctx.chart
-              .getDatasetMeta(ctx.datasetIndex)
-              .data[ctx.index - 1].getProps(["y"], true).y;
+        if (ctx.type !== "data") {
+          return 0;
+        }
+        if (ctx.index === 0) {
+          return ctx.chart.scales.y.getPixelForValue(0);
+        }
+        const meta = ctx.chart.getDatasetMeta(ctx.datasetIndex);
+        const prevElement = meta.data[ctx.index - 1];
+        return prevElement
+          ? prevElement.getProps(["y"], true).y
+          : ctx.chart.scales.y.getPixelForValue(0);
       },
       delay(ctx: ProgressiveAnimationContext) {
         if (ctx.type !== "data" || ctx.yStarted) {

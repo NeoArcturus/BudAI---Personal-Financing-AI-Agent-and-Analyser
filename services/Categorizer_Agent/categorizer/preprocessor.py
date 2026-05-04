@@ -1,14 +1,18 @@
 import os
 import re
+import json
+import hashlib
 import pandas as pd
 import torch
 import numpy as np
+from diskcache import Cache
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
 
 class Preprocessor:
+
     def __init__(self, dataframe, st_model_path):
         self.df = dataframe.copy()
         self.standard_columns = [
@@ -24,25 +28,15 @@ class Preprocessor:
             "Category",
         ]
 
-        self.rules = {
-            "Food & Dining": r"(?i)\b(tesco|lidl|asda|greggs|pret|sainsbury|morrisons|aldi|mcdonalds|kfc|starbucks|costa|co-op|vending|chillionrice|subway|grill|restaurant|cafe|pizza|burger|kitchen|food|deliveroo|just eat|uber eats)\b",
-            "Transportation": r"(?i)\b(uber|trainline|tfl|transport for london|bus|rail|stagecoach|bee network|taxi|bolt|national express|beryl|transport|coach|train|ticket|avanti|west coast|ctylink)\b",
-            "Bills & Utilities": r"(?i)\b(lebara|vodafone|ee|o2|british gas|octopus|council tax|water|energy|mobile|circuit laundry|utility|broadband)\b",
-            "Shopping": r"(?i)\b(amazon|prime|ebay|argos|zara|h&m|ikea|currys|adidas|nike|freeprints|shop|store|flexistore)\b",
-            "Entertainment": r"(?i)\b(netflix|spotify|cinema|vue|odeon|steam|playstation|xbox|tower bridge|obscura|pub|bar|club|wake|hotstar)\b",
-            "Health & Wellness": r"(?i)\b(boots|pharmacy|gym|nhs|dentist|barber|clinic|health|hospital|medical)\b",
-            "Transfers & Investments": r"(?i)\b(paypal|revolut|transfer|monzo|savings|investment|sent|added to)\b"
-        }
+        rules_path = os.path.join(os.path.dirname(
+            __file__), "..", "budai_category_rules.json")
+        with open(rules_path, "r") as f:
+            rules_data = json.load(f)
 
-        self.semantic_anchors = {
-            "Food & Dining": ["supermarket groceries", "fast food restaurant", "coffee shop cafe", "dining out pub", "vending machine snack", "food delivery takeaway"],
-            "Transportation": ["public transport ticket", "taxi ride hail", "train fare rail", "fuel petrol station", "commuter travel", "parking fees"],
-            "Bills & Utilities": ["monthly utility bill", "mobile phone contract", "electricity gas water", "internet broadband provider", "insurance premium", "rent payment"],
-            "Shopping": ["online retail store", "department store", "clothing apparel fashion", "electronics gadgets", "home furniture household", "general merchandise"],
-            "Entertainment": ["streaming subscription service", "cinema movie theater", "video gaming console", "concert music event", "hobby leisure activity", "bookstore"],
-            "Health & Wellness": ["pharmacy medicine", "gym membership fitness", "dental medical clinic", "healthcare services", "vitamins supplements", "spa beauty"],
-            "Transfers & Investments": ["bank transfer send", "savings account deposit", "stock market investment", "cryptocurrency exchange", "peer to peer payment", "money wire"]
-        }
+        self.rules = rules_data["rules"]
+        self.semantic_anchors = rules_data["semantic_anchors"]
+
+        self.cache = Cache('./embedding_cache')
 
         if not os.path.exists(st_model_path):
             os.makedirs(st_model_path, exist_ok=True)
@@ -76,9 +70,7 @@ class Preprocessor:
         self.df.rename(columns=manual_map, inplace=True)
         self.df.columns = [c.capitalize() if c.lower(
         ) in ['amount', 'date'] else c for c in self.df.columns]
-
         self.df = self.df.loc[:, ~self.df.columns.duplicated()].copy()
-
         available_cols = [
             c for c in self.standard_columns if c in self.df.columns]
         self.df = self.df[available_cols].copy()
@@ -90,6 +82,8 @@ class Preprocessor:
                 'today').strftime('%Y-%m-%d')
 
         feature_texts = []
+        hashes = []
+
         for _, row in tqdm(self.df.iterrows(), total=len(self.df), desc="Cleaning"):
             target = str(row.get('Target Name', '')).strip()
             desc = self.clean_text(str(row.get('Description', '')))
@@ -99,11 +93,30 @@ class Preprocessor:
             if combined.lower().startswith('nan '):
                 combined = combined[4:]
 
+            text_hash = hashlib.md5(combined.encode()).hexdigest()
             feature_texts.append(combined)
+            hashes.append(text_hash)
 
         self.df.loc[:, "Description"] = feature_texts
-        embeddings = self.st_model.encode(
-            self.df["Description"].tolist(), batch_size=32, convert_to_numpy=True)
+
+        embeddings = np.zeros((len(feature_texts), 384))
+        texts_to_encode = []
+        indices_to_encode = []
+
+        for idx, (t_hash, text) in enumerate(zip(hashes, feature_texts)):
+            if t_hash in self.cache:
+                embeddings[idx] = self.cache[t_hash]
+            else:
+                texts_to_encode.append(text)
+                indices_to_encode.append(idx)
+
+        if texts_to_encode:
+            new_embs = self.st_model.encode(
+                texts_to_encode, batch_size=32, convert_to_numpy=True)
+            for i, idx in enumerate(indices_to_encode):
+                embeddings[idx] = new_embs[i]
+                self.cache[hashes[idx]] = new_embs[i]
+
         return self.df, embeddings
 
     def preprocess_for_inference(self):
@@ -123,7 +136,6 @@ class Preprocessor:
                 continue
 
             best_cat = None
-            max_sim = -1.0
 
             window_size = 8
             windows = [text[j:j+window_size]
@@ -135,7 +147,7 @@ class Preprocessor:
             sim_matrix = cosine_similarity(
                 window_embs, self.category_embeddings)
 
-            best_window_idx, best_cat_idx = np.unravel_index(
+            _, best_cat_idx = np.unravel_index(
                 np.argmax(sim_matrix), sim_matrix.shape)
             best_cat = self.category_names[best_cat_idx]
 

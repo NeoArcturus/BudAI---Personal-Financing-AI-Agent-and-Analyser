@@ -1,5 +1,4 @@
 import requests
-import traceback
 import time
 import uuid
 import pandas as pd
@@ -9,6 +8,9 @@ from services.api_integrator.access_token_generator import AccessTokenGenerator
 from config import SessionLocal, TRUELAYER_BASE_URL, ENCRYPTION_KEY
 from models.database_models import Account, Bank, Transaction
 from sqlalchemy import text
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 
 
 class UserAccounts:
@@ -37,8 +39,7 @@ class UserAccounts:
         if res is not None and res.status_code == 403:
             err_data = res.json()
             if isinstance(err_data, dict) and (err_data.get("error") == "sca_exceeded" or "PSU" in str(err_data)):
-                raise PermissionError(
-                    "SECURITY LOCK: The bank blocked access to historical data (older than 90 days).")
+                raise PermissionError("SECURITY LOCK")
         return res
 
     def initialise_accounts(self, bank_uuid, user_uuid):
@@ -48,8 +49,6 @@ class UserAccounts:
                     bank_uuid=bank_uuid, user_uuid=user_uuid).first()
 
                 if not bank:
-                    print(
-                        f"[BACKEND LOG] Bank UUID {bank_uuid} not found during initialization.")
                     return False
 
                 access_token_raw = bank.access_token
@@ -89,7 +88,6 @@ class UserAccounts:
                             acc_balance = bal_data.get(
                                 "available", bal_data.get("current", 0.0))
 
-                        # ORM INSERTION
                         existing_acc = session.query(Account).filter_by(
                             account_id=acc_id).first()
 
@@ -110,12 +108,8 @@ class UserAccounts:
                             )
                             session.add(new_acc)
 
-                        # Commit the account first so transaction foreign keys don't fail
                         session.commit()
 
-                        # --- SYNC 2025 TRANSACTIONS IMMEDIATELY ---
-                        print(
-                            f"[SYNC] Fetching 2025 transactions for {acc_id}...")
                         tx_url = f"{self.base_url}/{acc_id}/transactions"
                         tx_params = {"from": "2025-01-01", "to": "2025-12-31"}
                         tx_res = self._make_request(
@@ -169,12 +163,24 @@ class UserAccounts:
                     return True
                 return False
         except Exception as e:
-            print("[CRITICAL ERROR] Initialising Accounts:")
-            traceback.print_exc()
             return False
 
     def get_all_accounts(self):
         all_accounts = []
+        provider_logos = {}
+        provider_names = {}
+        try:
+            providers_res = requests.get(
+                "https://auth.truelayer.com/api/providers")
+
+            if providers_res is not None and providers_res.status_code == 200:
+                for p in providers_res.json():
+                    provider_logos[p.get("provider_id")] = p.get("logo_url")
+                    provider_names[p.get("provider_id")] = p.get(
+                        "display_name")
+        except Exception as e:
+            pass
+
         try:
             with SessionLocal() as session:
                 banks = session.query(Bank).filter_by(
@@ -187,34 +193,40 @@ class UserAccounts:
                 updated_banks = session.query(Bank).filter_by(
                     user_uuid=self.user_id).all()
                 for b in updated_banks:
+                    logo_url = provider_logos.get(b.truelayer_provider_id, "")
+                    display_name = provider_names.get(
+                        b.truelayer_provider_id, b.bank_name)
                     if b.consent_status == 'revoked':
                         all_accounts.append({
                             "account_id": b.truelayer_provider_id,
-                            "provider_name": b.bank_name,
+                            "bank_name": display_name,
+                            "provider_name": display_name,
                             "account_number": "****",
                             "sort_code": "00-00-00",
                             "currency": "GBP",
                             "balance": 0.0,
                             "status": "revoked",
-                            "provider_id": b.truelayer_provider_id
+                            "provider_id": b.truelayer_provider_id,
+                            "logo_url": logo_url
                         })
                         continue
 
                     for acc in b.accounts:
                         all_accounts.append({
                             "account_id": acc.account_id,
-                            "provider_name": b.bank_name,
-                            "account_number": acc.account_number[-4:] if acc.account_number else "****",
+                            "bank_name": display_name,
+                            "provider_name": display_name,
+                            "account_number": acc.account_number,
                             "sort_code": acc.sort_code or "",
                             "currency": "GBP",
                             "balance": acc.account_balance or 0.0,
                             "status": "active",
-                            "provider_id": b.truelayer_provider_id
+                            "provider_id": b.truelayer_provider_id,
+                            "logo_url": logo_url
                         })
 
             return all_accounts
         except Exception:
-            traceback.print_exc()
             return []
 
     def get_account_balance(self, bank_name_or_id, user_uuid, account_type="TRANSACTION"):
@@ -263,15 +275,10 @@ class UserAccounts:
 
                 return pd.DataFrame(transactions)
         except Exception:
-            traceback.print_exc()
             return pd.DataFrame()
 
-    def get_bank_transactions(self, bank_name_or_id: str, user_uuid: str, from_date: str, to_date: str):
+    def get_bank_transactions(self, bank_name_or_id: str, user_uuid: str, from_date: str = None, to_date: str = None):
         try:
-            print(
-                "[TRUELAYER API BACKEND LOG] Entering get_bank_transactions function...")
-            print(
-                f"Params: bank_name_or_id: {bank_name_or_id}, user_uuid: {user_uuid}, from_date: {from_date}, to_date: {to_date}")
             transactions = self.get_transactions(
                 bank_name_or_id, user_uuid, start_date=from_date, end_date=to_date)
 
@@ -281,9 +288,11 @@ class UserAccounts:
                 temp_dates = pd.to_datetime(
                     transactions['date'], errors='coerce', utc=True)
                 oldest_db_record = temp_dates.min()
-                requested_start = pd.to_datetime(from_date, utc=True)
-
-                if oldest_db_record <= requested_start + pd.Timedelta(days=5):
+                if from_date:
+                    requested_start = pd.to_datetime(from_date, utc=True)
+                    if oldest_db_record <= requested_start + pd.Timedelta(days=5):
+                        needs_api_fetch = False
+                else:
                     needs_api_fetch = False
 
             if not needs_api_fetch:
@@ -301,13 +310,11 @@ class UserAccounts:
                     query, {"identifier": bank_name_or_id, "user_uuid": user_uuid}).fetchall()
 
                 if not rows:
-                    print("[TRUELAYER API BACKEND LOG] Account does not exist!")
                     return pd.DataFrame()
 
             all_txs = []
 
             for row in rows:
-                print(f"[TRUELAYER API BACKEND LOG] Row data: {row}")
                 account_id = row[0]
                 access_token = self.cipher_suite.decrypt(row[1]).decode()
                 provider_id = row[2]
@@ -318,8 +325,6 @@ class UserAccounts:
                 result = self._make_request(
                     url=url, token=access_token, provider_id=provider_id, params=params)
 
-                print(
-                    f"[TRUELAYER API BACKEND LOG] API request result status code: {result.status_code}")
                 if result and result.status_code == 200:
                     data = result.json()
                     transactions_list = data.get(
@@ -329,7 +334,6 @@ class UserAccounts:
             return pd.DataFrame(all_txs)
 
         except Exception as e:
-            print(f"Error fetching bank transactions: {e}")
             return pd.DataFrame()
 
     def get_transactions_by_account(self, account_id):
@@ -351,7 +355,6 @@ class UserAccounts:
                     })
                 return results
         except Exception:
-            traceback.print_exc()
             return []
 
     def revoke_provider_connection(self, provider_id):
@@ -366,5 +369,4 @@ class UserAccounts:
                     session.commit()
             return True
         except Exception:
-            traceback.print_exc()
             return False

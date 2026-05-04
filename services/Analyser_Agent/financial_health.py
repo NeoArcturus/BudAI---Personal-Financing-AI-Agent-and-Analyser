@@ -1,8 +1,11 @@
 import pandas as pd
 import numpy as np
+import logging
 from sqlalchemy import text
 from config import SessionLocal
 from services.api_integrator.get_account_detail import UserAccounts
+
+logger = logging.getLogger("uvicorn.error")
 
 
 class FinancialHealthAnalyzer:

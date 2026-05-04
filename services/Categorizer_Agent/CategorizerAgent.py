@@ -1,6 +1,9 @@
 import pandas as pd
 import os
 import sys
+import json
+import hashlib
+import logging
 from datetime import datetime
 from diskcache import Cache
 from sqlalchemy import text
@@ -10,11 +13,14 @@ from services.Categorizer_Agent.categorizer.preprocessor import Preprocessor
 from services.Categorizer_Agent.categorizer.categorizer import Categorizer
 from services.api_integrator.get_account_detail import UserAccounts
 
+logger = logging.getLogger("uvicorn.error")
+
 sys.path.append(os.path.abspath(os.path.join(
     os.path.dirname(__file__), '..', '..')))
 
 
 class CategorizerAgent:
+
     def __init__(self):
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self.model_dir = os.path.join(self.base_dir, "saved_model")
@@ -22,6 +28,12 @@ class CategorizerAgent:
         self.local_st_path = os.path.join(self.model_dir, "st_model_local")
         self.cache = Cache('./agent_cache')
         self.categorizer = Categorizer()
+
+        rules_path = os.path.join(self.base_dir, "budai_category_rules.json")
+        with open(rules_path, "r") as f:
+            self.valid_categories = list(
+                json.load(f)["rules"].keys()) + ["Income", "Uncategorized"]
+
         self._ensure_feedback_table()
 
     def _ensure_feedback_table(self):
@@ -40,6 +52,9 @@ class CategorizerAgent:
             session.commit()
 
     def save_manual_label(self, user_uuid, transaction_uuid, corrected_label):
+        if corrected_label not in self.valid_categories:
+            raise ValueError(f"Invalid category label: {corrected_label}")
+
         self._ensure_feedback_table()
         with SessionLocal() as session:
             session.execute(text("""
@@ -117,8 +132,11 @@ class CategorizerAgent:
                     "CategorizerAgent strictly handles a single account identifier.")
 
             user_acc = UserAccounts(user_id=user_uuid)
-            raw_df = user_acc.get_transactions(
+            raw_df = user_acc.get_bank_transactions(
                 identifier, user_uuid, start_date, end_date)
+
+            logger.info("Transactions obtained:")
+            logger.info(raw_df)
 
             if raw_df is None or raw_df.empty:
                 return None
@@ -136,12 +154,9 @@ class CategorizerAgent:
             else:
                 clean_df, embeddings = proc.preprocess_for_inference()
 
-            print("Ready for categorization")
-            print(clean_df)
             final_df = self.categorizer.predict(
                 clean_df, embeddings, xgb_model_path, enc_path)
 
-            # Apply user-corrected labels as final source of truth.
             with SessionLocal() as session:
                 feedback_rows = session.execute(text("""
                     SELECT transaction_uuid, corrected_label
@@ -155,9 +170,6 @@ class CategorizerAgent:
                         str(r.get("transaction_id")), r.get("Category")),
                     axis=1
                 )
-
-            print("Categorized data:")
-            print(final_df)
 
             with SessionLocal() as session:
                 row = session.execute(text("""
@@ -173,8 +185,7 @@ class CategorizerAgent:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            print("An error occured while saving data in the database!")
-            print(e)
+            logger.error(e)
 
     def _update_sql_memory(self, df, account_id, user_uuid):
         from models.database_models import Transaction, Bank, Account
@@ -189,12 +200,9 @@ class CategorizerAgent:
             bank_uuid = bank.bank_uuid if bank else None
 
             df = df.loc[:, ~df.columns.duplicated()].copy()
-
             records = df.fillna("").to_dict(orient="records")
 
             for r in records:
-                tx_id = str(r.get('transaction_id') or r.get(
-                    'transaction_uuid') or uuid.uuid4())
                 acc_id_val = r.get('account_id') or account_id
 
                 raw_date = r.get('Date') or r.get('date')
@@ -212,8 +220,13 @@ class CategorizerAgent:
                 except ValueError:
                     amt_val = 0.0
 
-                cat_val = r.get('Category') or 'Uncategorized'
                 desc_val = r.get('Description') or r.get('description') or ''
+                cat_val = r.get('Category') or 'Uncategorized'
+
+                tx_hash = hashlib.sha256(
+                    f"{user_uuid}_{account_id}_{date_val.strftime('%Y-%m-%d')}_{amt_val}_{desc_val}".encode()).hexdigest()
+                tx_id = str(r.get('transaction_id') or r.get(
+                    'transaction_uuid') or tx_hash)
 
                 existing_tx = session.query(Transaction).filter_by(
                     transaction_uuid=tx_id).first()

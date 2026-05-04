@@ -1,222 +1,27 @@
 import pandas as pd
 import numpy as np
-import os
-import json
-import uuid
-from sqlalchemy import text
+import logging
 from datetime import datetime, timedelta
+from langchain_core.tools import tool
 from config import SessionLocal
+from sqlalchemy import text
+
+from services.mcp_tools.tool_schema import (
+    GenerateFinancialForecastInput, ClassifyFinancialDataInput, FindTotalSpentInput,
+    FindHighestSpendingCategoryInput, CreateBargraphChartInput, CreatePieChartInput,
+    PlotExpensesInput, GenerateExpenseForecastInput, AnalyzeCriticalSurvivalMetricsInput,
+    AnalyzeWealthAccelerationMetricsInput, PlotCashFlowMixedInput, PlotHealthRadarInput,
+    UpdateTransactionCategoryInput, RetrainCategorizerInput, _cache_chart_data,
+    _parse_accounts, _check_and_handle_sca_error, _get_combined_categorized_data
+)
+
 from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
 from services.Forecaster_Agent.ForecasterAgent import ForecasterAgent
 from services.Analyser_Agent.expense_analysis import ExpenseAnalysis
-from langchain_core.tools import tool
-from pydantic import BaseModel, Field, model_validator
 from services.api_integrator.get_account_detail import UserAccounts
 from services.Analyser_Agent.financial_health import FinancialHealthAnalyzer
-from cryptography.fernet import Fernet
-from services.api_integrator.access_token_generator import AccessTokenGenerator
 
-
-class BaseToolInput(BaseModel):
-    @model_validator(mode='before')
-    @classmethod
-    def unnest_args(cls, data: object) -> object:
-        if isinstance(data, dict):
-            if 'arguments' in data and isinstance(data['arguments'], dict):
-                return data['arguments']
-        return data
-
-
-class GenerateFinancialForecastInput(BaseToolInput):
-    bank_name_or_id: str = Field(...,
-                                 description="MUST be 'ALL' unless explicitly named.")
-    user_uuid: str = Field(
-        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
-    days: int = Field(
-        60, description="The number of days into the future to forecast.")
-
-
-class ClassifyFinancialDataInput(BaseToolInput):
-    from_date: str = Field(...,
-                           description="Starting date for transactions in YYYY-MM-DD format.")
-    to_date: str = Field(...,
-                         description="End date for transactions in YYYY-MM-DD format.")
-    bank_name_or_id: str = Field(...,
-                                 description="MUST be 'ALL' unless explicitly named.")
-    user_uuid: str = Field(
-        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
-
-
-class FindTotalSpentInput(BaseToolInput):
-    category_name: str = Field(...,
-                               description="Name of the category, or 'all'.")
-    bank_name_or_id: str = Field(...,
-                                 description="MUST be 'ALL' unless explicitly named.")
-    user_uuid: str = Field(
-        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
-
-
-class FindHighestSpendingCategoryInput(BaseToolInput):
-    bank_name_or_id: str = Field(...,
-                                 description="MUST be 'ALL' unless explicitly named.")
-    user_uuid: str = Field(
-        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
-
-
-class CreateBargraphChartInput(BaseToolInput):
-    bank_name_or_id: str = Field(...,
-                                 description="MUST be 'ALL' unless explicitly named.")
-    user_uuid: str = Field(
-        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
-
-
-class CreatePieChartInput(BaseToolInput):
-    bank_name_or_id: str = Field(...,
-                                 description="MUST be 'ALL' unless explicitly named.")
-    user_uuid: str = Field(
-        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
-
-
-class PlotExpensesInput(BaseToolInput):
-    plot_time_type: str = Field(...,
-                                description="MUST be exactly 'Daily', 'Weekly', or 'Monthly'.")
-    from_date: str = Field(...,
-                           description="Starting date for transactions in YYYY-MM-DD format.")
-    to_date: str = Field(...,
-                         description="End date for transactions in YYYY-MM-DD format.")
-    bank_name_or_id: str = Field(...,
-                                 description="MUST be 'ALL' unless explicitly named.")
-    user_uuid: str = Field(
-        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
-
-
-class GenerateExpenseForecastInput(BaseToolInput):
-    bank_name_or_id: str = Field(...,
-                                 description="MUST be 'ALL' unless explicitly named.")
-    user_uuid: str = Field(
-        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
-    days: int = Field(
-        30, description="The number of days into the future to forecast.")
-
-
-class AnalyzeCriticalSurvivalMetricsInput(BaseToolInput):
-    user_uuid: str = Field(
-        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
-
-
-class AnalyzeWealthAccelerationMetricsInput(BaseToolInput):
-    user_uuid: str = Field(
-        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
-
-
-class PlotCashFlowMixedInput(BaseToolInput):
-    bank_name_or_id: str = Field(...,
-                                 description="MUST be 'ALL' unless explicitly named.")
-    user_uuid: str = Field(
-        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
-
-
-class PlotHealthRadarInput(BaseToolInput):
-    user_uuid: str = Field(
-        ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
-
-
-def _cache_chart_data(payload_data):
-    """Caches chart data into the local SQLite database to be retrieved instantly by the frontend."""
-    cache_id = f"CACHE_{uuid.uuid4().hex}"
-    with SessionLocal() as session:
-        session.execute(text('''CREATE TABLE IF NOT EXISTS chart_cache (
-                            cache_id TEXT PRIMARY KEY,
-                            chart_data TEXT,
-                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'''))
-        session.execute(text('INSERT INTO chart_cache (cache_id, chart_data) VALUES (:cache_id, :chart_data)'),
-                        {"cache_id": cache_id, "chart_data": json.dumps(payload_data)})
-        session.commit()
-    return cache_id
-
-
-def _check_and_handle_sca_error(e, acc, user_uuid):
-    """Checks if a TrueLayer API error is an SCA lock, and if so, returns an actionable authentication link."""
-    if isinstance(e, PermissionError) and "SECURITY LOCK" in str(e):
-        with SessionLocal() as session:
-            row = session.execute(text("""
-                SELECT b.truelayer_provider_id, b.refresh_token
-                FROM banks b
-                LEFT JOIN accounts a ON a.bank_uuid = b.bank_uuid
-                WHERE (b.bank_name = :acc OR a.account_id = :acc) AND b.user_uuid = :user_uuid
-            """), {"acc": acc, "user_uuid": user_uuid}).fetchone()
-
-        token_gen = AccessTokenGenerator()
-        auth_link = None
-
-        if row and row[1]:
-            provider_id = row[0]
-            enc_key = os.getenv(
-                "ENCRYPTION_KEY", b'cw_8H_1M4bX_3nF8vO5n3Y7A8xQ3_1m8aT2vP5_v5r8=')
-            cipher_suite = Fernet(enc_key)
-            refresh_token = cipher_suite.decrypt(row[1]).decode()
-
-            auth_link = token_gen.get_reauth_link(refresh_token, user_uuid)
-
-            if not auth_link:
-                auth_link = token_gen.get_auth_link(user_uuid)
-                auth_link += f"&provider_id={provider_id}"
-        else:
-            auth_link = token_gen.get_auth_link(user_uuid)
-
-        return (f"⚠️ **SCA Security Lock Activated**\n\n"
-                f"Under Open Banking regulations, {acc} requires you to periodically re-authenticate to access historical data older than 90 days.\n\n"
-                f"**[Click here to securely re-authenticate with {acc}]({auth_link})**\n\n"
-                f"Once you complete the bank prompt, come back and ask me to run this forecast again!")
-    return None
-
-
-def _parse_accounts(bank_name_or_id, user_uuid):
-    """Resolves the requested bank names into actual identifiers available in the database."""
-    if not bank_name_or_id or str(bank_name_or_id).lower() in ["none", ""]:
-        return [], ""
-
-    bank_name_or_id = str(bank_name_or_id).replace("'", "").replace("\’", "")
-
-    if str(bank_name_or_id).upper() == "ALL":
-        with SessionLocal() as session:
-            accounts = [row[0] for row in session.execute(
-                text("SELECT b.bank_name FROM banks b WHERE b.user_uuid = :user_uuid"), {"user_uuid": user_uuid}).fetchall()]
-        return accounts, "ALL"
-    else:
-        with SessionLocal() as session:
-            row = session.execute(text("""
-                SELECT a.account_id, b.bank_name
-                FROM accounts a
-                JOIN banks b ON a.bank_uuid = b.bank_uuid
-                WHERE (b.bank_name = :bank_name_or_id OR a.account_id = :bank_name_or_id) AND a.user_uuid = :user_uuid
-            """), {"bank_name_or_id": bank_name_or_id, "user_uuid": user_uuid}).fetchone()
-
-            if row:
-                return [row[1]], row[0]
-
-            return [bank_name_or_id], bank_name_or_id
-
-
-def _get_combined_categorized_data(accounts, suffix, user_uuid):
-    """Runs the categorization pipeline across all requested accounts and returns a merged dataframe."""
-    combined_df = pd.DataFrame()
-    agent = CategorizerAgent()
-
-    start_date = "2010-01-01"
-    end_date = datetime.now().strftime("%Y-%m-%d")
-
-    for acc in accounts:
-        try:
-            df = agent.execute_cycle(acc, user_uuid, start_date, end_date)
-            if df is not None and not df.empty:
-                df['bank_name'] = acc
-                combined_df = pd.concat([combined_df, df], ignore_index=True)
-        except Exception as e:
-            sca_msg = _check_and_handle_sca_error(e, acc, user_uuid)
-            if sca_msg:
-                raise Exception(sca_msg)
-    return combined_df
+logger = logging.getLogger("uvicorn.error")
 
 
 @tool(args_schema=GenerateFinancialForecastInput)
@@ -263,7 +68,6 @@ def generate_financial_forecast(bank_name_or_id: str, user_uuid: str, days: int 
             total_real_balance += real_balance
             S0, mu, _ = agent.fetch_and_calculate_parameters(
                 acc, real_balance, user_uuid, 60)
-
             df_temp = agent.run_hybrid_simulation(
                 acc, S0, mu, days=days, paths=1000)
 
@@ -278,12 +82,12 @@ def generate_financial_forecast(bank_name_or_id: str, user_uuid: str, days: int 
                     combined_careless = care_vals
                     combined_optimal = opt_vals
                 else:
-                    combined_expected = [
-                        x + y for x, y in zip(combined_expected, exp_vals)]
-                    combined_careless = [
-                        x + y for x, y in zip(combined_careless, care_vals)]
-                    combined_optimal = [
-                        x + y for x, y in zip(combined_optimal, opt_vals)]
+                    combined_expected = [x + y for x,
+                                         y in zip(combined_expected, exp_vals)]
+                    combined_careless = [x + y for x,
+                                         y in zip(combined_careless, care_vals)]
+                    combined_optimal = [x + y for x,
+                                        y in zip(combined_optimal, opt_vals)]
 
                 for i in range(days):
                     bank_data.append({
@@ -299,7 +103,6 @@ def generate_financial_forecast(bank_name_or_id: str, user_uuid: str, days: int 
         final_expected = combined_expected[-1] if combined_expected else 0
         final_careless = combined_careless[-1] if combined_careless else 0
         final_optimal = combined_optimal[-1] if combined_optimal else 0
-
         net_change = final_expected - total_real_balance
         trajectory_status = "POSITIVE" if net_change > 0 else "NEGATIVE"
 
@@ -354,6 +157,12 @@ def classify_financial_data(from_date: str, to_date: str, bank_name_or_id: str, 
         if combined_df.empty:
             return f"No transactions found between {from_date} and {to_date}."
 
+        anomalies_count = len(
+            combined_df[combined_df['Category'] == 'High-Risk / Anomaly'])
+        anomaly_alert = ""
+        if anomalies_count > 0:
+            anomaly_alert = f"CRITICAL PRIORITY: {anomalies_count} 'High-Risk / Anomaly' transactions detected! Explicitly warn the user to review these immediately.\n"
+
         payload = []
         for acc in accounts:
             acc_df = combined_df[combined_df['bank_name'] ==
@@ -370,7 +179,6 @@ def classify_financial_data(from_date: str, to_date: str, bank_name_or_id: str, 
             payload.append({"bank_name": acc, "data": bank_data})
 
         cache_id = _cache_chart_data(payload)
-
         category_counts = combined_df['Category'].value_counts().to_dict()
         summary = "\n".join(
             [f"- {cat}: {count} transactions" for cat, count in category_counts.items()])
@@ -380,6 +188,7 @@ def classify_financial_data(from_date: str, to_date: str, bank_name_or_id: str, 
 
         return (
             f"--- DATA SUMMARY FOR BUDAI ---\n"
+            f"{anomaly_alert}"
             f"Successfully classified {len(combined_df)} transactions from {from_date} to {to_date}.\n"
             f"Category breakdown:\n{summary}\n\n"
             f"--- AI Classifier Metrics ---\n{report}\n"
@@ -781,7 +590,6 @@ def generate_expense_forecast(bank_name_or_id: str, user_uuid: str, days: int = 
         for acc in accounts:
             E0, mu_E = agent.fetch_expense_parameters(
                 acc, user_uuid, lookback_days=60)
-
             df_temp = agent.run_expense_simulation(
                 acc, E0, mu_E, days=days, paths=1000)
 
@@ -806,7 +614,6 @@ def generate_expense_forecast(bank_name_or_id: str, user_uuid: str, days: int = 
             payload.append({"bank_name": acc, "data": bank_data})
 
         cache_id = _cache_chart_data(payload)
-
         actual_err = abs(total_converged - total_historical_expected) / \
             total_historical_expected if total_historical_expected > 0 else 0
         trajectory_insight = "higher" if total_converged > total_historical_expected else "lower"
@@ -969,8 +776,8 @@ def plot_cash_flow_mixed(bank_name_or_id: str, user_uuid: str) -> str:
                 month_str = period.strftime('%Y-%m')
                 month_df = acc_df[acc_df['Month'] == period]
                 inc = float(month_df[month_df['amount'] > 0]['amount'].sum())
-                exp = float(month_df[month_df['amount'] < 0]
-                            ['amount'].sum().abs())
+                exp = abs(
+                    float(month_df[month_df['amount'] < 0]['amount'].sum()))
                 bank_data.append({
                     "Month": month_str,
                     "Income": round(inc, 2),
@@ -1051,4 +858,31 @@ def plot_health_radar(user_uuid: str) -> str:
     except Exception as e:
         if "⚠️ **SCA" in str(e):
             return str(e)
+        return f"CRITICAL TOOL ERROR: {str(e)}"
+
+
+@tool(args_schema=UpdateTransactionCategoryInput)
+def update_transaction_category(user_uuid: str, transaction_uuid: str, corrected_category: str) -> str:
+    """Updates the category of a specific transaction based on user feedback and saves it to the database."""
+    try:
+        agent = CategorizerAgent()
+        agent.save_manual_label(
+            user_uuid, transaction_uuid, corrected_category)
+        return f"Successfully updated transaction {transaction_uuid} to '{corrected_category}'. The database has been secured."
+    except ValueError as ve:
+        return f"Validation Error: {str(ve)}. Ensure the category matches the valid system rules."
+    except Exception as e:
+        return f"CRITICAL TOOL ERROR: {str(e)}"
+
+
+@tool(args_schema=RetrainCategorizerInput)
+def retrain_categorization_model(user_uuid: str) -> str:
+    """Retrains the underlying categorization model using the user's recent manual corrections."""
+    try:
+        agent = CategorizerAgent()
+        result = agent.retrain_from_feedback(user_uuid)
+        if result.get("trained"):
+            return f"Successfully retrained model with {result.get('samples')} samples."
+        return f"Retraining skipped: {result.get('reason')}"
+    except Exception as e:
         return f"CRITICAL TOOL ERROR: {str(e)}"

@@ -1,58 +1,47 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import text
-import pandas as pd
 import time
 import json
+import re
 from datetime import datetime, timedelta
-
+from sqlalchemy import text
+from typing import Any, Dict
+from pydantic import BaseModel
 from middleware.auth_middleware import get_current_user
-from models.database_models import User
-from schemas.api_schema import MediaExecuteRequest
 from config import SessionLocal
 
-from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
-from services.Analyser_Agent.financial_health import FinancialHealthAnalyzer
-from services.Forecaster_Agent.ForecasterAgent import ForecasterAgent
-from services.Analyser_Agent.expense_analysis import ExpenseAnalysis
+from services.mcp_tools.internal_tools import (
+    generate_financial_forecast, classify_financial_data, find_total_spent_for_given_category,
+    find_highest_spending_category, create_bargraph_chart_and_save, create_pie_chart_and_save,
+    plot_expenses, generate_expense_forecast, analyze_critical_survival_metrics,
+    analyze_wealth_acceleration_metrics, plot_cash_flow_mixed, plot_health_radar
+)
 
 media_router = APIRouter(prefix="/api/media", tags=["media"])
 
 
-def resolve_bank_accounts(bank_name_or_id, user_uuid):
-    with SessionLocal() as session:
-        rows = session.execute(text("""
-            SELECT b.bank_name, a.account_id 
-            FROM banks b 
-            JOIN accounts a ON b.bank_uuid = a.bank_uuid 
-            WHERE a.user_uuid = :user_uuid
-        """), {"user_uuid": user_uuid}).fetchall()
-
-        all_accounts = rows
-
-        if not all_accounts:
-            return []
-
-        if not bank_name_or_id or str(bank_name_or_id).upper() in ["ALL", "NONE", ""]:
-            if len(all_accounts) == 1:
-                return [{"bank_name": all_accounts[0][0], "account_id": all_accounts[0][1]}]
-            return [{"bank_name": row[0], "account_id": row[1]} for row in all_accounts]
-
-        raw_banks = [b.strip().lower()
-                     for b in str(bank_name_or_id).split(",") if b.strip()]
-        resolved = []
-        for row in all_accounts:
-            b_name, a_id = row
-            if b_name.lower() in raw_banks or a_id.lower() in raw_banks:
-                resolved.append({"bank_name": b_name, "account_id": a_id})
-
-        if not resolved:
-            return [{"bank_name": bank_name_or_id, "account_id": bank_name_or_id}]
-
-        return resolved
+class MediaExecuteRequest(BaseModel):
+    tool_name: str
+    parameters: Dict[str, Any] = {}
 
 
-@media_router.post("/execute")
-def execute_tool(request: MediaExecuteRequest, current_user: User = Depends(get_current_user)):
+TOOL_MAPPING = {
+    "generate_financial_forecast": generate_financial_forecast,
+    "classify_financial_data": classify_financial_data,
+    "find_total_spent_for_given_category": find_total_spent_for_given_category,
+    "find_highest_spending_category": find_highest_spending_category,
+    "create_bargraph_chart_and_save": create_bargraph_chart_and_save,
+    "create_pie_chart_and_save": create_pie_chart_and_save,
+    "plot_expenses": plot_expenses,
+    "generate_expense_forecast": generate_expense_forecast,
+    "analyze_critical_survival_metrics": analyze_critical_survival_metrics,
+    "analyze_wealth_acceleration_metrics": analyze_wealth_acceleration_metrics,
+    "plot_cash_flow_mixed": plot_cash_flow_mixed,
+    "plot_health_radar": plot_health_radar
+}
+
+
+@media_router.post('/execute')
+def execute_tool(request: MediaExecuteRequest, current_user=Depends(get_current_user)):
     start_time = time.time()
     tool_name = request.tool_name
     params = request.parameters
@@ -67,217 +56,65 @@ def execute_tool(request: MediaExecuteRequest, current_user: User = Depends(get_
                 {"cache_id": bank_name_or_id}
             ).fetchone()
             if row:
-                cached_payload = json.loads(row[0])
-                execution_time = int((time.time() - start_time) * 1000)
                 return {
                     "status": "success",
                     "metadata": {
-                        "execution_time_ms": execution_time,
+                        "execution_time_ms": int((time.time() - start_time) * 1000),
                         "tool_executed": tool_name,
                         "query_type": "CACHED_RETRIEVAL",
                         "resolved_accounts": [{"bank_name": "Cached Data"}]
                     },
-                    "data": cached_payload
+                    "data": json.loads(row[0])
                 }
 
-    resolved_accounts = resolve_bank_accounts(bank_name_or_id, user_uuid)
-
-    if not resolved_accounts:
-        raise HTTPException(
-            status_code=404, detail="No accounts found for user.")
-
-    query_type = "SINGLE_BANK" if len(
-        resolved_accounts) == 1 else "MULTIPLE_BANKS"
-    response_data = []
+    if tool_name not in TOOL_MAPPING:
+        raise HTTPException(status_code=404, detail="Tool not found.")
 
     try:
-        if tool_name == "plot_cash_flow_mixed":
-            from_date = (datetime.now() - timedelta(days=365)
-                         ).strftime("%Y-%m-%d")
-            to_date = datetime.now().strftime("%Y-%m-%d")
+        params["user_uuid"] = user_uuid
+        tool_obj = TOOL_MAPPING[tool_name]
 
-            for acc in resolved_accounts:
-                bank_data = []
-                agent = CategorizerAgent()
-                full_df = agent.execute_cycle(
-                    acc["account_id"], user_uuid, from_date, to_date)
+        if hasattr(tool_obj, "args"):
+            if "from_date" in tool_obj.args and "from_date" not in params:
+                params["from_date"] = (
+                    datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+            if "to_date" in tool_obj.args and "to_date" not in params:
+                params["to_date"] = datetime.now().strftime("%Y-%m-%d")
 
-                if full_df is not None and not full_df.empty:
-                    full_df['Date'] = pd.to_datetime(
-                        full_df['Date'], errors='coerce', utc=True)
-                    full_df['Month'] = full_df['Date'].dt.to_period('M')
+        result_str = tool_obj.invoke(params)
 
-                    for period in sorted(full_df['Month'].dropna().unique()):
-                        month_str = period.strftime('%Y-%m')
-                        month_df = full_df[full_df['Month'] == period]
+        match = re.search(r'\[TRIGGER_[A-Z_]+:([^:\]]+)', str(result_str))
+        if match:
+            cache_id = match.group(1)
+            with SessionLocal() as session:
+                row = session.execute(
+                    text("SELECT chart_data FROM chart_cache WHERE cache_id = :cache_id"),
+                    {"cache_id": cache_id}
+                ).fetchone()
+                if row:
+                    return {
+                        "status": "success",
+                        "metadata": {
+                            "execution_time_ms": int((time.time() - start_time) * 1000),
+                            "tool_executed": tool_name,
+                            "query_type": "DYNAMIC_GENERATION",
+                            "resolved_accounts": [{"bank_name": bank_name_or_id}]
+                        },
+                        "data": json.loads(row[0])
+                    }
 
-                        inc = float(
-                            month_df[month_df['Category'].str.lower() == 'income']['Amount'].abs().sum())
-                        exp = float(
-                            month_df[month_df['Category'].str.lower() != 'income']['Amount'].abs().sum())
-
-                        bank_data.append({
-                            "Month": month_str,
-                            "Income": round(inc, 2),
-                            "Expense": round(exp, 2),
-                            "Net_Balance": round(inc - exp, 2)
-                        })
-
-                response_data.append({
-                    "bank_name": acc["bank_name"],
-                    "data": bank_data
-                })
-
-        elif tool_name in ["classify_financial_data", "create_bargraph_chart_and_save", "find_total_spent_for_given_category"]:
-            from_date = params.get("from_date", "2010-01-01")
-            to_date = params.get(
-                "to_date", datetime.now().strftime("%Y-%m-%d"))
-            agent = CategorizerAgent()
-
-            for acc in resolved_accounts:
-                df = agent.execute_cycle(
-                    acc["account_id"], user_uuid, from_date, to_date)
-                bank_data = []
-
-                if df is not None and not df.empty:
-                    categories = df['Category'].unique()
-                    for cat in categories:
-                        cat_df = df[df['Category'] == cat]
-                        total_amt = float(cat_df['Amount'].abs().sum())
-                        tx_count = len(cat_df)
-                        bank_data.append({
-                            "Category": str(cat),
-                            "Total_Amount": round(total_amt, 2),
-                            "Transaction_Count": tx_count
-                        })
-                    bank_data = sorted(
-                        bank_data, key=lambda x: x["Total_Amount"], reverse=True)
-
-                response_data.append({
-                    "bank_name": acc["bank_name"],
-                    "data": bank_data
-                })
-
-        elif tool_name == "plot_health_radar":
-            analyzer = FinancialHealthAnalyzer(user_uuid)
-            runway = min(analyzer.calculate_liquid_runway() / 180 * 100, 100)
-            nw_vel = max(
-                min((analyzer.calculate_net_worth_velocity() + 1000) / 2000 * 100, 100), 0)
-            mpc_score = max((1.0 - analyzer.calculate_mpc()) * 100, 0)
-            absorption = min(
-                analyzer.calculate_shock_absorption() / 5 * 100, 100)
-            drag_score = max(100 - (analyzer.calculate_interest_drag() * 5), 0)
-
-            overall_data = [
-                {"Metric": "Liquid Runway", "Score": round(runway, 2)},
-                {"Metric": "Wealth Velocity", "Score": round(nw_vel, 2)},
-                {"Metric": "Savings Efficiency", "Score": round(mpc_score, 2)},
-                {"Metric": "Shock Absorption", "Score": round(absorption, 2)},
-                {"Metric": "Debt Control", "Score": round(drag_score, 2)}
-            ]
-            response_data.append({
-                "bank_name": "Overall Portfolio",
-                "data": overall_data
-            })
-
-        elif tool_name == "plot_expenses":
-            plot_type = str(params.get("plot_time_type", "monthly")).lower()
-            from_date = params.get("from_date", "2010-01-01")
-            to_date = params.get(
-                "to_date", datetime.now().strftime("%Y-%m-%d"))
-
-            for acc in resolved_accounts:
-                ea = ExpenseAnalysis(
-                    identifier=acc["account_id"], user_uuid=user_uuid)
-                bank_data = []
-
-                if ea.fetch_data(from_date, to_date):
-                    if plot_type == 'daily':
-                        df = ea.get_daily_spend_data()
-                    elif plot_type == 'weekly':
-                        df = ea.get_weekly_spend_data()
-                    else:
-                        df = ea.get_monthly_spend_data()
-
-                    if df is not None and not df.empty:
-                        for _, row in df.iterrows():
-                            date_val = row['Date'] if 'Date' in df.columns else row.get(
-                                'date')
-                            amt_val = row['Amount'] if 'Amount' in df.columns else row.get(
-                                'amount')
-
-                            if pd.notnull(date_val):
-                                bank_data.append({
-                                    "Date": pd.to_datetime(date_val).strftime('%Y-%m-%d'),
-                                    "Amount": round(float(amt_val), 2)
-                                })
-
-                response_data.append({
-                    "bank_name": acc["bank_name"],
-                    "data": bank_data
-                })
-
-        elif tool_name in ["generate_expense_forecast", "generate_financial_forecast"]:
-            agent = ForecasterAgent()
-            days = params.get("days", 30)
-
-            for acc in resolved_accounts:
-                a_id = acc["account_id"]
-                bank_data = []
-
-                if tool_name == "generate_financial_forecast":
-                    real_balance = agent.fetch_live_balance(a_id, user_uuid)
-                    S0, mu, _ = agent.fetch_and_calculate_parameters(
-                        a_id, real_balance, user_uuid, 60)
-                    df_temp = agent.run_hybrid_simulation(
-                        a_id, S0, mu, days=days, paths=1000)
-
-                    if not df_temp.empty:
-                        exp_vals = df_temp.iloc[0].values.tolist()
-                        care_vals = df_temp.iloc[1].values.tolist()
-                        opt_vals = df_temp.iloc[2].values.tolist()
-
-                        for i in range(days):
-                            bank_data.append({
-                                "Day": f"Day {i}",
-                                "Expected Balance": round(exp_vals[i], 2),
-                                "Careless Scenario (5%)": round(care_vals[i], 2),
-                                "Optimal Scenario (95%)": round(opt_vals[i], 2)
-                            })
-
-                else:
-                    E0, mu_E = agent.fetch_expense_parameters(
-                        a_id, user_uuid, lookback_days=60)
-                    df_temp = agent.run_expense_simulation(
-                        a_id, E0, mu_E, days=days, paths=1000)
-
-                    if not df_temp.empty:
-                        convergent_path = df_temp.iloc[0].values.tolist()
-                        for i in range(days):
-                            bank_data.append({
-                                "Day": f"Day {i}",
-                                "Projected Daily Spend (£)": round(convergent_path[i], 2)
-                            })
-
-                response_data.append({
-                    "bank_name": acc["bank_name"],
-                    "data": bank_data
-                })
+        return {
+            "status": "success",
+            "metadata": {
+                "execution_time_ms": int((time.time() - start_time) * 1000),
+                "tool_executed": tool_name,
+                "query_type": "TEXT_FALLBACK",
+                "resolved_accounts": [{"bank_name": bank_name_or_id}]
+            },
+            "data": result_str
+        }
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-
-    execution_time = int((time.time() - start_time) * 1000)
-
-    return {
-        "status": "success",
-        "metadata": {
-            "execution_time_ms": execution_time,
-            "tool_executed": tool_name,
-            "query_type": query_type,
-            "resolved_accounts": resolved_accounts
-        },
-        "data": response_data
-    }

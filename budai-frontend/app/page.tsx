@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShieldCheck, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 
@@ -34,7 +34,7 @@ export default function Home() {
         setError(data.detail || "Invalid credentials. Please try again.");
       }
     } catch (err) {
-      console.error("Authentication Error", err);
+      console.log(err);
       setError("Failed to connect to the authentication server.");
     } finally {
       setLoading(false);
@@ -42,32 +42,37 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#0A120D] text-white p-6">
-      <div className="bg-[#132017] p-10 rounded-3xl border border-[#1A2D21] w-full max-w-md shadow-2xl text-center">
-        <div className="flex flex-col items-center mb-6 text-[#69F0AE]">
-          <ShieldCheck size={48} className="mb-4" />
-          <h1 className="text-4xl font-extrabold tracking-tighter mb-2 animate-pulse">
-            BUDAI.CORE
-          </h1>
-          <p className="text-sm text-slate-400 font-medium">
-            Agentic Personal Finance & Behavioral Intelligence System
+    <div className="flex flex-col items-center justify-center min-h-screen bg-[#101115] text-[#FFFFFF] p-6 font-sans">
+      <div className="bg-[#1A1C24] p-10 rounded-2xl border border-[#2A2D35] w-full max-w-md shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-[#3D73FF]/5 rounded-bl-full" />
+
+        <div className="flex flex-col items-center mb-8 z-10 relative">
+          <div className="w-12 h-12 bg-[#3D73FF] rounded-xl flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(61,115,255,0.3)]">
+            <span className="text-white text-xl font-bold">B</span>
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight mb-2">BudAI</h1>
+          <p className="text-sm text-[#8B8E98] font-medium text-center">
+            Financial Intelligence System
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 text-red-500 text-sm font-bold bg-red-500/10 py-2 rounded-lg border border-red-500/50">
+          <div className="mb-6 text-[#FF5E98] text-sm font-medium bg-[#FF5E98]/10 py-3 px-4 rounded-xl border border-[#FF5E98]/20 z-10 relative text-center">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form
+          onSubmit={handleLogin}
+          className="flex flex-col gap-5 z-10 relative"
+        >
           <input
             type="email"
             placeholder="BudAI ID (Email)"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full bg-[#0A120D] border border-[#1A2D21] rounded-xl px-4 py-3 text-white focus:border-[#69F0AE] outline-none transition-colors"
+            className="w-full bg-[#101115] border border-[#2A2D35] rounded-xl px-4 py-3 text-white focus:border-[#3D73FF] focus:ring-1 focus:ring-[#3D73FF] outline-none transition-all placeholder:text-[#2A2D35]"
           />
           <input
             type="password"
@@ -75,27 +80,27 @@ export default function Home() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            className="w-full bg-[#0A120D] border border-[#1A2D21] rounded-xl px-4 py-3 text-white focus:border-[#69F0AE] outline-none transition-colors"
+            className="w-full bg-[#101115] border border-[#2A2D35] rounded-xl px-4 py-3 text-white focus:border-[#3D73FF] focus:ring-1 focus:ring-[#3D73FF] outline-none transition-all placeholder:text-[#2A2D35]"
           />
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center items-center gap-2 bg-[#69F0AE] text-[#0A120D] font-bold rounded-xl py-3 hover:scale-[1.02] transition-transform shadow-[0_0_15px_rgba(105,240,174,0.3)]"
+            className="w-full flex justify-center items-center gap-2 bg-[#3D73FF] text-white font-semibold rounded-xl py-3 hover:bg-[#3D73FF]/90 transition-colors disabled:opacity-50 mt-2"
           >
             {loading ? (
-              <>
-                <Loader2 className="animate-spin text-[#0A120D]" size={18} />{" "}
-                Authenticating...
-              </>
+              <Loader2 className="animate-spin" size={18} />
             ) : (
               "Initialize Session"
             )}
           </button>
         </form>
 
-        <p className="text-center text-slate-500 mt-6 text-sm">
+        <p className="text-center text-[#8B8E98] mt-8 text-sm z-10 relative">
           New to BudAI?{" "}
-          <Link href="/register" className="text-[#69F0AE] hover:underline">
+          <Link
+            href="/register"
+            className="text-[#3D73FF] hover:underline font-medium"
+          >
             Register here
           </Link>
         </p>

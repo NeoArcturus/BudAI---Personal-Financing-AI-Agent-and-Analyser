@@ -1,8 +1,8 @@
-from typing import TypedDict, List, Optional
+from typing import TypedDict, Dict, Any, List, Optional
 from langchain_core.messages import BaseMessage
 
 
-class BudAIState(TypedDict):
+class BudAIState(TypedDict, total=False):
     user_uuid: str
     active_account_id: str
     user_input: str
@@ -13,3 +13,5 @@ class BudAIState(TypedDict):
     chart_type: Optional[str]
     ui_trigger_tag: Optional[str]
     final_response: str
+    raw_data: Optional[Any]
+    is_explanation: Optional[bool]

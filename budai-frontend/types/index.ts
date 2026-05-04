@@ -1,4 +1,4 @@
-import { ChartConfiguration } from "chart.js";
+import { ChartConfiguration, ChartData } from "chart.js";
 
 export interface Account {
   account_id: string;
@@ -30,6 +30,10 @@ export interface Transaction {
 export interface ChatMessage {
   role: "user" | "assistant";
   text: string;
+}
+
+export interface LocalMessage extends ChatMessage {
+  timestamp?: Date;
 }
 
 export type TabType =
@@ -65,4 +69,45 @@ export interface ToolParameters {
   to_date?: string;
   days?: number;
   plot_time_type?: string;
+}
+
+export interface NextAction {
+  label: string;
+  tool_target: string;
+}
+
+export type ExplanationContextType =
+  | "CHART"
+  | "TRANSACTION_LEDGER"
+  | "MARKET_NEWS"
+  | "ADVISORY"
+  | string
+  | null;
+
+export type ExplanationPayload =
+  | BankChartData[]
+  | Transaction[]
+  | Record<string, unknown>
+  | unknown[]
+  | ChartData<"line" | "bar" | "doughnut" | "radar">;
+
+export interface ExplanationState {
+  isOpen: boolean;
+  isExplaining: boolean;
+  contextType: ExplanationContextType;
+  rawPayload: ExplanationPayload | null;
+  aiExplanation: string;
+  nextActions: NextAction[];
+}
+
+export interface CategorySummary {
+  Category?: string;
+  category?: string;
+  Total_Amount?: number | string;
+  amount?: number | string;
+}
+
+export interface ParsedCategory {
+  name: string;
+  value: number;
 }

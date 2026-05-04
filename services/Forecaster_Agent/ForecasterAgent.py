@@ -1,10 +1,13 @@
 import os
 import pandas as pd
 import numpy as np
+import logging
 from sqlalchemy import text
 from config import SessionLocal
 from services.api_integrator.get_account_detail import UserAccounts
 from services.Forecaster_Agent.mathematics.mathematics import run_hybrid_engine, run_converged_expense_engine
+
+logger = logging.getLogger("uvicorn.error")
 
 
 class ForecasterAgent:

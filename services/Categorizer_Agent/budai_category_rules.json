@@ -1,0 +1,77 @@
+{
+  "rules": {
+    "Food & Dining": "(?i)\\b(tesco|lidl|asda|greggs|pret|sainsbury|morrisons|aldi|mcdonalds|kfc|starbucks|costa|co-op|vending|chillionrice|subway|grill|restaurant|cafe|pizza|burger|kitchen|food|deliveroo|just eat|uber eats)\\b",
+    "Transportation": "(?i)\\b(uber|trainline|tfl|transport for london|bus|rail|stagecoach|bee network|taxi|bolt|national express|beryl|transport|coach|train|ticket|avanti|west coast|ctylink)\\b",
+    "Bills & Utilities": "(?i)\\b(lebara|vodafone|ee|o2|british gas|octopus|council tax|water|energy|mobile|circuit laundry|utility|broadband)\\b",
+    "Shopping": "(?i)\\b(amazon|prime|ebay|argos|zara|h&m|ikea|currys|adidas|nike|freeprints|shop|store|flexistore)\\b",
+    "Entertainment": "(?i)\\b(netflix|spotify|cinema|vue|odeon|steam|playstation|xbox|tower bridge|obscura|pub|bar|club|wake|hotstar)\\b",
+    "Health & Wellness": "(?i)\\b(boots|pharmacy|gym|nhs|dentist|barber|clinic|health|hospital|medical)\\b",
+    "Transfers & Investments": "(?i)\\b(paypal|revolut|transfer|monzo|savings|investment|sent|added to)\\b",
+    "High-Risk / Anomaly": "(?i)\\b(anydesk|teamviewer|urgent transfer|account blocked|verify account|western union|moneygram|unauthorized|fraud|scam|bitcoin|binance|kraken|refund scam|lottery|prize winner)\\b"
+  },
+  "semantic_anchors": {
+    "Food & Dining": [
+      "supermarket groceries",
+      "fast food restaurant",
+      "coffee shop cafe",
+      "dining out pub",
+      "vending machine snack",
+      "food delivery takeaway"
+    ],
+    "Transportation": [
+      "public transport ticket",
+      "taxi ride hail",
+      "train fare rail",
+      "fuel petrol station",
+      "commuter travel",
+      "parking fees"
+    ],
+    "Bills & Utilities": [
+      "monthly utility bill",
+      "mobile phone contract",
+      "electricity gas water",
+      "internet broadband provider",
+      "insurance premium",
+      "rent payment"
+    ],
+    "Shopping": [
+      "online retail store",
+      "department store",
+      "clothing apparel fashion",
+      "electronics gadgets",
+      "home furniture household",
+      "general merchandise"
+    ],
+    "Entertainment": [
+      "streaming subscription service",
+      "cinema movie theater",
+      "video gaming console",
+      "concert music event",
+      "hobby leisure activity",
+      "bookstore"
+    ],
+    "Health & Wellness": [
+      "pharmacy medicine",
+      "gym membership fitness",
+      "dental medical clinic",
+      "healthcare services",
+      "vitamins supplements",
+      "spa beauty"
+    ],
+    "Transfers & Investments": [
+      "bank transfer send",
+      "savings account deposit",
+      "stock market investment",
+      "cryptocurrency exchange",
+      "peer to peer payment",
+      "money wire"
+    ],
+    "High-Risk / Anomaly": [
+      "fraudulent transaction scam",
+      "unauthorized account access",
+      "wire transfer western union moneygram",
+      "crypto exchange bitcoin binance",
+      "remote access anydesk teamviewer"
+    ]
+  }
+}

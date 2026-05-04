@@ -1,5 +1,6 @@
 import requests
 import uuid
+import logging
 from urllib.parse import urlencode
 from cryptography.fernet import Fernet
 from sqlalchemy import text
@@ -15,6 +16,8 @@ import datetime
 import pandas as pd
 
 from models.database_models import Bank
+
+logger = logging.getLogger("uvicorn.error")
 
 
 class AccessTokenGenerator:
@@ -50,14 +53,14 @@ class AccessTokenGenerator:
             if response.status_code == 200:
                 data = response.json()
                 if data.get("success") == True:
-                    print(
+                    logger.info(
                         f"[BACKEND LOG] Re-auth URI successfully generated: {data.get('result')}")
                     return data.get("result")
             else:
-                print(
+                logger.error(
                     f"[ERROR] TrueLayer reauthuri returned {response.status_code}: {response.text}")
         except Exception as e:
-            print(f"[ERROR] TrueLayer reauthuri generation failed: {e}")
+            logger.error(f"[ERROR] TrueLayer reauthuri generation failed: {e}")
 
         return None
 
@@ -97,7 +100,7 @@ class AccessTokenGenerator:
             expires_at = parse_tl_date(
                 me_res['results'][0].get('consent_expires_at'))
 
-            print(updated_at, created_at, expires_at)
+            logger.info(f"{updated_at} {created_at} {expires_at}")
 
             enc_access = self.cipher_suite.encrypt(
                 res["access_token"].encode())
@@ -136,11 +139,12 @@ class AccessTokenGenerator:
                     session.add(new_bank)
                 session.commit()
 
-            print(
+            logger.info(
                 f"[AUTH LOG] Bank {provider_name} successfully linked/updated.")
             return True
         else:
-            print(f"[AUTH ERROR] TrueLayer token exchange failed: {res}")
+            logger.error(
+                f"[AUTH ERROR] TrueLayer token exchange failed: {res}")
 
         return False
 
