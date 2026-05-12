@@ -1,3 +1,4 @@
+// app/(protected)/_components/CoreChartEngine.tsx
 "use client";
 
 import React, { useEffect, useRef } from "react";
@@ -112,6 +113,16 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
         };
       }) || [];
 
+    const isCircular =
+      config.type === "pie" ||
+      config.type === "doughnut" ||
+      config.type === "radar" ||
+      (config.data?.datasets &&
+        config.data.datasets.some(
+          (d) =>
+            d.type === "pie" || d.type === "doughnut" || d.type === "radar",
+        ));
+
     const finalConfig: ChartConfiguration = {
       ...config,
       data: {
@@ -125,10 +136,12 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
           ...config.options?.plugins,
           ...baseOptions.plugins,
         },
-        scales: {
-          ...config.options?.scales,
-          ...baseOptions.scales,
-        },
+        scales: isCircular
+          ? { x: { display: false }, y: { display: false } }
+          : {
+              ...config.options?.scales,
+              ...baseOptions.scales,
+            },
       },
       plugins: [customGlowPlugin],
     };

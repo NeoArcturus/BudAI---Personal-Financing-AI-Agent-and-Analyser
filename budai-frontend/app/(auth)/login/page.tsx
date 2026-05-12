@@ -2,14 +2,24 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Lock, Mail, Loader2 } from "lucide-react";
+import { Lock, Mail, Loader2, Eye, EyeClosed } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import {
+  Button,
+  Card,
+  InputGroup,
+  Label,
+  Link,
+  TextField,
+  Form,
+} from "@heroui/react";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  const [isVisible, setIsVisible] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -41,97 +51,114 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#101115] items-center justify-center font-sans text-[#FFFFFF]">
-      <div className="w-full max-w-md bg-[#1A1C24] border border-[#2A2D35] p-8 rounded-2xl shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-[#3D73FF]/5 rounded-bl-full" />
-
-        <div className="flex items-center gap-2 mb-8 z-10 relative">
-          <div className="w-8 h-8 bg-[#3D73FF] rounded-lg flex items-center justify-center">
-            <span className="text-white text-sm font-bold">B</span>
+    <div className="flex h-screen w-screen bg-[#101115] items-center justify-center font-sans text-white">
+      <Card className="w-full max-w-md bg-[#1A1C24] border border-[#2A2D35] rounded-2xl shadow-2xl relative overflow-hidden">
+        <Card.Header className="text-2xl font-bold mb-2 tracking-tight text-white bg-transparent mt-4 ml-8 flex-col items-start gap-1">
+          <h1>Welcome Back</h1>
+          <div className="z-10 relative">
+            <p className="text-gray-500 text-sm font-normal">
+              Sign in to securely access your dashboard.
+            </p>
           </div>
-          <span className="font-bold text-xl tracking-tight">BudAI</span>
-        </div>
+        </Card.Header>
+        <Card.Content className="p-8 pt-4 relative">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-[#3D73FF]/5 rounded-bl-full pointer-events-none" />
 
-        <h1 className="text-2xl font-bold mb-2 tracking-tight z-10 relative">
-          Welcome Back
-        </h1>
-        <p className="text-[#8B8E98] mb-8 text-sm z-10 relative">
-          Sign in to securely access your financial telemetry.
-        </p>
-
-        {error && (
-          <div className="mb-6 text-[#FF5E98] text-sm font-medium bg-[#FF5E98]/10 py-3 px-4 rounded-xl border border-[#FF5E98]/20 z-10 relative">
-            {error}
-          </div>
-        )}
-
-        <form
-          onSubmit={handleLogin}
-          className="flex flex-col gap-5 z-10 relative"
-        >
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-[#8B8E98] uppercase tracking-wider">
-              Email Address
-            </label>
-            <div className="relative">
-              <Mail
-                className="absolute left-4 top-3 text-[#8B8E98]"
-                size={18}
-              />
-              <input
-                type="email"
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-[#101115] border border-[#2A2D35] text-white rounded-xl py-2.5 pl-11 pr-4 focus:border-[#3D73FF] focus:ring-1 focus:ring-[#3D73FF] outline-none transition-all placeholder:text-[#2A2D35]"
-                required
-              />
+          {error && (
+            <div className="mb-6 text-[#FF5E98] text-sm font-medium bg-[#FF5E98]/10 py-3 px-4 rounded-xl border border-[#FF5E98]/20 z-10 relative">
+              {error}
             </div>
-          </div>
+          )}
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-[#8B8E98] uppercase tracking-wider">
-              Password
-            </label>
-            <div className="relative">
-              <Lock
-                className="absolute left-4 top-3 text-[#8B8E98]"
-                size={18}
-              />
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#101115] border border-[#2A2D35] text-white rounded-xl py-2.5 pl-11 pr-4 focus:border-[#3D73FF] focus:ring-1 focus:ring-[#3D73FF] outline-none transition-all placeholder:text-[#2A2D35]"
-                required
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-[#3D73FF] text-white font-semibold py-3 rounded-xl mt-4 hover:bg-[#3D73FF]/90 transition-colors flex justify-center items-center gap-2 disabled:opacity-50"
+          <Form
+            onSubmit={handleLogin}
+            validationBehavior="native"
+            className="flex flex-col gap-6 w-full z-10 relative"
           >
-            {isLoading ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              "Sign In"
-            )}
-          </button>
-        </form>
+            <TextField className="w-full" name="Email">
+              <Label className="uppercase tracking-wider text-xs font-semibold mb-1.5 text-cyan-400">
+                Email
+              </Label>
+              <InputGroup
+                className="bg-[#101115] rounded-2xl flex items-center focus-within:ring-1 focus-within:ring-cyan-400 w-full border border-transparent"
+                variant="secondary"
+              >
+                <InputGroup.Prefix className="pl-4 pr-2 text-[#8B8E98] flex items-center shrink-0">
+                  <Mail size={18} />
+                </InputGroup.Prefix>
+                <InputGroup.Input
+                  placeholder="name@email.com"
+                  type="email"
+                  required
+                  className="flex-1 w-full bg-transparent text-white py-3 pr-4 placeholder:text-[#2A2D35] border-none focus:ring-0 focus:outline-none"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </InputGroup>
+            </TextField>
 
-        <p className="text-center text-[#8B8E98] mt-6 text-sm z-10 relative">
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/register"
-            className="text-[#3D73FF] hover:underline font-medium"
-          >
-            Create one
-          </Link>
-        </p>
-      </div>
+            <TextField className="w-full" name="Password">
+              <Label className="uppercase tracking-wider text-xs font-semibold mb-1.5 text-cyan-400">
+                Password
+              </Label>
+              <InputGroup
+                className="bg-[#101115] rounded-2xl flex items-center focus-within:ring-1 focus-within:ring-cyan-400 w-full border border-transparent"
+                variant="secondary"
+              >
+                <InputGroup.Prefix className="pl-4 pr-2 text-[#8B8E98] flex items-center shrink-0">
+                  <Lock size={18} />
+                </InputGroup.Prefix>
+                <InputGroup.Input
+                  placeholder="••••••••"
+                  type={isVisible ? "text" : "password"}
+                  required
+                  className="flex-1 w-full bg-transparent text-white py-3 pr-2 placeholder:text-[#2A2D35] border-none focus:ring-0 focus:outline-none"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <InputGroup.Suffix className="pr-3 flex items-center shrink-0 relative z-10 pointer-events-auto">
+                  <Button
+                    isIconOnly
+                    type="button"
+                    aria-label={isVisible ? "Hide Password" : "Show Password"}
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setIsVisible(!isVisible);
+                    }}
+                    onPress={() => setIsVisible(!isVisible)}
+                    size="sm"
+                    className="hover:cursor-pointer text-[#8B8E98]"
+                  >
+                    {isVisible ? <Eye size={18} /> : <EyeClosed size={18} />}
+                  </Button>
+                </InputGroup.Suffix>
+              </InputGroup>
+            </TextField>
+
+            <Button
+              type="submit"
+              className="w-full mt-2 bg-cyan-400 text-black font-semibold rounded-2xl py-3 hover:bg-cyan-300 cursor-pointer transition-colors flex items-center justify-center gap-2"
+            >
+              {isLoading && <Loader2 className="animate-spin" size={18} />}
+              Sign In
+            </Button>
+          </Form>
+
+          <Card.Footer className="text-center text-gray-400 mt-8 text-sm z-10 relative flex justify-center w-full">
+            <span>
+              Don&apos;t have an account?{" "}
+              <Link
+                href="/register"
+                className="inline-flex items-center gap-1 text-cyan-400 hover:underline font-bold"
+              >
+                Create one
+                <Link.Icon />
+              </Link>
+            </span>
+          </Card.Footer>
+        </Card.Content>
+      </Card>
     </div>
   );
 }

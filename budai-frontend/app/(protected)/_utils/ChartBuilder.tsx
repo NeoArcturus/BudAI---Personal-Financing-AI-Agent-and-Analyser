@@ -71,22 +71,14 @@ const baseOptions = {
 };
 
 const colorPalette = [
-  "#00FFAA",
-  "#3b82f6",
-  "#ef4444",
-  "#f59e0b",
-  "#a855f7",
-  "#ec4899",
-  "#14b8a6",
-  "#f97316",
-  "#6366f1",
-  "#8b5cf6",
-  "#84cc16",
-  "#eab308",
-  "#0ea5e9",
-  "#d946ef",
-  "#10b981",
-  "#f43f5e",
+  "#00E5FF",
+  "#FF007F",
+  "#7FFF00",
+  "#B900FF",
+  "#FFEA00",
+  "#FF3366",
+  "#00F0FF",
+  "#39FF14",
 ];
 
 const getColorForMetric = (
@@ -99,14 +91,14 @@ const getColorForMetric = (
     lower.includes("flow") ||
     lower.includes("optimal")
   )
-    return "#00FFAA";
+    return "#00E5FF";
   if (
     lower.includes("expense") ||
     lower.includes("spend") ||
     lower.includes("careless")
   )
-    return "#ef4444";
-  if (lower.includes("income")) return "#3b82f6";
+    return "#FF007F";
+  if (lower.includes("income")) return "#B900FF";
   return colorPalette[defaultIndex % colorPalette.length];
 };
 
@@ -246,8 +238,7 @@ export const buildChartConfig = (
           {
             data: amounts,
             backgroundColor: colorPalette,
-            borderColor: "#161B22",
-            borderWidth: 4,
+            borderWidth: 0,
             hoverOffset: 12,
           },
         ],
@@ -275,7 +266,10 @@ export const buildChartConfig = (
   if (type === "cash_flow_mixed") {
     const allMonths = Array.from(
       new Set(payloadData.flatMap((b) => b.data.map((d) => String(d.Month)))),
-    ).sort();
+    ).sort(
+      (a, b) => new Date(`01 ${a}`).getTime() - new Date(`01 ${b}`).getTime(),
+    );
+
     const netBalance = allMonths.map((m) =>
       payloadData.reduce(
         (s, b) =>

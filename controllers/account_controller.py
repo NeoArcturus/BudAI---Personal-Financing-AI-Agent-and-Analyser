@@ -40,7 +40,7 @@ def get_transactions(account_id: str, from_date: str = Query(None, alias="from")
 
         df = df.fillna("")
         txs = df.to_dict('records')
-        return {"transactions": txs[:30]}
+        return {"transactions": txs}
     except Exception:
         raise HTTPException(
             status_code=500, detail="Failed to fetch transactions.")

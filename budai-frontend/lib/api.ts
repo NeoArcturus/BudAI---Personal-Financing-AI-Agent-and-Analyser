@@ -35,6 +35,28 @@ export async function apiFetch(
   if (response.status === 401 && withAuth) {
     clearSession();
     if (typeof window !== "undefined") window.location.href = "/login";
+    throw new Error("Unauthorized");
   }
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.message ||
+        `API Error: ${response.status} ${response.statusText}`,
+    );
+  }
+
   return response;
+}
+
+/**
+ * Typed wrapper for apiFetch to handle JSON parsing automatically
+ */
+export async function apiRequest<T>(
+  path: string,
+  init?: RequestInit,
+  withAuth = false,
+): Promise<T> {
+  const response = await apiFetch(path, init, withAuth);
+  return response.json() as Promise<T>;
 }
