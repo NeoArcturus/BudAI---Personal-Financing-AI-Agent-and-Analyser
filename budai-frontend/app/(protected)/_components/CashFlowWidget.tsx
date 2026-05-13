@@ -178,7 +178,7 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
     "Select Account";
 
   return (
-    <Card className="w-full h-full bg-[#13151D]/40 bg-linear-to-br from-white/8 to-transparent backdrop-blur-xl rounded-3xl border border-white/8 p-6 flex flex-col shadow-2xl relative overflow-hidden">
+    <Card className="w-full h-full bg-obsidian/40 backdrop-blur-xl border border-white/8 p-6 flex flex-col shadow-2xl relative overflow-hidden font-geist">
       <Card.Header className="flex flex-col gap-4 mb-6 p-0 shrink-0 w-full z-10">
         <div className="flex justify-between items-start w-full">
           <Card.Title className="text-white font-bold text-2xl tracking-tight">
@@ -204,7 +204,7 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
             </Label>
             <DateField.Group
               fullWidth
-              className="bg-[#181A20] border border-[#2A2D35] rounded-xl px-3 h-10 flex items-center transition-colors focus-within:border-cyan-600"
+              className="bg-[#181A20] border border-white/8 rounded-xl px-3 h-10 flex items-center transition-colors focus-within:border-neon-cyan"
             >
               <DateField.Input className="flex-1 bg-transparent text-white text-sm outline-none">
                 {(segment) => (
@@ -220,20 +220,20 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
                 </DatePicker.Trigger>
               </DateField.Suffix>
             </DateField.Group>
-            <DatePicker.Popover className="bg-black border-2 border-cyan-400/70 rounded-2xl p-4 shadow-2xl z-50">
+            <DatePicker.Popover className="bg-obsidian border border-neon-cyan/50 rounded-2xl p-4 shadow-2xl z-50 backdrop-blur-xl">
               <Calendar aria-label="From date" className="w-full min-w-65">
                 <Calendar.Header className="flex items-center gap-2 mb-4">
                   <Calendar.YearPickerTrigger className="flex items-center gap-1 mr-auto cursor-pointer hover:opacity-80 transition-opacity">
-                    <Calendar.YearPickerTriggerHeading className="text-base font-semibold text-cyan-400" />
+                    <Calendar.YearPickerTriggerHeading className="text-base font-semibold text-neon-cyan" />
                     <Calendar.YearPickerTriggerIndicator className="text-[#8B8E98] w-4 h-4" />
                   </Calendar.YearPickerTrigger>
                   <Calendar.NavButton
                     slot="previous"
-                    className="text-cyan-400 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                    className="text-neon-cyan w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
                   />
                   <Calendar.NavButton
                     slot="next"
-                    className="text-cyan-400 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                    className="text-neon-cyan w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
                   />
                 </Calendar.Header>
                 <Calendar.Grid className="w-full border-collapse">
@@ -248,7 +248,7 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
                     {(date) => (
                       <Calendar.Cell
                         date={date}
-                        className="w-8 h-8 flex items-center justify-center mx-auto text-sm text-white rounded-full hover:bg-white/10 data-[selected=true]:bg-cyan-600 data-[selected=true]:text-white cursor-pointer outline-none transition-colors"
+                        className="w-8 h-8 flex items-center justify-center mx-auto text-sm text-white rounded-full hover:bg-white/10 data-[selected=true]:bg-neon-cyan data-[selected=true]:text-obsidian cursor-pointer outline-none transition-colors"
                       />
                     )}
                   </Calendar.GridBody>
@@ -268,7 +268,7 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
             </Label>
             <DateField.Group
               fullWidth
-              className="bg-[#181A20] border border-[#2A2D35] rounded-xl px-3 h-10 flex items-center transition-colors focus-within:border-cyan-600"
+              className="bg-[#181A20] border border-white/8 rounded-xl px-3 h-10 flex items-center transition-colors focus-within:border-neon-cyan"
             >
               <DateField.Input className="flex-1 bg-transparent text-white text-sm outline-none">
                 {(segment) => (
@@ -284,20 +284,20 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
                 </DatePicker.Trigger>
               </DateField.Suffix>
             </DateField.Group>
-            <DatePicker.Popover className="bg-black border-2 border-cyan-400/70 rounded-2xl p-4 shadow-2xl z-50">
+            <DatePicker.Popover className="bg-obsidian border border-neon-cyan/50 rounded-2xl p-4 shadow-2xl z-50 backdrop-blur-xl">
               <Calendar aria-label="To date" className="w-full min-w-65">
                 <Calendar.Header className="flex items-center gap-2 mb-4">
                   <Calendar.YearPickerTrigger className="flex items-center gap-1 mr-auto cursor-pointer hover:opacity-80 transition-opacity">
-                    <Calendar.YearPickerTriggerHeading className="text-base font-semibold text-cyan-400" />
+                    <Calendar.YearPickerTriggerHeading className="text-base font-semibold text-neon-cyan" />
                     <Calendar.YearPickerTriggerIndicator className="text-[#8B8E98] w-4 h-4" />
                   </Calendar.YearPickerTrigger>
                   <Calendar.NavButton
                     slot="previous"
-                    className="text-cyan-400 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                    className="text-neon-cyan w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
                   />
                   <Calendar.NavButton
                     slot="next"
-                    className="text-cyan-400 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                    className="text-neon-cyan w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
                   />
                 </Calendar.Header>
                 <Calendar.Grid className="w-full border-collapse">
@@ -312,7 +312,7 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
                     {(date) => (
                       <Calendar.Cell
                         date={date}
-                        className="w-8 h-8 flex items-center justify-center mx-auto text-sm text-white rounded-full hover:bg-white/10 data-[selected=true]:bg-cyan-600 data-[selected=true]:text-white cursor-pointer outline-none transition-colors"
+                        className="w-8 h-8 flex items-center justify-center mx-auto text-sm text-white rounded-full hover:bg-white/10 data-[selected=true]:bg-neon-cyan data-[selected=true]:text-obsidian cursor-pointer outline-none transition-colors"
                       />
                     )}
                   </Calendar.GridBody>
@@ -327,7 +327,7 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
                 <div
                   role="button"
                   tabIndex={0}
-                  className="h-10 min-h-10 min-w-30 max-w-50 bg-[#181A20] hover:bg-white/10 border border-[#2A2D35] text-sm text-white font-medium rounded-xl px-4 flex items-center justify-between transition-all cursor-pointer outline-none"
+                  className="h-10 min-h-10 min-w-30 max-w-50 bg-[#181A20] hover:bg-white/10 border border-white/8 text-sm text-white font-medium rounded-xl px-4 flex items-center justify-between transition-all cursor-pointer outline-none focus-within:border-neon-cyan"
                 >
                   <span className="truncate pointer-events-none">
                     {activeAccountName}
@@ -338,7 +338,7 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
                   />
                 </div>
               </Dropdown.Trigger>
-              <Dropdown.Popover className="bg-black border-2 border-cyan-400/70 shadow-2xl rounded-2xl min-w-40 z-50">
+              <Dropdown.Popover className="bg-obsidian border border-neon-cyan/50 shadow-2xl rounded-2xl min-w-40 z-50 backdrop-blur-xl">
                 <Dropdown.Menu
                   items={accounts}
                   selectionMode="single"
@@ -356,7 +356,7 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
                     <Dropdown.Item
                       id={acc.account_id}
                       textValue={acc.bank_name}
-                      className="rounded-xl transition-all data-[hover=true]:bg-white/5 data-[hover=true]:ring-1 data-[hover=true]:ring-cyan-400/70 border border-transparent data-[hover=true]:border-cyan-400/70 py-3 px-3 outline-none cursor-pointer focus:ring-0 focus:outline-none w-full block"
+                      className="rounded-xl transition-all data-[hover=true]:bg-white/5 data-[hover=true]:ring-1 data-[hover=true]:ring-neon-cyan/70 border border-transparent data-[hover=true]:border-neon-cyan/70 py-3 px-3 outline-none cursor-pointer focus:ring-0 focus:outline-none w-full block"
                     >
                       <div className="flex flex-col w-full">
                         <Badge.Anchor className="w-full relative flex items-center justify-between">
@@ -364,7 +364,7 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
                             {acc.bank_name}
                           </Label>
                           {localAccountId === acc.account_id && (
-                            <Badge className="bg-green-500 border-none w-2.5 h-2.5 min-w-0 p-0 relative transform-none rounded-full shrink-0" />
+                            <Badge className="bg-brand-green border-none w-2.5 h-2.5 min-w-0 p-0 relative transform-none rounded-full shrink-0" />
                           )}
                         </Badge.Anchor>
                         <Description className="text-xs text-[#8B8E98] font-mono tracking-wider pointer-events-none mt-1">
@@ -380,7 +380,7 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
         </div>
       </Card.Header>
 
-      <Card.Content className="flex-1 w-full min-h-0 flex items-center justify-center p-0 z-0">
+      <Card.Content className="flex-1 w-full min-h-0 flex items-center justify-center p-0 z-0 [&::-webkit-scrollbar]:hidden">
         {isLoading ? (
           <Spinner color="accent" />
         ) : config ? (

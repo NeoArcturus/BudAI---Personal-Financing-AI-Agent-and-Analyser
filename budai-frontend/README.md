@@ -1,142 +1,97 @@
-# BudAI Frontend
+# BudAI Frontend - Financial Intelligence Interface
 
-BudAI Frontend is the interactive user interface for the BudAI personal finance assistant. It provides users with a comprehensive dashboard to securely link bank accounts, visualize spending habits through dynamic analytics charts, and engage with an integrated AI chat panel for real-time financial insights and forecasting.
+BudAI is a high-fidelity, AI-powered personal finance intelligence platform. It features a **Liquid State Dashboard Architecture** designed for modularity, real-time data visualization, and autonomous financial decision-making support.
 
-This is the frontend app for BudAI, built with `Next.js 16, React 19, Tailwind CSS 4` and `Chart.js`.
+---
+
+## Visual Identity: "Obsidian Glass"
+
+The BudAI interface follows a **Cyber-Financial** aesthetic known as **Obsidian Glass**. It prioritizes depth, precision, and futuristic control through:
+
+- **Surface Strategy:** Deep obsidian backgrounds (`#0D1516`) paired with 24px backdrop blurs and semi-transparent glass layers.
+- **Chromatic Functionalism:** Neon Cyan (`#00E5FF`) for growth and action; Deep Pink (`#FF3366`) for risk and attention.
+- **Elevation through Light:** Inset glows and soft neon halos replace traditional drop shadows to simulate a premium hardware interface.
+
+---
+
+## Core Architecture
+
+### 1. Liquid State Dashboard
+A fully dynamic workspace powered by `@dnd-kit`. Widgets are not fixed; they are draggable, sortable, and resizable. The dashboard layout is "liquid," adapting in real-time to user priority and data density.
+
+### 2. Context-Isolated Widgets
+In strict adherence to architectural mandates, every widget (e.g., `CashFlowWidget`, `PortfolioCardWidget`) is an independent system. They manage:
+- Their own state and business logic.
+- Isolated data fetching from dedicated endpoints.
+- Independent account-selection and date-filtering contexts.
+
+### 3. AI-Native Integration
+The frontend is built to communicate with a multi-agent backend orchestrator:
+- **Streaming Intelligence:** Real-time chat with "Neural Core" persona.
+- **Semantic Triggers:** The AI can "emit" visualization commands (e.g., `[TRIGGER_CHART]`), which the interface intercepts to render interactive data on the fly.
+- **Explanation Engine:** Dedicated pipeline for generating AI-driven insights on complex financial datasets.
+
+---
 
 ## Tech Stack
 
-- Next.js 16 (App Router)
-- React 19
-- TypeScript 5
-- Tailwind CSS 4
-- Chart.js
+- **Framework:** Next.js 15+ (App Router)
+- **Language:** TypeScript (Strict Mode)
+- **UI Library:** [HeroUI v3](https://heroui.com/) (formerly NextUI)
+- **Layout & Drag:** `@dnd-kit/core` & `@dnd-kit/sortable`
+- **Styling:** Tailwind CSS 4 (with CSS Variables for Obsidian Glass tokens)
+- **Charting:** `Chart.js` (Centralized via `CoreChartEngine`)
+- **Icons:** `Lucide-React`
 
-## Prerequisites
-
-- Node.js 20+ recommended
-- npm
-- BudAI backend running on `http://localhost:8080`
-
-## Getting Started
-
-From this folder (`budai-frontend`):
-
-```bash
-npm install
-npm run dev
-```
-
-Open `http://localhost:3000` in your browser.
-
-## Available Scripts
-
-- `npm run dev` - start local dev server
-- `npm run build` - build for production
-- `npm run start` - start production server
-- `npm run lint` - run ESLint
-
-## Backend Dependency
-
-The frontend currently relies on the FastAPI backend running locally on port `8080`. API calls are configured to hit the following base endpoints:
-
-- **Auth & TrueLayer:** `http://localhost:8080/api/auth/...` (Login, Token Exchange, Connection Revocation)
-- **Banking Data:** `http://localhost:8080/api/accounts/...` (Fetching balances and transaction history)
-- **Conversational AI:** `http://localhost:8080/api/chat/` (Streaming the multi-agent graph responses)
-- **Analytics & Visualizations:** `http://localhost:8080/api/media/execute` (Triggering cache generation for charts and radar data)
-
-**Crucial:** You must start the backend server (`uvicorn main:app --port 8080`) _before_ interacting with the frontend. Login, TrueLayer bank linking, chat functionality, and dynamic chart rendering will fail if the backend is unreachable.
-
-> **Note for Production:** While these URLs are currently hardcoded for local development, it is recommended to eventually extract the base URL into a `.env.local` variable (e.g., `NEXT_PUBLIC_API_URL`) to allow seamless transitioning between local testing and live production environments.
-
-## Key Frontend Routes
-
-The application uses the Next.js App Router. Routes are broadly split into public authentication flows and private, protected dashboard views.
-
-### Public Routes
-
-- `/` - **Landing Page:** The initial entry point of the application, introducing BudAI and directing users to authenticate.
-- `/login` (via `app/(auth)/login`) - **Authentication:** Existing user login. Upon success, the `budai_token` is saved to browser local storage.
-- `/register` (via `app/(auth)/register`) - **Onboarding:** New user registration and initial account setup.
-
-### Protected Routes (`app/(protected)/`)
-
-All routes within the `(protected)` group share a common layout (`layout.tsx`). This layout ensures that the Left Navigation Sidebar and the right-side BudAI Chat panel are persistently visible across all dashboard views.
-
-- `/home` - **Main Dashboard:** The primary landing view post-login. Displays high-level statistic cards (`StatCard.tsx`), a feed of recent bank transactions (`TransactionFeed.tsx`), and quick actions (`QuickActions.tsx`).
-- `/finances` - **Analytics & Forecasting:** A deep dive into the user's financial data. This route houses the dynamic visual charts (`ChartDisplay.tsx`, `DynamicChart.tsx`) for categorized spending, cash flow, and future balance predictions.
-- `/profile` - **User Management:** Displays user account details, preferences, and the status of linked bank accounts (TrueLayer connections).
+---
 
 ## Project Structure
 
 ```text
-budai-frontend/
-├── app/
-│   ├── (auth)/
-│   │   ├── login/
-│   │   └── register/
-│   ├── (protected)/
-│   │   ├── _components/
-│   │   │   ├── BudAIChat.tsx
-│   │   │   ├── ChartDisplay.tsx
-│   │   │   ├── DynamicChart.tsx
-│   │   │   ├── QuickActions.tsx
-│   │   │   ├── SidebarLeft.tsx
-│   │   │   ├── SidebarRight.tsx
-│   │   │   ├── StatCard.tsx
-│   │   │   ├── TransactionFeed.tsx
-│   │   │   ├── TransactionsControl.tsx
-│   │   │   └── TransactionsModal.tsx
-│   │   ├── _utils/
-│   │   │   └── ChartBuilder.tsx
-│   │   ├── finances/
-│   │   │   └── page.tsx
-│   │   ├── home/
-│   │   │   └── page.tsx
-│   │   ├── profile/
-│   │   │   └── page.tsx
-│   │   └── layout.tsx
-│   ├── context/
-│   │   └── AppContext.tsx
-│   ├── favicon.ico
-│   ├── globals.css
-│   ├── layout.tsx
-│   └── page.tsx
-├── components/
-│   └── ui/
-│       ├── Badge.tsx
-│       ├── button.tsx
-│       ├── card.tsx
-│       ├── dialog.tsx
-│       ├── input.tsx
-│       ├── scroll-area.tsx
-│       └── skeleton.tsx
-├── lib/
-│   │── api.ts
-│   └── utils.ts
-├── node_modules/
-├── public/
-├── types/
-├── .env
-├── .gitignore
-├── components.json
-├── eslint.config.mjs
-├── next-env.d.ts
-├── next.config.ts
-├── package-lock.json
-├── package.json
-├── postcss.config.mjs
-├── README.md
-├── tailwind.config.ts
-└── tsconfig.json
+app/
+├── (auth)/                # Context-isolated login/register flows
+├── (protected)/           # Authenticated dashboard workspace
+│   ├── _components/       # Modular Dashboard Widgets (CashFlow, Ledger, etc.)
+│   ├── _utils/            # Centralized Chart Builders and visual logic
+│   ├── home/              # Liquid Dashboard entry point
+│   ├── transactions/      # Transaction Intelligence Ledger
+│   ├── forecasting/       # Wealth & Growth tracking
+│   ├── health/            # Financial Health Radar
+│   └── layout.tsx         # Persistent context provider
+├── context/               # Global AppContext (Session & AI Orchestration)
+└── globals.css            # Obsidian Glass global definitions & scrollbar-hide
+lib/                       # API clients and utility functions
+types/                     # Strict TypeScript interfaces for financial models
 ```
 
 ---
 
-## Notes
+## Getting Started
 
-- **Authentication:** The session token is stored securely in the browser's local storage as `budai_token`. It acts as a Bearer token and must be attached to the `Authorization` header for all protected backend requests.
-- **Global State:** The frontend utilizes React Context (`context/AppContext.tsx`) to manage global app state, including user session data and active TrueLayer bank connections.
-- **Persistent Layout:** The `app/(protected)/layout.tsx` enforces a persistent dashboard shell. The Left Navigation handles page routing, while the right-side BudAI Chat panel remains continuously mounted. This ensures that the user's conversational context and chat history are never lost when navigating between the home and finances views.
-- **Dynamic UI Rendering:** The chat component is programmed to intercept specific trigger tags sent by the backend graph orchestrator (e.g., `[TRIGGER_CASH_FLOW_CHART:CACHE_123]`). When detected, the frontend strips the raw text tag and dynamically renders the corresponding `Chart.js` component using the provided cache ID.
-- **Environment Configuration:** If the backend API host changes from `localhost:8080` (e.g., during deployment), ensure you update the fetch URLs across the frontend services. Migrating these hardcoded URLs to a `.env.local` file (e.g., using `NEXT_PUBLIC_API_URL`) is recommended for production.
+### Prerequisites
+- **Node.js:** 20+ (LTS)
+- **Backend:** [BudAI Backend](https://github.com/...) running on `http://localhost:8080`
+
+### Installation
+```bash
+npm install
+```
+
+### Development
+```bash
+npm run dev
+```
+
+### Build
+```bash
+npm run build
+```
+
+---
+
+## Engineering Standards
+
+- **HeroUI Enforcement:** Native HTML elements are avoided; all UI components leverage HeroUI for design consistency.
+- **Scrollbar Policy:** All visible scrollbars are hidden using utility classes (`scrollbar-hide`) to maintain the "app-like" aesthetic.
+- **Type Safety:** Zero usage of `any`. All API responses and component props must be explicitly typed in `/types/index.ts`.
+- **Widget Independence:** Widgets must never share mutable state or rely on parent-level fetch managers.

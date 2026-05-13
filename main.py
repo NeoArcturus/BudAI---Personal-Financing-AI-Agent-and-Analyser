@@ -4,6 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 import sqlite3
 from contextlib import asynccontextmanager
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
+
 from config import Base, engine, DATABASE_URL, ALLOWED_ORIGINS
 from controllers.auth_controller import auth_router, callback_router
 from controllers.account_controller import account_router
@@ -43,6 +46,8 @@ async def lifespan(app: FastAPI):
     bridge = MCPBridge()
     logger.info(f"Local Workspace: {bridge.workspace_dir}")
     logger.info("Inbound Filesystem Watchdog: DISABLED")
+
+    FastAPICache.init(InMemoryBackend(), prefix="budai-cache")
 
     logger.info("="*50)
 

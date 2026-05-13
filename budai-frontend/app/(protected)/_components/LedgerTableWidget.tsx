@@ -28,6 +28,22 @@ interface LedgerTableWidgetProps {
   onRemove?: () => void;
 }
 
+// Strictly type the potential fields coming from various banking APIs (TrueLayer, Plaid, etc.)
+type ExtendedTx = Transaction & {
+  transaction_uuid?: string;
+  id?: string;
+  transaction_id?: string;
+  TransactionId?: string;
+  category?: string;
+  Category?: string;
+  amount?: number;
+  Amount?: number;
+  description?: string;
+  Description?: string;
+  timestamp?: string;
+  date?: string;
+};
+
 const STANDARD_CATEGORIES = [
   "Food & Dining",
   "Transportation",
@@ -47,7 +63,7 @@ export default function LedgerTableWidget({
   const [localAccountId, setLocalAccountId] = useState<string>(
     accounts.length > 0 ? accounts[0].account_id : "",
   );
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<ExtendedTx[]>([]);
   const [fromDate, setFromDate] = useState<CalendarDate | null>(
     parseDate("2025-11-10"),
   );
@@ -56,7 +72,7 @@ export default function LedgerTableWidget({
   );
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [selectedTx, setSelectedTx] = useState<ExtendedTx | null>(null);
   const [editCategory, setEditCategory] = useState<string>("");
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
 
@@ -85,7 +101,7 @@ export default function LedgerTableWidget({
         );
         if (response.ok) {
           const data = await response.json();
-          setTransactions((data.transactions as Transaction[]) || []);
+          setTransactions((data.transactions as ExtendedTx[]) || []);
         }
       } catch (error) {
         console.error(error);
@@ -102,37 +118,58 @@ export default function LedgerTableWidget({
 
   const handleUpdateCategory = async () => {
     if (!selectedTx || !editCategory) return;
+
+    // Safely extract the ID regardless of the banking API format
+    const txId =
+      selectedTx.transaction_uuid ||
+      selectedTx.id ||
+      selectedTx.transaction_id ||
+      selectedTx.TransactionId;
+
+    if (!txId) {
+      console.error("Missing required transaction ID for update.", {
+        availableFields: Object.keys(selectedTx),
+      });
+      return;
+    }
+
     setIsUpdating(true);
     try {
-      const txId = selectedTx.transaction_uuid || selectedTx.id;
-      if (!txId) return;
-
       const res = await apiFetch(
         "/api/categorizer/labels",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            transaction_uuid: txId,
+            transaction_uuid: String(txId),
             corrected_label: editCategory,
             retrain_model: true,
           }),
         },
-        true,
+        true, // Ensure JWT is passed
       );
 
       if (res.ok) {
         setTransactions((prev) =>
-          prev.map((t) =>
-            t.transaction_uuid === txId || t.id === txId
+          prev.map((t) => {
+            const currentId =
+              t.transaction_uuid || t.id || t.transaction_id || t.TransactionId;
+            return currentId === txId
               ? { ...t, category: editCategory, Category: editCategory }
-              : t,
-          ),
+              : t;
+          }),
         );
         setSelectedTx(null);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        console.error(
+          "Backend failed to update category:",
+          res.status,
+          errorData,
+        );
       }
     } catch (e) {
-      console.error(e);
+      console.error("Network error during category update:", e);
     } finally {
       setIsUpdating(false);
     }
@@ -149,13 +186,13 @@ export default function LedgerTableWidget({
       Transportation:
         "bg-[#FFEA00]/20 text-[#FFEA00] border-[#FFEA00]/40 shadow-[0_0_10px_rgba(255,234,0,0.15)]",
       "Bills & Utilities":
-        "bg-[#00F0FF]/20 text-[#00F0FF] border-[#00F0FF]/40 shadow-[0_0_10px_rgba(0,240,255,0.15)]",
+        "bg-neon-cyan/20 text-neon-cyan border-neon-cyan/40 shadow-[0_0_10px_rgba(0,240,255,0.15)]",
       Shopping:
         "bg-[#B900FF]/20 text-[#B900FF] border-[#B900FF]/40 shadow-[0_0_10px_rgba(185,0,255,0.15)]",
       Entertainment:
-        "bg-[#FF3366]/20 text-[#FF3366] border-[#FF3366]/40 shadow-[0_0_10px_rgba(255,51,102,0.15)]",
+        "bg-deep-pink/20 text-deep-pink border-deep-pink/40 shadow-[0_0_10px_rgba(255,51,102,0.15)]",
       "Health & Wellness":
-        "bg-[#00E5FF]/20 text-[#00E5FF] border-[#00E5FF]/40 shadow-[0_0_10px_rgba(0,229,255,0.15)]",
+        "bg-neon-cyan/20 text-neon-cyan border-neon-cyan/40 shadow-[0_0_10px_rgba(0,229,255,0.15)]",
       "Transfers & Investments":
         "bg-[#7FFF00]/20 text-[#7FFF00] border-[#7FFF00]/40 shadow-[0_0_10px_rgba(127,255,0,0.15)]",
       "High-Risk / Anomaly":
@@ -179,8 +216,8 @@ export default function LedgerTableWidget({
   };
 
   return (
-    <Card className="w-full h-full bg-[#13151D]/40 bg-linear-to-br from-white/8 to-transparent backdrop-blur-xl rounded-3xl border border-white/8 shadow-2xl flex flex-col overflow-hidden relative">
-      <Card.Header className="flex flex-col p-6 border-b border-white/5 shrink-0 gap-4 w-full">
+    <Card className="w-full h-full bg-obsidian/40 backdrop-blur-xl rounded-3xl border border-white/8 shadow-2xl flex flex-col overflow-hidden relative font-geist">
+      <Card.Header className="flex flex-col p-6 border-b border-white/8 shrink-0 gap-4 w-full">
         <div className="flex justify-between items-center w-full">
           <Card.Title className="text-white font-bold text-2xl tracking-tight whitespace-nowrap">
             Transaction history
@@ -202,7 +239,7 @@ export default function LedgerTableWidget({
           >
             <DateField.Group
               fullWidth
-              className="bg-[#181A20] border border-[#2A2D35] rounded-xl px-3 h-10 flex items-center transition-colors focus-within:border-cyan-600"
+              className="bg-[#181A20] border border-white/8 rounded-xl px-3 h-10 flex items-center transition-colors focus-within:border-neon-cyan"
             >
               <DateField.Input className="flex-1 bg-transparent text-white text-sm outline-none">
                 {(segment) => (
@@ -218,20 +255,20 @@ export default function LedgerTableWidget({
                 </DatePicker.Trigger>
               </DateField.Suffix>
             </DateField.Group>
-            <DatePicker.Popover className="bg-black border-2 border-cyan-400/70 rounded-2xl p-4 shadow-2xl z-50">
+            <DatePicker.Popover className="bg-obsidian border border-neon-cyan/50 rounded-2xl p-4 shadow-2xl z-50 backdrop-blur-xl">
               <Calendar aria-label="From date" className="w-full min-w-65">
                 <Calendar.Header className="flex items-center gap-2 mb-4">
                   <Calendar.YearPickerTrigger className="flex items-center gap-1 mr-auto cursor-pointer hover:opacity-80 transition-opacity">
-                    <Calendar.YearPickerTriggerHeading className="text-base font-semibold text-cyan-400" />
+                    <Calendar.YearPickerTriggerHeading className="text-base font-semibold text-neon-cyan" />
                     <Calendar.YearPickerTriggerIndicator className="text-[#8B8E98] w-4 h-4" />
                   </Calendar.YearPickerTrigger>
                   <Calendar.NavButton
                     slot="previous"
-                    className="text-cyan-400 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                    className="text-neon-cyan w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
                   />
                   <Calendar.NavButton
                     slot="next"
-                    className="text-cyan-400 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                    className="text-neon-cyan w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
                   />
                 </Calendar.Header>
                 <Calendar.Grid className="w-full border-collapse">
@@ -246,7 +283,7 @@ export default function LedgerTableWidget({
                     {(date) => (
                       <Calendar.Cell
                         date={date}
-                        className="w-8 h-8 flex items-center justify-center mx-auto text-sm text-white rounded-full hover:bg-white/10 data-[selected=true]:bg-cyan-600 data-[selected=true]:text-white cursor-pointer outline-none transition-colors"
+                        className="w-8 h-8 flex items-center justify-center mx-auto text-sm text-white rounded-full hover:bg-white/10 data-[selected=true]:bg-neon-cyan data-[selected=true]:text-obsidian cursor-pointer outline-none transition-colors"
                       />
                     )}
                   </Calendar.GridBody>
@@ -265,7 +302,7 @@ export default function LedgerTableWidget({
           >
             <DateField.Group
               fullWidth
-              className="bg-[#181A20] border border-[#2A2D35] rounded-xl px-3 h-10 flex items-center transition-colors focus-within:border-cyan-600"
+              className="bg-[#181A20] border border-white/8 rounded-xl px-3 h-10 flex items-center transition-colors focus-within:border-neon-cyan"
             >
               <DateField.Input className="flex-1 bg-transparent text-white text-sm outline-none">
                 {(segment) => (
@@ -281,20 +318,20 @@ export default function LedgerTableWidget({
                 </DatePicker.Trigger>
               </DateField.Suffix>
             </DateField.Group>
-            <DatePicker.Popover className="bg-black border-2 border-cyan-400/70 rounded-2xl p-4 shadow-2xl z-50">
+            <DatePicker.Popover className="bg-obsidian border border-neon-cyan/50 rounded-2xl p-4 shadow-2xl z-50 backdrop-blur-xl">
               <Calendar aria-label="To date" className="w-full min-w-65">
                 <Calendar.Header className="flex items-center gap-2 mb-4">
                   <Calendar.YearPickerTrigger className="flex items-center gap-1 mr-auto cursor-pointer hover:opacity-80 transition-opacity">
-                    <Calendar.YearPickerTriggerHeading className="text-base font-semibold text-cyan-400" />
+                    <Calendar.YearPickerTriggerHeading className="text-base font-semibold text-neon-cyan" />
                     <Calendar.YearPickerTriggerIndicator className="text-[#8B8E98] w-4 h-4" />
                   </Calendar.YearPickerTrigger>
                   <Calendar.NavButton
                     slot="previous"
-                    className="text-cyan-400 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                    className="text-neon-cyan w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
                   />
                   <Calendar.NavButton
                     slot="next"
-                    className="text-cyan-400 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                    className="text-neon-cyan w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
                   />
                 </Calendar.Header>
                 <Calendar.Grid className="w-full border-collapse">
@@ -309,7 +346,7 @@ export default function LedgerTableWidget({
                     {(date) => (
                       <Calendar.Cell
                         date={date}
-                        className="w-8 h-8 flex items-center justify-center mx-auto text-sm text-white rounded-full hover:bg-white/10 data-[selected=true]:bg-cyan-600 data-[selected=true]:text-white cursor-pointer outline-none transition-colors"
+                        className="w-8 h-8 flex items-center justify-center mx-auto text-sm text-white rounded-full hover:bg-white/10 data-[selected=true]:bg-neon-cyan data-[selected=true]:text-obsidian cursor-pointer outline-none transition-colors"
                       />
                     )}
                   </Calendar.GridBody>
@@ -324,7 +361,7 @@ export default function LedgerTableWidget({
                 <div
                   role="button"
                   tabIndex={0}
-                  className="h-10 min-h-10 min-w-30 max-w-50 bg-[#181A20] hover:bg-white/10 border border-[#2A2D35] text-sm text-white font-medium rounded-xl px-4 flex items-center justify-between transition-all cursor-pointer outline-none"
+                  className="h-10 min-h-10 min-w-30 max-w-50 bg-[#181A20] hover:bg-white/10 border border-white/8 text-sm text-white font-medium rounded-xl px-4 flex items-center justify-between transition-all cursor-pointer outline-none focus-within:border-neon-cyan"
                 >
                   <span className="truncate pointer-events-none">
                     {activeAccountName}
@@ -335,7 +372,7 @@ export default function LedgerTableWidget({
                   />
                 </div>
               </Dropdown.Trigger>
-              <Dropdown.Popover className="bg-black border-2 border-cyan-400/70 shadow-2xl rounded-2xl min-w-50 z-50">
+              <Dropdown.Popover className="bg-obsidian border border-neon-cyan/50 shadow-2xl rounded-2xl min-w-50 z-50 backdrop-blur-xl">
                 <Dropdown.Menu
                   items={accounts}
                   selectionMode="single"
@@ -353,7 +390,7 @@ export default function LedgerTableWidget({
                     <Dropdown.Item
                       id={acc.account_id}
                       textValue={acc.bank_name}
-                      className="rounded-xl transition-all data-[hover=true]:bg-white/5 data-[hover=true]:ring-1 data-[hover=true]:ring-cyan-400/70 border border-transparent data-[hover=true]:border-cyan-400/70 py-3 px-3 outline-none cursor-pointer focus:ring-0 focus:outline-none w-full block"
+                      className="rounded-xl transition-all data-[hover=true]:bg-white/5 data-[hover=true]:ring-1 data-[hover=true]:ring-neon-cyan/70 border border-transparent data-[hover=true]:border-neon-cyan/70 py-3 px-3 outline-none cursor-pointer focus:ring-0 focus:outline-none w-full block"
                     >
                       <div className="flex flex-col w-full">
                         <Badge.Anchor className="w-full relative flex items-center justify-between">
@@ -361,7 +398,7 @@ export default function LedgerTableWidget({
                             {acc.bank_name}
                           </Label>
                           {localAccountId === acc.account_id && (
-                            <Badge className="bg-green-500 border-none w-2.5 h-2.5 min-w-0 p-0 relative transform-none rounded-full shrink-0" />
+                            <Badge className="bg-brand-green border-none w-2.5 h-2.5 min-w-0 p-0 relative transform-none rounded-full shrink-0" />
                           )}
                         </Badge.Anchor>
                         <Description className="text-xs text-[#8B8E98] font-mono tracking-wider pointer-events-none mt-1">
@@ -391,7 +428,7 @@ export default function LedgerTableWidget({
           <Table className="w-full h-full text-left relative table-fixed">
             <Table.ScrollContainer className="h-full w-full overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] px-2 pb-4">
               <Table.Content aria-label="Transaction Ledger" className="w-full">
-                <Table.Header className="sticky top-0 bg-[#13151D]/90 backdrop-blur-md z-10 border-b border-white/10 w-full">
+                <Table.Header className="sticky top-0 bg-obsidian/90 backdrop-blur-md z-10 border-b border-white/8 w-full">
                   <Table.Column
                     isRowHeader
                     className="py-4 px-6 font-semibold uppercase tracking-wider text-[10px] text-[#5E6272] w-[20%] sm:w-[40%]"
@@ -437,11 +474,11 @@ export default function LedgerTableWidget({
                               color="accent"
                               className={
                                 isPositive
-                                  ? "w-9 h-9 shrink-0 shadow-md rounded-full flex items-center justify-center border-2 border-green-500 bg-green-500/40"
-                                  : "w-9 h-9 shrink-0 shadow-md rounded-full flex items-center justify-center border-2 border-red-500 bg-red-500/40"
+                                  ? "w-9 h-9 shrink-0 shadow-md rounded-full flex items-center justify-center border-2 border-neon-cyan bg-neon-cyan/40"
+                                  : "w-9 h-9 shrink-0 shadow-md rounded-full flex items-center justify-center border-2 border-deep-pink bg-deep-pink/40"
                               }
                             >
-                              <Avatar.Fallback className="w-full h-full flex items-center justify-center font-bold text-sm leading-none m-0 p-0">
+                              <Avatar.Fallback className="w-full h-full flex items-center justify-center font-bold text-sm leading-none m-0 p-0 text-white">
                                 {initial}
                               </Avatar.Fallback>
                             </Avatar>
@@ -454,7 +491,7 @@ export default function LedgerTableWidget({
                           <span
                             className={cn(
                               "text-sm font-medium",
-                              isPositive ? "text-green-500" : "text-red-500",
+                              isPositive ? "text-neon-cyan" : "text-deep-pink",
                             )}
                           >
                             {isPositive ? "+" : "-"} £{" "}
@@ -483,7 +520,7 @@ export default function LedgerTableWidget({
                                 setSelectedTx(tx);
                                 setEditCategory(cat);
                               }}
-                              className="text-[#5E6272] hover:text-[#00E5FF] hover:bg-[#00E5FF]/10 min-w-8 w-8 h-8 rounded-full cursor-pointer transition-colors flex items-center justify-center p-0 m-0"
+                              className="text-[#5E6272] hover:text-neon-cyan hover:bg-neon-cyan/10 min-w-8 w-8 h-8 rounded-full cursor-pointer transition-colors flex items-center justify-center p-0 m-0"
                             >
                               <Pencil size={14} />
                             </Button>
@@ -507,7 +544,7 @@ export default function LedgerTableWidget({
       >
         <Modal.Backdrop className="fixed inset-0 z-100 bg-black/60 backdrop-blur-sm">
           <Modal.Container className="fixed inset-0 z-101 flex items-center justify-center p-4">
-            <Modal.Dialog className="bg-[#13151D] border border-[#2A2D35] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] p-6 relative max-w-md w-full pointer-events-auto">
+            <Modal.Dialog className="bg-obsidian border border-white/8 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] p-6 relative max-w-md w-full pointer-events-auto backdrop-blur-xl">
               <Modal.CloseTrigger className="absolute top-4 right-4 text-[#8B8E98] hover:text-white transition-colors cursor-pointer" />
               <Modal.Header className="mb-6">
                 <Modal.Heading className="text-xl font-bold text-white tracking-tight">
@@ -527,7 +564,7 @@ export default function LedgerTableWidget({
                           "Unknown"}
                       </p>
                     </div>
-                    <div className="flex justify-between items-center bg-[#181A20] p-4 rounded-2xl border border-white/5">
+                    <div className="flex justify-between items-center bg-obsidian/40 p-4 rounded-2xl border border-white/8">
                       <div className="flex flex-col gap-1">
                         <Label className="text-[10px] font-bold text-[#5E6272] uppercase tracking-widest">
                           Amount
@@ -538,8 +575,8 @@ export default function LedgerTableWidget({
                             (selectedTx.amount ?? selectedTx.Amount ?? 0) > 0 ||
                               selectedTx.category === "Income" ||
                               selectedTx.Category === "Income"
-                              ? "text-[#00E096]"
-                              : "text-[#FF3366]",
+                              ? "text-neon-cyan"
+                              : "text-deep-pink",
                           )}
                         >
                           {(selectedTx.amount ?? selectedTx.Amount ?? 0) > 0 ||
@@ -574,7 +611,7 @@ export default function LedgerTableWidget({
                           <div
                             role="button"
                             tabIndex={0}
-                            className="w-full relative flex items-center justify-center bg-transparent hover:bg-white/5 border border-cyan-400/70 text-white rounded-xl h-12 px-4 cursor-pointer transition-colors outline-none"
+                            className="w-full relative flex items-center justify-center bg-transparent hover:bg-white/5 border border-neon-cyan/70 text-white rounded-xl h-12 px-4 cursor-pointer transition-colors outline-none"
                           >
                             <ChevronDown
                               size={16}
@@ -586,7 +623,7 @@ export default function LedgerTableWidget({
                           </div>
                         </Dropdown.Trigger>
                         <Dropdown.Popover
-                          className="bg-[#101115] border border-cyan-400/70 shadow-2xl rounded-2xl w-50 min-w-50"
+                          className="bg-obsidian border border-neon-cyan/70 shadow-2xl rounded-2xl w-50 min-w-50 backdrop-blur-xl"
                           placement="bottom left"
                         >
                           <Dropdown.Menu
@@ -616,7 +653,7 @@ export default function LedgerTableWidget({
                                     {cat.name}
                                   </Label>
                                   {editCategory === cat.name && (
-                                    <Badge className="bg-green-500 border-none w-2.5 h-2.5 min-w-0 p-0 relative transform-none rounded-full shrink-0" />
+                                    <Badge className="bg-brand-green border-none w-2.5 h-2.5 min-w-0 p-0 relative transform-none rounded-full shrink-0" />
                                   )}
                                 </Badge.Anchor>
                               </Dropdown.Item>
@@ -640,7 +677,7 @@ export default function LedgerTableWidget({
                   variant="primary"
                   onPress={handleUpdateCategory}
                   isDisabled={isUpdating}
-                  className="bg-[#4D7CFF] hover:bg-[#4D7CFF]/80 text-white font-semibold px-8 h-11 rounded-xl transition-colors cursor-pointer border-none"
+                  className="bg-neon-cyan hover:bg-neon-cyan/80 text-obsidian font-bold px-8 h-11 rounded-xl transition-colors cursor-pointer border-none shadow-[0_0_15px_rgba(0,229,255,0.4)]"
                 >
                   {isUpdating ? "Retraining..." : "Update & Retrain"}
                 </Button>

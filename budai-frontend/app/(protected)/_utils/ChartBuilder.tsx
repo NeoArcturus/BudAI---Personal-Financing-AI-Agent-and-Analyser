@@ -42,16 +42,16 @@ const baseOptions = {
       position: "top" as const,
       labels: {
         color: "#94a3b8",
-        font: { family: "monospace" },
+        font: { family: "Geist, monospace" },
         usePointStyle: true,
         boxWidth: 8,
       },
     },
     tooltip: {
-      backgroundColor: "rgba(13, 17, 23, 0.95)",
-      titleColor: "#00FFAA",
+      backgroundColor: "rgba(13, 21, 22, 0.95)",
+      titleColor: "#00E5FF",
       bodyColor: "#e2e8f0",
-      borderColor: "#1e293b",
+      borderColor: "rgba(255, 255, 255, 0.08)",
       borderWidth: 1,
       padding: 12,
       usePointStyle: true,
@@ -60,8 +60,8 @@ const baseOptions = {
   scales: {
     y: {
       grace: "5%",
-      grid: { color: "#1e293b", drawBorder: false },
-      ticks: { color: "#94a3b8", font: { family: "monospace" } },
+      grid: { color: "rgba(255, 255, 255, 0.05)", drawBorder: false },
+      ticks: { color: "#94a3b8", font: { family: "Geist, monospace" } },
     },
     x: {
       grid: { display: false, drawBorder: false },
@@ -71,12 +71,11 @@ const baseOptions = {
 };
 
 const colorPalette = [
-  "#00E5FF",
-  "#FF007F",
+  "#00E5FF", // Neon Cyan
+  "#FF3366", // Deep Pink
   "#7FFF00",
   "#B900FF",
   "#FFEA00",
-  "#FF3366",
   "#00F0FF",
   "#39FF14",
 ];
@@ -89,15 +88,17 @@ const getColorForMetric = (
   if (
     lower.includes("balance") ||
     lower.includes("flow") ||
-    lower.includes("optimal")
+    lower.includes("optimal") ||
+    lower.includes("expected")
   )
     return "#00E5FF";
   if (
     lower.includes("expense") ||
     lower.includes("spend") ||
-    lower.includes("careless")
+    lower.includes("careless") ||
+    lower.includes("projected")
   )
-    return "#FF007F";
+    return "#FF3366";
   if (lower.includes("income")) return "#B900FF";
   return colorPalette[defaultIndex % colorPalette.length];
 };
@@ -352,13 +353,13 @@ export const buildChartConfig = (
           {
             label: "Health Index",
             data: scores,
-            backgroundColor: "rgba(0, 255, 170, 0.2)",
-            borderColor: "#00FFAA",
+            backgroundColor: "rgba(0, 229, 255, 0.2)",
+            borderColor: "#00E5FF",
             borderWidth: 2,
-            pointBackgroundColor: "#161B22",
-            pointBorderColor: "#00FFAA",
+            pointBackgroundColor: "#0D1516",
+            pointBorderColor: "#00E5FF",
             pointHoverBackgroundColor: "#fff",
-            pointHoverBorderColor: "#00FFAA",
+            pointHoverBorderColor: "#00E5FF",
             pointHoverRadius: 6,
           },
         ],
@@ -370,11 +371,11 @@ export const buildChartConfig = (
           x: { display: false },
           y: { display: false },
           r: {
-            angleLines: { color: "#1e293b" },
-            grid: { color: "#1e293b" },
+            angleLines: { color: "rgba(255, 255, 255, 0.08)" },
+            grid: { color: "rgba(255, 255, 255, 0.08)" },
             pointLabels: {
               color: "#94a3b8",
-              font: { family: "monospace", size: 11 },
+              font: { family: "Geist, monospace", size: 11 },
             },
             ticks: { display: false, min: 0, max: 100, stepSize: 20 },
           },
@@ -413,7 +414,7 @@ export const buildChartConfig = (
           ),
           borderColor: metricColor,
           backgroundColor: `${metricColor}1A`,
-          fill: false,
+          fill: true,
           tension: 0.4,
           pointRadius: 0,
           pointHitRadius: 10,

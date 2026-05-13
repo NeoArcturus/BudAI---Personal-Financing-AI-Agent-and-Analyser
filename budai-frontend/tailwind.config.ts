@@ -9,22 +9,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        obsidian: "#0d1516",
+        "neon-cyan": "#00e5ff",
+        "deep-pink": "#ff3366",
         app: {
-          bg: "#101115",
-          surface: "#1A1C24",
-          sidebar: "#14151B",
-          border: "#2A2D35",
+          bg: "#0d1516",
+          surface: "#111b1d",
+          sidebar: "#0a1112",
+          border: "rgba(255, 255, 255, 0.08)",
         },
         brand: {
+          cyan: "#00e5ff",
+          pink: "#ff3366",
           blue: "#3D73FF",
           orange: "#FF8A4C",
-          pink: "#FF5E98",
           green: "#00E096",
         },
         text: {
           main: "#FFFFFF",
           muted: "#8B8E98",
         },
+      },
+      fontFamily: {
+        sans: ["Geist", "Inter", "sans-serif"],
+        geist: ["Geist", "sans-serif"],
       },
     },
   },

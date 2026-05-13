@@ -1,22 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
+from fastapi_cache.decorator import cache
+from fastapi_cache import FastAPICache
 
 from middleware.auth_middleware import get_current_user
 from models.database_models import User
 from schemas.api_schema import TransactionLabelCorrectionRequest, RetrainCategorizerRequest
 from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
 from config import SessionLocal
-
+from utils.cache_utils import user_cache_key_builder
 
 categorizer_router = APIRouter(prefix="/api/categorizer", tags=["categorizer"])
 
 
 @categorizer_router.post("/labels")
-def save_manual_label(payload: TransactionLabelCorrectionRequest, current_user: User = Depends(get_current_user)):
+async def save_manual_label(payload: TransactionLabelCorrectionRequest, current_user: User = Depends(get_current_user)):
     try:
         normalized_label = payload.corrected_label.strip()
         if not normalized_label:
-            raise HTTPException(status_code=400, detail="corrected_label cannot be empty.")
+            raise HTTPException(
+                status_code=400, detail="corrected_label cannot be empty.")
 
         with SessionLocal() as session:
             exists = session.execute(text("""
@@ -27,7 +30,8 @@ def save_manual_label(payload: TransactionLabelCorrectionRequest, current_user: 
                 "transaction_uuid": payload.transaction_uuid
             }).fetchone()
         if not exists:
-            raise HTTPException(status_code=404, detail="Transaction not found.")
+            raise HTTPException(
+                status_code=404, detail="Transaction not found.")
 
         agent = CategorizerAgent()
         agent.save_manual_label(
@@ -38,7 +42,11 @@ def save_manual_label(payload: TransactionLabelCorrectionRequest, current_user: 
 
         retrain_result = None
         if payload.retrain_model:
-            retrain_result = agent.retrain_from_feedback(current_user.user_uuid)
+            retrain_result = agent.retrain_from_feedback(
+                current_user.user_uuid)
+
+        await FastAPICache.clear(namespace="transactions", key=str(current_user.user_uuid))
+        await FastAPICache.clear(namespace="categorizer", key=str(current_user.user_uuid))
 
         return {
             "status": "success",
@@ -50,18 +58,23 @@ def save_manual_label(payload: TransactionLabelCorrectionRequest, current_user: 
 
 
 @categorizer_router.post("/retrain")
-def retrain_categorizer(payload: RetrainCategorizerRequest, current_user: User = Depends(get_current_user)):
+async def retrain_categorizer(payload: RetrainCategorizerRequest, current_user: User = Depends(get_current_user)):
     if not payload.force:
         return {"status": "skipped", "message": "Retraining skipped by request."}
     try:
         agent = CategorizerAgent()
         result = agent.retrain_from_feedback(current_user.user_uuid)
+
+        await FastAPICache.clear(namespace="transactions", key=str(current_user.user_uuid))
+        await FastAPICache.clear(namespace="categorizer", key=str(current_user.user_uuid))
+
         return {"status": "success", "result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @categorizer_router.get("/review-candidates")
+@cache(expire=300, namespace="categorizer", key_builder=user_cache_key_builder)
 def get_review_candidates(
     account_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=500),

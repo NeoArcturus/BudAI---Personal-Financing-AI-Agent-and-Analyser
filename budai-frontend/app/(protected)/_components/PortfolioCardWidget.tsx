@@ -4,32 +4,35 @@ import {
   ChevronRight,
   CreditCard,
   TrendingUp,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBudAI } from "@/app/context/AppContext";
 import { Card, Button, Avatar } from "@heroui/react";
+import { apiFetch } from "@/lib/api";
 
 export default function PortfolioCardWidget() {
   const { accounts } = useBudAI();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const displayAccounts = accounts.slice(0, 4);
 
   const getGradient = (index: number, expanded: boolean) => {
     if (expanded) {
       const translucentGradients = [
-        "bg-[#00E5FF]/10 border border-[#00E5FF]/50 shadow-[0_0_20px_rgba(0,229,255,0.1)]",
-        "bg-[#FF3366]/10 border border-[#FF3366]/50 shadow-[0_0_20px_rgba(255,51,102,0.1)]",
+        "bg-neon-cyan/10 border border-neon-cyan/50 shadow-[0_0_20px_rgba(0,229,255,0.1)]",
+        "bg-deep-pink/10 border border-deep-pink/50 shadow-[0_0_20px_rgba(255,51,102,0.1)]",
         "bg-[#B900FF]/10 border border-[#B900FF]/50 shadow-[0_0_20px_rgba(185,0,255,0.1)]",
         "bg-[#39FF14]/10 border border-[#39FF14]/50 shadow-[0_0_20px_rgba(57,255,20,0.1)]",
       ];
       return translucentGradients[index % translucentGradients.length];
     } else {
       const opaqueGradients = [
-        "bg-[#13151D] border border-[#00E5FF]/40 shadow-[0_0_15px_rgba(0,229,255,0.05)]",
-        "bg-[#13151D] border border-[#FF3366]/40 shadow-[0_0_15px_rgba(255,51,102,0.05)]",
-        "bg-[#13151D] border border-[#B900FF]/40 shadow-[0_0_15px_rgba(185,0,255,0.05)]",
-        "bg-[#13151D] border border-[#39FF14]/40 shadow-[0_0_15px_rgba(57,255,20,0.05)]",
+        "bg-obsidian border border-neon-cyan/40 shadow-[0_0_15px_rgba(0,229,255,0.05)]",
+        "bg-obsidian border border-deep-pink/40 shadow-[0_0_15px_rgba(255,51,102,0.05)]",
+        "bg-obsidian border border-[#B900FF]/40 shadow-[0_0_15px_rgba(185,0,255,0.05)]",
+        "bg-obsidian border border-[#39FF14]/40 shadow-[0_0_15px_rgba(57,255,20,0.05)]",
       ];
       return opaqueGradients[index % opaqueGradients.length];
     }
@@ -44,13 +47,38 @@ export default function PortfolioCardWidget() {
     return sc;
   };
 
+  const handleConnectAccount = async () => {
+    setIsConnecting(true);
+    try {
+      const res = await apiFetch("/api/auth/truelayer/status", {}, true);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.auth_url) {
+          window.location.href = data.auth_url;
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
   if (!accounts || accounts.length === 0) {
     return (
-      <Card className="w-full h-full bg-[#13151D]/40 bg-linear-to-br from-white/8 to-transparent backdrop-blur-xl rounded-3xl border border-white/8 p-6 flex flex-col shadow-2xl justify-center items-center">
+      <Card className="w-full h-full bg-obsidian/40 backdrop-blur-xl border border-white/8 p-6 flex flex-col shadow-2xl justify-center items-center font-geist">
         <CreditCard className="w-12 h-12 text-[#5E6272] mb-3 opacity-50" />
-        <span className="text-[#8B8E98] text-sm font-medium">
+        <span className="text-[#8B8E98] text-sm font-medium mb-6">
           No Active Accounts
         </span>
+        <Button
+          variant="primary"
+          onPress={handleConnectAccount}
+          isPending={isConnecting}
+          className="bg-transparent border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/10 font-bold px-6 h-11 rounded-xl transition-colors cursor-pointer"
+        >
+          Connect Account
+        </Button>
       </Card>
     );
   }
@@ -64,18 +92,27 @@ export default function PortfolioCardWidget() {
     const balance = acc.account_balance ?? acc.balance ?? 0;
 
     return (
-      <Card className="w-full h-full bg-[#13151D]/40 bg-linear-to-br from-white/8 to-transparent backdrop-blur-xl rounded-3xl border border-white/8 flex flex-col shadow-2xl overflow-hidden">
+      <Card className="w-full h-full bg-obsidian/40 backdrop-blur-xl border border-white/8 flex flex-col shadow-2xl overflow-hidden font-geist">
         <Card.Header className="flex justify-between items-center p-6 pb-4 shrink-0 z-20">
           <Card.Title className="text-white font-bold text-2xl tracking-tight">
             Active Account
           </Card.Title>
+          <Button
+            isIconOnly
+            variant="ghost"
+            onPress={handleConnectAccount}
+            isPending={isConnecting}
+            className="flex items-center justify-center p-0 text-[#8B8E98] hover:text-neon-cyan hover:bg-neon-cyan/10 min-w-8 w-8 h-8 rounded-lg cursor-pointer transition-colors border-none bg-transparent"
+          >
+            <Plus size={18} />
+          </Button>
         </Card.Header>
 
         <Card.Content className="relative flex-1 w-full p-6 pt-0 flex flex-col h-full overflow-hidden">
-          <div className="relative flex-1 w-full rounded-2xl p-8 shadow-2xl overflow-hidden flex flex-col justify-between bg-[#0A0A0A] border border-[#00E5FF]/40 group hover:border-[#00E5FF]/70 transition-colors">
+          <div className="relative flex-1 w-full rounded-2xl p-8 shadow-2xl overflow-hidden flex flex-col justify-between bg-[#0A0A0A] border border-neon-cyan/40 group hover:border-neon-cyan/70 transition-colors">
             <div className="absolute inset-0 bg-black/40 pointer-events-none z-0"></div>
-            <div className="absolute -right-32 -top-32 w-96 h-96 bg-[#00E5FF]/10 rounded-full blur-[100px] pointer-events-none z-0"></div>
-            <div className="absolute -left-32 -bottom-32 w-96 h-96 bg-[#FF3366]/5 rounded-full blur-[100px] pointer-events-none z-0"></div>
+            <div className="absolute -right-32 -top-32 w-96 h-96 bg-neon-cyan/10 rounded-full blur-[100px] pointer-events-none z-0"></div>
+            <div className="absolute -left-32 -bottom-32 w-96 h-96 bg-deep-pink/5 rounded-full blur-[100px] pointer-events-none z-0"></div>
 
             <svg
               className="absolute bottom-0 left-0 w-full h-40 opacity-40 pointer-events-none z-0"
@@ -118,7 +155,7 @@ export default function PortfolioCardWidget() {
                     maximumFractionDigits: 2,
                   })}
                 </h2>
-                <div className="flex items-center gap-2 mt-3 px-3 py-1.5 rounded-full bg-[#00E096]/10 border border-[#00E096]/20 text-[#00E096] text-xs font-bold tracking-wide w-fit">
+                <div className="flex items-center gap-2 mt-3 px-3 py-1.5 rounded-full bg-brand-green/10 border border-brand-green/20 text-brand-green text-xs font-bold tracking-wide w-fit">
                   <TrendingUp size={14} strokeWidth={3} />
                   <span>+3.2% vs last month</span>
                 </div>
@@ -152,20 +189,35 @@ export default function PortfolioCardWidget() {
   }
 
   return (
-    <Card className="w-full h-full bg-[#13151D]/40 bg-linear-to-br from-white/8 to-transparent backdrop-blur-xl rounded-3xl border border-white/8 flex flex-col shadow-2xl overflow-hidden">
+    <Card className="w-full h-full bg-obsidian/40 bg-linear-to-br from-white/8 to-transparent backdrop-blur-xl rounded-3xl border border-white/8 flex flex-col shadow-2xl overflow-hidden font-geist">
       <Card.Header className="flex justify-between items-center p-6 pb-4 shrink-0 z-20">
         <Card.Title className="text-white font-bold text-2xl tracking-tight">
           Active Accounts
         </Card.Title>
-        <Button
-          variant="primary"
-          size="sm"
-          onPress={() => setIsExpanded(!isExpanded)}
-          className="text-[#8B8E98] hover:text-white font-medium flex items-center gap-1 bg-transparent border-none cursor-pointer transition-colors"
-        >
-          {isExpanded ? "Collapse" : "Show All"}
-          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={() => setIsExpanded(!isExpanded)}
+            className="text-[#8B8E98] hover:text-white font-medium flex items-center gap-1 bg-transparent border-none cursor-pointer transition-colors"
+          >
+            {isExpanded ? "Collapse" : "Show All"}
+            {isExpanded ? (
+              <ChevronDown size={14} />
+            ) : (
+              <ChevronRight size={14} />
+            )}
+          </Button>
+          <Button
+            isIconOnly
+            variant="ghost"
+            onPress={handleConnectAccount}
+            isPending={isConnecting}
+            className="text-[#8B8E98] hover:text-neon-cyan hover:bg-neon-cyan/10 min-w-8 w-8 h-8 rounded-lg cursor-pointer transition-colors border-none bg-transparent"
+          >
+            <Plus size={18} />
+          </Button>
+        </div>
       </Card.Header>
 
       <Card.Content className="relative flex-1 w-full p-0 overflow-hidden flex flex-col">
