@@ -137,7 +137,7 @@ export default function SpendingTrendWidget({
     "Select Account";
 
   return (
-    <Card className="w-full h-full bg-[#13151D]/40 bg-linear-to-br from-white/8 to-transparent backdrop-blur-xl rounded-3xl border border-white/8 p-6 flex flex-col shadow-2xl relative overflow-hidden">
+    <Card className="w-full h-full obsidian-glass p-6 flex flex-col shadow-2xl relative overflow-hidden">
       <Card.Header className="flex flex-col gap-4 mb-6 p-0 shrink-0 w-full z-10">
         <div className="flex justify-between items-start w-full">
           <Card.Title className="text-white font-bold text-2xl tracking-tight">

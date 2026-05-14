@@ -130,7 +130,7 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
       );
       if (newConfig) {
         setChartConfig(newConfig);
-        router.push("/finances");
+        router.push("/home");
       }
     } catch (e) {
       console.error(e);

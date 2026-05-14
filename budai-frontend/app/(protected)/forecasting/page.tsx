@@ -81,7 +81,7 @@ export default function ForecastingPage() {
       </div>
 
       {/* Sidebar */}
-      <div className="relative z-10 w-64 h-full bg-obsidian/40 backdrop-blur-xl border-r border-white/8 flex flex-col justify-between py-8 px-6 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
+      <div className="relative z-10 w-64 h-full obsidian-glass flex flex-col justify-between py-8 px-6 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
         <div>
           <div className="flex items-center gap-3 mb-12">
             <div className="w-8 h-8 rounded-lg bg-linear-to-br from-neon-cyan to-[#0088FF] flex items-center justify-center shadow-[0_0_15px_rgba(0,229,255,0.4)]">
@@ -166,7 +166,7 @@ export default function ForecastingPage() {
         </div>
 
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 pb-8 overflow-y-auto [&::-webkit-scrollbar]:hidden">
-          <Card className="lg:col-span-2 bg-obsidian/40 backdrop-blur-xl border border-white/8 rounded-3xl p-6 min-h-125 flex flex-col shadow-2xl">
+          <Card className="lg:col-span-2 obsidian-glass rounded-3xl p-6 min-h-125 flex flex-col shadow-2xl">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-neon-cyan/10 flex items-center justify-center text-neon-cyan">
@@ -198,7 +198,7 @@ export default function ForecastingPage() {
           </Card>
 
           <div className="space-y-6">
-            <Card className="bg-obsidian/40 backdrop-blur-xl border border-white/8 rounded-3xl p-6 shadow-2xl">
+            <Card className="obsidian-glass rounded-3xl p-6 shadow-2xl">
               <h4 className="text-white font-bold mb-4">AI Snapshot</h4>
               <div className="space-y-4">
                 <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
@@ -222,7 +222,7 @@ export default function ForecastingPage() {
               </div>
             </Card>
 
-            <Card className="bg-obsidian/40 backdrop-blur-xl border border-white/8 rounded-3xl p-6 shadow-2xl">
+            <Card className="obsidian-glass rounded-3xl p-6 shadow-2xl">
               <h4 className="text-white font-bold mb-4">Forecast Settings</h4>
               <div className="space-y-4">
                 <div className="space-y-2">

@@ -216,7 +216,7 @@ export default function LedgerTableWidget({
   };
 
   return (
-    <Card className="w-full h-full bg-obsidian/40 backdrop-blur-xl rounded-3xl border border-white/8 shadow-2xl flex flex-col overflow-hidden relative font-geist">
+    <Card className="w-full h-full obsidian-glass shadow-2xl flex flex-col overflow-hidden relative font-geist">
       <Card.Header className="flex flex-col p-6 border-b border-white/8 shrink-0 gap-4 w-full">
         <div className="flex justify-between items-center w-full">
           <Card.Title className="text-white font-bold text-2xl tracking-tight whitespace-nowrap">

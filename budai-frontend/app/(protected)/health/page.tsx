@@ -76,7 +76,7 @@ export default function HealthPage() {
         <div className="absolute -bottom-[10%] -right-[5%] w-[70%] h-[70%] rounded-full bg-deep-pink/5 blur-[180px]"></div>
       </div>
 
-      <div className="relative z-10 w-64 h-full bg-obsidian/40 backdrop-blur-xl border-r border-white/8 flex flex-col justify-between py-8 px-6 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
+      <div className="relative z-10 w-64 h-full obsidian-glass flex flex-col justify-between py-8 px-6 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
         <div>
           <div className="flex items-center gap-3 mb-12">
             <div className="w-8 h-8 rounded-lg bg-linear-to-br from-neon-cyan to-[#0088FF] flex items-center justify-center shadow-[0_0_15px_rgba(0,229,255,0.4)]">
@@ -156,7 +156,7 @@ export default function HealthPage() {
         </div>
 
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 pb-8 overflow-y-auto [&::-webkit-scrollbar]:hidden">
-          <Card className="bg-obsidian/40 backdrop-blur-xl border border-white/8 rounded-3xl p-6 min-h-125 flex flex-col shadow-2xl">
+          <Card className="obsidian-glass rounded-3xl p-6 min-h-125 flex flex-col shadow-2xl">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-neon-cyan/10 flex items-center justify-center text-neon-cyan">
@@ -188,7 +188,7 @@ export default function HealthPage() {
           </Card>
 
           <div className="flex flex-col gap-6">
-            <Card className="bg-obsidian/40 backdrop-blur-xl border border-white/8 rounded-3xl p-8 shadow-2xl flex flex-col items-center justify-center text-center">
+            <Card className="obsidian-glass rounded-3xl p-8 shadow-2xl flex flex-col items-center justify-center text-center">
               <div className="relative w-40 h-40 flex items-center justify-center mb-6">
                 <div className="absolute inset-0 rounded-full border-4 border-white/5"></div>
                 <div className="absolute inset-0 rounded-full border-t-4 border-r-4 border-neon-cyan shadow-[0_0_20px_rgba(0,229,255,0.4)] rotate-45"></div>
@@ -206,7 +206,7 @@ export default function HealthPage() {
               </p>
             </Card>
 
-            <Card className="bg-obsidian/40 backdrop-blur-xl border border-white/8 rounded-3xl p-6 shadow-2xl flex-1">
+            <Card className="obsidian-glass rounded-3xl p-6 shadow-2xl flex-1">
               <h4 className="text-white font-bold mb-6 flex items-center gap-2">
                 <Zap size={18} className="text-neon-cyan" />
                 Actionable Insights

@@ -1,10 +1,10 @@
 import "./globals.css";
 import { Inter, Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
+import { Providers } from "./providers";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
-
-const inter = Inter({ subsets: ["latin"] });
+const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export default function RootLayout({
   children,
@@ -12,11 +12,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={cn("dark", "font-sans", geist.variable)}>
+    <html lang="en" className={cn("dark", geist.variable, inter.variable)}>
       <body
-        className={`${geist.className} bg-[#0D1516] text-white antialiased`}
+        className="bg-[#08090D] text-white antialiased selection:bg-cyan-500/30 selection:text-cyan-200"
       >
-        {children}
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

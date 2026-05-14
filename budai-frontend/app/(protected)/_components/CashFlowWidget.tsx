@@ -178,7 +178,7 @@ export default function CashFlowWidget({ onRemove }: CashFlowWidgetProps) {
     "Select Account";
 
   return (
-    <Card className="w-full h-full bg-obsidian/40 backdrop-blur-xl border border-white/8 p-6 flex flex-col shadow-2xl relative overflow-hidden font-geist">
+    <Card className="w-full h-full obsidian-glass p-6 flex flex-col shadow-2xl relative overflow-hidden font-geist">
       <Card.Header className="flex flex-col gap-4 mb-6 p-0 shrink-0 w-full z-10">
         <div className="flex justify-between items-start w-full">
           <Card.Title className="text-white font-bold text-2xl tracking-tight">

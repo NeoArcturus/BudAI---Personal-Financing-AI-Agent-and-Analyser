@@ -228,7 +228,7 @@ export default function HomePage() {
         );
       case "aiChat":
         return (
-          <div className="w-full h-full bg-obsidian/40 backdrop-blur-[24px] rounded-3xl border border-neon-cyan/20 flex items-center justify-center relative shadow-[0_0_30px_rgba(0,229,255,0.05)]">
+          <div className="w-full h-full obsidian-glass rounded-3xl flex items-center justify-center relative">
             <span className="text-neon-cyan/50 font-medium">
               {widget.type} placeholder (To be implemented)
             </span>
@@ -250,7 +250,7 @@ export default function HomePage() {
         <div className="absolute -bottom-[10%] -right-[5%] w-[70%] h-[70%] rounded-full bg-deep-pink/10 blur-[180px]"></div>
       </div>
 
-      <div className="relative z-10 w-64 h-full bg-obsidian/40 backdrop-blur-[24px] border-r border-white/8 flex flex-col justify-between py-8 px-6 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
+      <div className="relative z-10 w-64 h-full obsidian-glass flex flex-col justify-between py-8 px-6 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
         <div>
           <div className="flex items-center gap-3 mb-12">
             <div className="w-8 h-8 rounded-lg bg-linear-to-br from-neon-cyan to-[#0088FF] flex items-center justify-center shadow-[0_0_15px_rgba(0,229,255,0.4)]">
@@ -324,11 +324,11 @@ export default function HomePage() {
             <Input
               type="text"
               placeholder="Search ledger..."
-              className="bg-obsidian/40 backdrop-blur-[24px] border border-white/8 rounded-xl focus-within:border-neon-cyan/50 shadow-[0_4px_20px_rgba(0,0,0,0.3)] [&_input]:pl-11 [&_input]:text-sm [&_input]:text-white [&_input::placeholder]:text-[#5E6272]"
+              className="obsidian-glass rounded-xl focus-within:border-neon-cyan/50 shadow-[0_4px_20px_rgba(0,0,0,0.3)] [&_input]:pl-11 [&_input]:text-sm [&_input]:text-white [&_input::placeholder]:text-[#5E6272]"
             />
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center bg-obsidian/40 backdrop-blur-[24px] border border-white/8 rounded-full p-1 shadow-lg">
+            <div className="flex items-center obsidian-glass rounded-full p-1 shadow-lg">
               <Button
                 isIconOnly
                 variant="primary"
@@ -347,7 +347,7 @@ export default function HomePage() {
             <Button
               isIconOnly
               variant="primary"
-              className="w-11 h-11 min-w-11 rounded-full bg-obsidian/40 backdrop-blur-[24px] border border-white/8 text-white shadow-[0_4px_20px_rgba(0,0,0,0.3)] relative cursor-pointer"
+              className="w-11 h-11 min-w-11 rounded-full obsidian-glass text-white shadow-[0_4px_20px_rgba(0,0,0,0.3)] relative cursor-pointer"
             >
               <Bell size={18} />
               <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-deep-pink rounded-full border-2 border-obsidian shadow-[0_0_8px_rgba(255,51,102,0.8)]"></span>
@@ -395,8 +395,8 @@ export default function HomePage() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-[24px]">
-          <div className="bg-obsidian border border-white/8 rounded-3xl w-full max-w-md shadow-[0_0_50px_rgba(0,229,255,0.1)] overflow-hidden flex flex-col font-geist">
-            <div className="p-6 border-b border-white/8 flex items-center justify-between bg-obsidian/50">
+          <div className="obsidian-glass rounded-3xl w-full max-w-md shadow-[0_0_50px_rgba(0,229,255,0.1)] overflow-hidden flex flex-col font-geist">
+            <div className="p-6 border-b border-white/8 flex items-center justify-between">
               <h2 className="text-white font-bold text-lg tracking-tight">
                 Add Widget
               </h2>

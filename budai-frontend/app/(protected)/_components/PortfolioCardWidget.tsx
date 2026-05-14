@@ -66,7 +66,7 @@ export default function PortfolioCardWidget() {
 
   if (!accounts || accounts.length === 0) {
     return (
-      <Card className="w-full h-full bg-obsidian/40 backdrop-blur-xl border border-white/8 p-6 flex flex-col shadow-2xl justify-center items-center font-geist">
+      <Card className="w-full h-full obsidian-glass p-6 flex flex-col shadow-2xl justify-center items-center font-geist">
         <CreditCard className="w-12 h-12 text-[#5E6272] mb-3 opacity-50" />
         <span className="text-[#8B8E98] text-sm font-medium mb-6">
           No Active Accounts
@@ -92,7 +92,7 @@ export default function PortfolioCardWidget() {
     const balance = acc.account_balance ?? acc.balance ?? 0;
 
     return (
-      <Card className="w-full h-full bg-obsidian/40 backdrop-blur-xl border border-white/8 flex flex-col shadow-2xl overflow-hidden font-geist">
+      <Card className="w-full h-full obsidian-glass flex flex-col shadow-2xl overflow-hidden font-geist">
         <Card.Header className="flex justify-between items-center p-6 pb-4 shrink-0 z-20">
           <Card.Title className="text-white font-bold text-2xl tracking-tight">
             Active Account
@@ -189,7 +189,7 @@ export default function PortfolioCardWidget() {
   }
 
   return (
-    <Card className="w-full h-full bg-obsidian/40 bg-linear-to-br from-white/8 to-transparent backdrop-blur-xl rounded-3xl border border-white/8 flex flex-col shadow-2xl overflow-hidden font-geist">
+    <Card className="w-full h-full obsidian-glass flex flex-col shadow-2xl overflow-hidden font-geist">
       <Card.Header className="flex justify-between items-center p-6 pb-4 shrink-0 z-20">
         <Card.Title className="text-white font-bold text-2xl tracking-tight">
           Active Accounts

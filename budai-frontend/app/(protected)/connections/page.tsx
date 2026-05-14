@@ -56,7 +56,7 @@ export default function ConnectionsPage() {
       </div>
 
       {/* Sidebar */}
-      <div className="relative z-10 w-64 h-full bg-obsidian/40 backdrop-blur-xl border-r border-white/8 flex flex-col justify-between py-8 px-6 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
+      <div className="relative z-10 w-64 h-full obsidian-glass flex flex-col justify-between py-8 px-6 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
         <div>
           <div className="flex items-center gap-3 mb-12">
             <div className="w-8 h-8 rounded-lg bg-linear-to-br from-neon-cyan to-[#0088FF] flex items-center justify-center shadow-[0_0_15px_rgba(0,229,255,0.4)]">
@@ -149,7 +149,7 @@ export default function ConnectionsPage() {
               Active Institutions
             </h3>
             {accounts.length === 0 && !isConnecting && (
-              <Card className="bg-obsidian/40 backdrop-blur-xl border border-white/8 rounded-3xl p-12 shadow-2xl flex flex-col items-center justify-center text-center">
+              <Card className="obsidian-glass rounded-3xl p-12 shadow-2xl flex flex-col items-center justify-center text-center">
                 <CreditCard className="w-16 h-16 text-[#5E6272] mb-4 opacity-20" />
                 <p className="text-white font-bold text-xl mb-2">
                   No Connections Found
@@ -169,7 +169,7 @@ export default function ConnectionsPage() {
             {accounts.map((acc, i) => (
               <Card
                 key={i}
-                className="bg-obsidian/40 backdrop-blur-xl border border-white/8 rounded-3xl p-6 shadow-2xl hover:border-white/20 transition-all group"
+                className="obsidian-glass rounded-3xl p-6 shadow-2xl hover:border-white/20 transition-all group"
               >
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
@@ -233,7 +233,7 @@ export default function ConnectionsPage() {
             <h3 className="text-white font-bold text-lg px-2 tracking-tight">
               Security & Permissions
             </h3>
-            <Card className="bg-obsidian/40 backdrop-blur-xl border border-white/8 rounded-3xl p-6 shadow-2xl">
+            <Card className="obsidian-glass rounded-3xl p-6 shadow-2xl">
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-neon-cyan/10 flex items-center justify-center text-neon-cyan shrink-0">
                   <ShieldCheck size={20} />
@@ -284,7 +284,7 @@ export default function ConnectionsPage() {
               </div>
             </Card>
 
-            <Button className="w-full h-14 flex items-center justify-between px-6 bg-obsidian/40 backdrop-blur-xl text-[#8B8E98] hover:text-white border border-white/8 rounded-2xl cursor-pointer transition-colors">
+            <Button className="w-full h-14 flex items-center justify-between px-6 obsidian-glass text-[#8B8E98] hover:text-white rounded-2xl cursor-pointer transition-colors">
               <span className="font-medium tracking-wide">
                 View Connection Logs
               </span>
