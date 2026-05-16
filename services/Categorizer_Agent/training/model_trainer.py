@@ -8,6 +8,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import classification_report, accuracy_score
 from sklearn.utils.class_weight import compute_sample_weight
+import torch
 from tqdm import tqdm
 
 
@@ -17,7 +18,8 @@ class CategorizerTrainer:
         self.df = df
         self.embeddings = embeddings
         self.model = HistGradientBoostingClassifier(
-            max_iter=500, random_state=42, min_samples_leaf=1)
+            max_iter=500, random_state=42, min_samples_leaf=1,
+            device="mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else None)
         self.model_dir = model_dir
         self.enc_dir = enc_dir
         os.makedirs(self.model_dir, exist_ok=True)
@@ -34,6 +36,9 @@ class CategorizerTrainer:
 
         if self.df.empty:
             return False
+
+        indices = self.df.index.values
+        self.embeddings = self.embeddings[indices]
 
         with tqdm(total=4, desc="Training Brain") as pbar:
             le = LabelEncoder()

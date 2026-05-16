@@ -1,13 +1,16 @@
-// AppContext.tsx
+
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Account,
+  Transaction,
   NativeChartConfig,
   TabType,
   ToolParameters,
+  BankChartData,
+  ParsedCategory,
   ExplanationState,
   ExplanationContextType,
   ExplanationPayload,
@@ -15,6 +18,28 @@ import {
 } from "@/types";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
 import { apiFetch } from "@/lib/api";
+
+export type AdvisorContextData =
+  | Transaction[]
+  | BankChartData[]
+  | ParsedCategory[]
+  | Record<string, string | number | boolean | null>
+  | string
+  | null;
+
+export interface AdvisorContext {
+  type: "cash_flow" | "spending_trend" | "expense_distribution" | "ledger_audit" | "general";
+  accountId?: string;
+  data?: AdvisorContextData;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: LocalMessage[];
+  lastUpdated: Date;
+  contextData?: AdvisorContext;
+}
 
 interface BudAIContextType {
   accounts: Account[];
@@ -36,11 +61,16 @@ interface BudAIContextType {
     type: ExplanationContextType,
     data: ExplanationPayload | null,
   ) => void;
+
   isChatOpen: boolean;
   setIsChatOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  chatMessages: LocalMessage[];
+  currentSessionId: string | null;
+  setCurrentSessionId: (id: string | null) => void;
+  sessions: ChatSession[];
+  createNewSession: (title: string, contextData?: AdvisorContext) => string;
+  deleteSession: (id: string) => void;
   isChatLoading: boolean;
-  sendChatMessage: (textToSend: string) => Promise<void>;
+  sendChatMessage: (textToSend: string, sessionId?: string) => Promise<void>;
 }
 
 const BudAIContext = createContext<BudAIContextType | undefined>(undefined);
@@ -55,7 +85,8 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
 
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
-  const [chatMessages, setChatMessages] = useState<LocalMessage[]>([]);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
 
   const [userName] = useState<string>(
@@ -63,6 +94,47 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
       ? localStorage.getItem("budai_user_name") || "User"
       : "User",
   );
+
+  useEffect(() => {
+    if (!currentSessionId) return;
+
+    const currentSession = sessions.find(s => s.id === currentSessionId);
+    if (currentSession && currentSession.messages.length === 0) {
+      apiFetch(`/api/chat/sessions/${currentSessionId}`, {}, true)
+        .then(res => res.json())
+        .then(data => {
+           if (data.messages) {
+              setSessions(prev => prev.map(s => s.id === currentSessionId ? {
+                  ...s,
+                  messages: data.messages.map((m: any) => ({
+                      role: m.role,
+                      text: m.content,
+                      timestamp: new Date(m.timestamp)
+                  }))
+              } : s));
+           }
+        })
+        .catch(err => console.error("Failed to fetch session details", err));
+    }
+  }, [currentSessionId]);
+
+  const createNewSession = (title: string, contextData?: AdvisorContext) => {
+    const newSession: ChatSession = {
+      id: crypto.randomUUID(),
+      title,
+      messages: [],
+      lastUpdated: new Date(),
+      contextData,
+    };
+    setSessions((prev) => [newSession, ...prev]);
+    setCurrentSessionId(newSession.id);
+    return newSession.id;
+  };
+
+  const deleteSession = (id: string) => {
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    if (currentSessionId === id) setCurrentSessionId(null);
+  };
 
   const [explanation, setExplanation] = useState<ExplanationState>({
     isOpen: false,
@@ -90,12 +162,32 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const token = localStorage.getItem("budai_token");
     if (!token) return router.push("/login");
-    apiFetch("/api/accounts/", {}, true)
+    
+    // Fetch Accounts
+    apiFetch("/api/accounts", {}, true)
       .then((res) => res.json())
       .then((data) => {
         if (data.accounts) setAccounts(data.accounts);
       })
       .catch(() => {});
+
+    // Fetch Chat Sessions
+    apiFetch("/api/chat/sessions", {}, true)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+            const mappedSessions: ChatSession[] = data.map(s => ({
+                id: s.session_id,
+                title: s.title,
+                messages: [], // Messages will be fetched on demand when selecting the session
+                lastUpdated: new Date(s.last_updated),
+                contextData: s.context_data
+            }));
+            setSessions(mappedSessions);
+        }
+      })
+      .catch((err) => console.error("Failed to fetch sessions", err));
+
   }, [router]);
 
   const fetchCachedChart = async (type: string, cacheId: string) => {
@@ -139,13 +231,24 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const sendChatMessage = async (textToSend: string) => {
+  const sendChatMessage = async (textToSend: string, sessionId?: string) => {
     if (!textToSend.trim() || isChatLoading) return;
 
-    setChatMessages((prev) => [
-      ...prev,
-      { role: "user", text: textToSend, timestamp: new Date() },
-    ]);
+    let targetId = sessionId || currentSessionId;
+    if (!targetId) {
+      targetId = createNewSession("New Conversation");
+    }
+
+    const currentSession = sessions.find(s => s.id === targetId);
+    const history = currentSession?.messages || [];
+
+    const userMsg: LocalMessage = { role: "user", text: textToSend, timestamp: new Date() };
+    setSessions((prev) => prev.map(s => s.id === targetId ? {
+      ...s,
+      messages: [...s.messages, userMsg],
+      lastUpdated: new Date()
+    } : s));
+
     setIsChatLoading(true);
 
     const activeAccount = accounts.find(
@@ -158,17 +261,15 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
 
     try {
       const response = await apiFetch(
-        "/api/chat/",
+        "/api/chat",
         {
           method: "POST",
           body: JSON.stringify({
             input: textToSend,
             active_account_id: bankName,
-            user_id: localStorage.getItem("budai_token"),
-            chat_history: chatMessages.map(({ role, text }) => ({
-              role,
-              text,
-            })),
+            session_id: targetId,
+            chat_history: history.map(({ role, text }) => ({ role, text })),
+            context_data: currentSession?.contextData,
           }),
         },
         true,
@@ -180,20 +281,39 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
       const decoder = new TextDecoder();
       let aiText = "";
 
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: "", timestamp: new Date() },
-      ]);
+      setSessions((prev) => prev.map(s => s.id === targetId ? {
+        ...s,
+        messages: [...s.messages, { role: "assistant", text: "", timestamp: new Date() }]
+      } : s));
+
+      const sessionIdRegex = /^\[SESSION_ID:([a-zA-Z0-9-]+)\]/;
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        aiText += decoder.decode(value, { stream: true });
-        setChatMessages((prev) => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1].text = aiText;
-          return newMessages;
-        });
+        
+        let chunk = decoder.decode(value, { stream: true });
+        
+        const sessionMatch = chunk.match(sessionIdRegex);
+        if (sessionMatch) {
+            const newSessionId = sessionMatch[1];
+            setCurrentSessionId(newSessionId);
+            
+            if (targetId !== newSessionId) {
+                 setSessions(prev => prev.map(s => s.id === targetId ? { ...s, id: newSessionId } : s));
+                 targetId = newSessionId;
+            }
+            chunk = chunk.replace(sessionIdRegex, "");
+        }
+
+        aiText += chunk;
+
+        setSessions((prev) => prev.map(s => s.id === targetId ? {
+          ...s,
+          messages: s.messages.map((m, idx) =>
+            idx === s.messages.length - 1 ? { ...m, text: aiText } : m
+          )
+        } : s));
       }
 
       const triggerRegex =
@@ -203,16 +323,16 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
       let foundTrigger = false;
 
       while ((match = triggerRegex.exec(aiText)) !== null) {
-        const rawType = match[1].toLowerCase();
+        const typeSlug = match[1].toLowerCase();
         const cacheId = match[2];
 
         let triggeredAction = "";
-        if (rawType === "categorized") triggeredAction = "categorized_doughnut";
-        else if (rawType === "balance") triggeredAction = "balance_forecast";
-        else if (rawType === "expense") triggeredAction = "expense_forecast";
-        else if (rawType === "cash_flow") triggeredAction = "cash_flow_mixed";
-        else if (rawType === "health_radar") triggeredAction = "health_radar";
-        else if (rawType.startsWith("historical")) triggeredAction = rawType;
+        if (typeSlug === "categorized") triggeredAction = "categorized_doughnut";
+        else if (typeSlug === "balance_forecast") triggeredAction = "balance_forecast";
+        else if (typeSlug === "expense") triggeredAction = "expense_forecast";
+        else if (typeSlug === "cash_flow") triggeredAction = "cash_flow_mixed";
+        else if (typeSlug === "health_radar") triggeredAction = "health_radar";
+        else if (typeSlug.startsWith("historical")) triggeredAction = typeSlug;
 
         if (triggeredAction && cacheId) {
           foundTrigger = true;
@@ -221,19 +341,22 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
         cleanedReply = cleanedReply.replace(match[0], "");
       }
 
-      setChatMessages((prev) => {
-        const newMessages = [...prev];
-        newMessages[newMessages.length - 1].text = cleanedReply.trim();
-        return newMessages;
-      });
+      setSessions((prev) => prev.map(s => s.id === targetId ? {
+        ...s,
+        messages: s.messages.map((m, idx) =>
+          idx === s.messages.length - 1 ? { ...m, text: cleanedReply.trim() } : m
+        ),
+
+        title: s.messages.length <= 2 ? (textToSend.length > 30 ? textToSend.slice(0, 30) + "..." : textToSend) : s.title
+      } : s));
 
       if (!foundTrigger) setIsGenerating(false);
     } catch (e) {
       console.error(e);
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: "Engine Error.", timestamp: new Date() },
-      ]);
+      setSessions((prev) => prev.map(s => s.id === targetId ? {
+        ...s,
+        messages: [...s.messages, { role: "assistant", text: "Engine Error.", timestamp: new Date() }]
+      } : s));
       setIsGenerating(false);
     } finally {
       setIsChatLoading(false);
@@ -280,7 +403,7 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const totalBalance = accounts.reduce(
-    (sum, acc) => sum + (acc.balance ?? acc.account_balance ?? 0),
+    (sum, acc) => sum + (acc.balance ?? 0),
     0,
   );
 
@@ -302,7 +425,11 @@ export const BudAIProvider = ({ children }: { children: React.ReactNode }) => {
         triggerExplanation,
         isChatOpen,
         setIsChatOpen,
-        chatMessages,
+        currentSessionId,
+        setCurrentSessionId,
+        sessions,
+        createNewSession,
+        deleteSession,
         isChatLoading,
         sendChatMessage,
       }}

@@ -22,6 +22,11 @@ class Categorizer:
         le = joblib.load(enc_path)
 
         df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
+        
+        # Defensive alignment
+        if len(embeddings) != len(df):
+            embeddings = embeddings[df.index]
+
         X_infer = np.hstack(
             (embeddings, df['Amount'].values.reshape(-1, 1).astype(np.float32)))
 
@@ -33,7 +38,7 @@ class Categorizer:
         final_labels = []
         final_confidences = []
         model_labels = []
-        needs_review_threshold = 0.62
+        needs_review_threshold = 0.40
         income_keywords = ("salary", "payroll", "wage", "interest", "bonus")
         transfer_like_keywords = (
             "refund", "reversal", "chargeback", "transfer", "cashback")

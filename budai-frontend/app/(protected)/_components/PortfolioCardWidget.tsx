@@ -8,13 +8,28 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBudAI } from "@/app/context/AppContext";
-import { Card, Button, Avatar } from "@heroui/react";
+import { Card, Button, Avatar, Skeleton } from "@heroui/react";
 import { apiFetch } from "@/lib/api";
 
 export default function PortfolioCardWidget() {
   const { accounts } = useBudAI();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  React.useEffect(() => {
+
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 800);
+
+    if (accounts.length > 0) {
+      setIsLoading(false);
+      clearTimeout(timer);
+    }
+
+    return () => clearTimeout(timer);
+  }, [accounts]);
 
   const displayAccounts = accounts.slice(0, 4);
 
@@ -64,9 +79,39 @@ export default function PortfolioCardWidget() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <Card className="w-full h-full obsidian-glass rounded-3xl p-8 flex flex-col shadow-2xl relative overflow-hidden font-geist">
+        <div className="flex justify-between items-center mb-12">
+          <Skeleton className="h-8 w-40 rounded-xl bg-white/5" />
+          <Skeleton className="h-8 w-8 rounded-lg bg-white/5" />
+        </div>
+        <div className="space-y-6">
+          <div className="flex justify-between items-start">
+            <div className="space-y-3">
+              <Skeleton className="h-3 w-24 rounded bg-white/5" />
+              <Skeleton className="h-12 w-48 rounded-3xl bg-white/5" />
+            </div>
+            <Skeleton className="h-16 w-16 rounded-3xl bg-white/5" />
+          </div>
+          <div className="pt-8 flex justify-between items-end">
+            <div className="space-y-3">
+              <Skeleton className="h-6 w-32 rounded-lg bg-white/5" />
+              <Skeleton className="h-3 w-40 rounded bg-white/5" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-10 w-10 rounded-full bg-white/5" />
+              <Skeleton className="h-10 w-10 rounded-full bg-white/5 -ml-6" />
+            </div>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
   if (!accounts || accounts.length === 0) {
     return (
-      <Card className="w-full h-full obsidian-glass p-6 flex flex-col shadow-2xl justify-center items-center font-geist">
+      <Card className="w-full h-full obsidian-glass rounded-3xl p-6 flex flex-col shadow-2xl justify-center items-center font-geist">
         <CreditCard className="w-12 h-12 text-[#5E6272] mb-3 opacity-50" />
         <span className="text-[#8B8E98] text-sm font-medium mb-6">
           No Active Accounts
@@ -89,10 +134,10 @@ export default function PortfolioCardWidget() {
     const accountNumber = acc.account_number || "****";
     const bankName = acc.bank_name || "Bank";
     const logoUrl = (acc as typeof acc & { logo_url?: string }).logo_url;
-    const balance = acc.account_balance ?? acc.balance ?? 0;
+    const balance = acc.balance ?? 0;
 
     return (
-      <Card className="w-full h-full obsidian-glass flex flex-col shadow-2xl overflow-hidden font-geist">
+      <Card className="w-full h-full obsidian-glass rounded-3xl flex flex-col shadow-2xl overflow-hidden font-geist">
         <Card.Header className="flex justify-between items-center p-6 pb-4 shrink-0 z-20">
           <Card.Title className="text-white font-bold text-2xl tracking-tight">
             Active Account
@@ -109,7 +154,8 @@ export default function PortfolioCardWidget() {
         </Card.Header>
 
         <Card.Content className="relative flex-1 w-full p-6 pt-0 flex flex-col h-full overflow-hidden">
-          <div className="relative flex-1 w-full rounded-2xl p-8 shadow-2xl overflow-hidden flex flex-col justify-between bg-[#0A0A0A] border border-neon-cyan/40 group hover:border-neon-cyan/70 transition-colors">
+          <div className="relative flex-1 w-full rounded-3xl p-8 shadow-2xl overflow-hidden flex flex-col justify-between bg-[#0A0A0A] border border-neon-cyan/40 group hover:border-neon-cyan/70 transition-colors">
+
             <div className="absolute inset-0 bg-black/40 pointer-events-none z-0"></div>
             <div className="absolute -right-32 -top-32 w-96 h-96 bg-neon-cyan/10 rounded-full blur-[100px] pointer-events-none z-0"></div>
             <div className="absolute -left-32 -bottom-32 w-96 h-96 bg-deep-pink/5 rounded-full blur-[100px] pointer-events-none z-0"></div>
@@ -130,18 +176,6 @@ export default function PortfolioCardWidget() {
                 </linearGradient>
               </defs>
             </svg>
-            <svg
-              className="absolute bottom-0 left-0 w-full h-40 opacity-70 pointer-events-none z-0 drop-shadow-[0_0_8px_rgba(0,229,255,0.8)]"
-              preserveAspectRatio="none"
-              viewBox="0 0 100 100"
-            >
-              <path
-                d="M0,50 Q15,80 35,40 T70,60 T100,30"
-                fill="none"
-                stroke="#00E5FF"
-                strokeWidth="1.5"
-              />
-            </svg>
 
             <div className="flex justify-between items-start z-10">
               <div className="flex flex-col gap-1">
@@ -160,7 +194,10 @@ export default function PortfolioCardWidget() {
                   <span>+3.2% vs last month</span>
                 </div>
               </div>
-              <Avatar className="w-16 h-16 bg-white p-2 shadow-[0_0_25px_rgba(0,229,255,0.15)] text-[#08090D] font-black text-2xl rounded-2xl group-hover:scale-105 transition-transform">
+              <Avatar
+                variant="soft"
+                className="w-16 h-16 bg-white p-2 shadow-[0_0_25px_rgba(0,229,255,0.15)] text-[#08090D] font-black text-2xl rounded-2xl group-hover:scale-105 transition-transform"
+              >
                 {logoUrl && <Avatar.Image src={logoUrl} alt={bankName} />}
                 <Avatar.Fallback>{bankName.charAt(0)}</Avatar.Fallback>
               </Avatar>
@@ -189,7 +226,7 @@ export default function PortfolioCardWidget() {
   }
 
   return (
-    <Card className="w-full h-full obsidian-glass flex flex-col shadow-2xl overflow-hidden font-geist">
+    <Card className="w-full h-full obsidian-glass rounded-3xl flex flex-col shadow-2xl overflow-hidden font-geist">
       <Card.Header className="flex justify-between items-center p-6 pb-4 shrink-0 z-20">
         <Card.Title className="text-white font-bold text-2xl tracking-tight">
           Active Accounts
@@ -236,7 +273,7 @@ export default function PortfolioCardWidget() {
               const bankName = acc.bank_name || "Bank";
               const logoUrl = (acc as typeof acc & { logo_url?: string })
                 .logo_url;
-              const balance = acc.account_balance ?? acc.balance ?? 0;
+              const balance = acc.balance ?? 0;
 
               return (
                 <div
@@ -261,7 +298,10 @@ export default function PortfolioCardWidget() {
                     <span className="text-white font-bold text-xl tracking-tight">
                       {bankName}
                     </span>
-                    <Avatar className="w-14 h-14 bg-white p-1.5 shadow-[0_0_15px_rgba(255,255,255,0.2)] text-[#08090D] font-black text-xl rounded-2xl">
+                    <Avatar
+                      variant="soft"
+                      className="w-14 h-14 bg-white p-1.5 shadow-[0_0_15px_rgba(255,255,255,0.2)] text-[#08090D] font-black text-xl rounded-2xl"
+                    >
                       {logoUrl && <Avatar.Image src={logoUrl} alt={bankName} />}
                       <Avatar.Fallback>{bankName.charAt(0)}</Avatar.Fallback>
                     </Avatar>

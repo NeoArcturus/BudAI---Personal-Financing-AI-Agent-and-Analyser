@@ -9,22 +9,17 @@ export interface Account {
   sort_code: string;
   currency: string;
   balance: number;
-  account_balance?: number;
   status?: string;
   provider_id?: string;
 }
 
 export interface Transaction {
-  id?: string;
-  transaction_uuid?: string;
+  transaction_id: string;
   date?: string;
   timestamp?: string;
   amount?: number;
-  Amount?: number;
   description?: string;
-  Description?: string;
   category?: string;
-  Category?: string;
 }
 
 export interface ChatMessage {

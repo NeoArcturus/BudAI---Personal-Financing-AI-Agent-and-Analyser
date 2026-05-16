@@ -135,9 +135,9 @@ def truelayer_status(current_user: User = Depends(get_current_user)):
 
 
 @callback_router.get("/callback")
-def truelayer_callback(code: str, state: str):
+async def truelayer_callback(code: str, state: str):
     token_gen = AccessTokenGenerator()
-    if token_gen.validate_callback(code, state):
+    if await token_gen.validate_callback(code, state):
         return RedirectResponse(f"{FRONTEND_URL}/home")
     raise HTTPException(
         status_code=400, detail="Authentication failed or session expired")

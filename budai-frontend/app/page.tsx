@@ -31,8 +31,7 @@ export default function LandingPage() {
     if (token) {
       router.push("/home");
     } else {
-      // Defers the state update to the next event loop tick,
-      // avoiding the synchronous cascading render warning.
+
       const timer = setTimeout(() => setIsLoaded(true), 0);
       return () => clearTimeout(timer);
     }
@@ -42,13 +41,12 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#08090D] text-[#dce4e5] selection:bg-cyan-500/30 selection:text-cyan-200 bg-grid-pattern relative overflow-x-hidden">
-      {/* Ambient Background Glows */}
+
       <div className="fixed inset-0 z-0 pointer-events-none opacity-50 mix-blend-screen">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-500/20 blur-[120px]" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-pink-500/10 blur-[150px]" />
       </div>
 
-      {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 h-20 obsidian-glass border-b border-white/5 flex justify-between items-center px-6 md:px-10">
         <div className="flex items-center gap-2">
           <Activity className="text-cyan-400 w-8 h-8" />
@@ -108,7 +106,7 @@ export default function LandingPage() {
       </nav>
 
       <main className="relative z-10 pt-20">
-        {/* Hero Section */}
+
         <section className="relative min-h-[80vh] flex items-center justify-center px-6 py-24 bg-hero-abstract">
           <div className="max-w-4xl mx-auto text-center flex flex-col items-center gap-8">
             <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 text-cyan-400 text-xs font-bold tracking-wider">
@@ -145,7 +143,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Decorative Dashboard Preview */}
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-full max-w-6xl h-64 obsidian-glass rounded-t-[3rem] border-t border-x border-white/10 opacity-60 flex justify-center pt-8 overflow-hidden pointer-events-none">
             <div className="w-3/4 h-full border border-white/5 rounded-t-2xl bg-white/5 flex p-6 gap-6">
               <div className="w-1/4 h-full bg-white/5 rounded-xl animate-pulse" />
@@ -160,7 +157,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Bank Integration Marquee */}
         <section className="py-20 border-y border-white/5 bg-black/20 overflow-hidden relative z-20">
           <div className="text-center mb-10">
             <h3 className="text-xs font-bold text-white/40 uppercase tracking-[0.3em]">
@@ -196,7 +192,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* The Intelligence Engine (Product Tour) */}
         <section id="engine" className="py-32 px-6 relative z-20">
           <div className="max-w-6xl mx-auto flex flex-col items-center">
             <div className="text-center mb-20">
@@ -211,16 +206,16 @@ export default function LandingPage() {
 
             <div className="w-full aspect-video max-w-5xl obsidian-glass rounded-3xl border border-white/10 p-4 relative overflow-hidden group shadow-2xl">
               <div className="w-full h-full bg-[#0d1516]/40 rounded-2xl flex border border-white/5">
-                {/* Simulated Sidebar */}
+
                 <div className="w-1/4 border-r border-white/5 p-6 hidden md:flex flex-col gap-6">
                   <div className="h-8 bg-white/10 rounded-lg w-1/2 mb-4" />
                   <div className="h-4 bg-white/5 rounded-lg w-3/4" />
                   <div className="h-4 bg-white/5 rounded-lg w-full" />
                   <div className="h-4 bg-white/5 rounded-lg w-5/6" />
                 </div>
-                {/* Main Content */}
+
                 <div className="flex-1 p-8 flex flex-col gap-8 relative">
-                  {/* Floating Chips */}
+
                   <div className="absolute top-1/4 left-1/4 bg-cyan-400/20 border border-cyan-400/30 text-cyan-400 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 shadow-lg z-10 hover:scale-105 transition-transform cursor-default">
                     <TrendingUp size={18} /> Wealth Velocity +12.4%
                   </div>
@@ -251,7 +246,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* How it Works */}
         <section id="features" className="py-32 px-6 relative z-20 bg-black/20">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-20">
@@ -306,7 +300,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Security Section */}
         <section id="security" className="py-32 px-6 relative z-20">
           <div className="max-w-6xl mx-auto obsidian-glass rounded-[3rem] p-12 md:p-20 border border-white/10 flex flex-col md:flex-row gap-16 items-center">
             <div className="flex-1 flex flex-col gap-8 text-center md:text-left items-center md:items-start">
@@ -388,7 +381,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Real-time Ticker */}
         <div className="w-full bg-black/40 py-4 border-y border-white/5 overflow-hidden flex z-30 relative">
           <div className="flex animate-marquee whitespace-nowrap gap-16 items-center text-xs font-mono text-white/40 uppercase tracking-widest">
             {[
@@ -403,7 +395,7 @@ export default function LandingPage() {
                 {stat}
               </span>
             ))}
-            {/* Duplicates for loop */}
+
             {[
               "Transactions Processed: 4,291,003",
               "Inference Latency: 42ms",
@@ -419,7 +411,6 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* FAQ Section */}
         <section id="faq" className="py-32 px-6 relative z-20">
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-16">
@@ -473,7 +464,6 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-white/5 bg-[#08090D] pt-24 pb-12 px-6 relative z-20">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-16 mb-20">

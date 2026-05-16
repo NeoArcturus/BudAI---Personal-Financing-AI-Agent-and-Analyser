@@ -122,8 +122,8 @@ class CategorizerAgent:
         train_df["Category"] = raw_df["Category"].values
         trainer = CategorizerTrainer(
             train_df, embeddings, self.model_dir, self.enc_dir)
-        trainer.train()
-        return {"trained": True, "samples": len(train_df)}
+        success = trainer.train()
+        return {"trained": success, "samples": len(train_df)}
 
     def execute_cycle(self, identifier, user_uuid, start_date, end_date):
         try:

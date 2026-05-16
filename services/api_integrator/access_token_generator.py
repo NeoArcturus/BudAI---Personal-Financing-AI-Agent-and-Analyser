@@ -64,7 +64,7 @@ class AccessTokenGenerator:
 
         return None
 
-    def generate_token_from_code(self, code, state):
+    async def generate_token_from_code(self, code, state):
         payload = {
             "grant_type": "authorization_code",
             "client_id": self.client_id,
@@ -109,6 +109,7 @@ class AccessTokenGenerator:
 
             # ORM INSERTION (Bug-Free)
             from config import SessionLocal
+            bank_id_to_init = None
             with SessionLocal() as session:
                 bank = session.query(Bank).filter_by(
                     truelayer_provider_id=provider_id, user_uuid=state).first()
@@ -122,9 +123,11 @@ class AccessTokenGenerator:
                     bank.consent_expires_at = expires_at
                     bank.bank_name = provider_name
                     bank.bank_logo_uri = provider_logo_uri
+                    bank_id_to_init = bank.bank_uuid
                 else:
+                    bank_id_to_init = str(uuid.uuid4())
                     new_bank = Bank(
-                        bank_uuid=str(uuid.uuid4()),
+                        bank_uuid=bank_id_to_init,
                         truelayer_provider_id=provider_id,
                         user_uuid=state,
                         bank_name=provider_name,
@@ -141,6 +144,29 @@ class AccessTokenGenerator:
 
             logger.info(
                 f"[AUTH LOG] Bank {provider_name} successfully linked/updated.")
+
+            # Trigger immediate account initialization in background
+            try:
+                from services.api_integrator.get_account_detail import UserAccounts
+                from fastapi_cache import FastAPICache
+                import asyncio
+
+                logger.info(
+                    f"Dispatching background account initialization for {provider_name}...")
+                user_acc = UserAccounts(user_id=state)
+
+                # Do NOT await this, let it run in the executor threadpool
+                loop = asyncio.get_running_loop()
+                loop.run_in_executor(
+                    None, user_acc.initialise_accounts, bank_id_to_init, state)
+
+                # We can't clear cache here reliably because init hasn't finished,
+                # but the frontend will poll anyway.
+
+            except Exception as init_err:
+                logger.error(
+                    f"Failed to trigger immediate initialization: {init_err}")
+
             return True
         else:
             logger.error(
@@ -148,8 +174,8 @@ class AccessTokenGenerator:
 
         return False
 
-    def validate_callback(self, code, state):
-        return self.generate_token_from_code(code, state)
+    async def validate_callback(self, code, state):
+        return await self.generate_token_from_code(code, state)
 
     def refresh_token(self, provider_id, user_uuid):
         with SessionLocal() as session:

@@ -1,45 +1,76 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Dict, Any, Union, List
+from typing import Dict, Any, Union, List, Optional
 from middleware.auth_middleware import get_current_user
-from models.database_models import User
-from schemas.api_schema import ChatRequest
-from services.orchestrator_graph import execute_chat_graph
-from langchain_core.messages import HumanMessage, AIMessage
+from models.database_models import User, ChatSession, ChatHistory
+from schemas.api_schema import ChatRequest, ExplanationRequest, ChatSessionResponse, ChatMessageResponse
+from services.orchestrator_graph import execute_chat_graph, get_session_history
 from config import SessionLocal
-from models.database_models import ChatHistory
 import asyncio
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 
 chat_router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
-class ExplanationRequest(BaseModel):
-    user_uuid: str
-    chart_type: str | None = None
-    raw_data: Union[Dict[str, Any], List[Any], Any]
+@chat_router.get("/sessions", response_model=List[ChatSessionResponse])
+async def list_chat_sessions(current_user: User = Depends(get_current_user)):
+    try:
+        with SessionLocal() as session:
+            sessions = session.query(ChatSession).filter_by(user_uuid=current_user.user_uuid).order_by(ChatSession.last_updated.desc()).all()
+            return [
+                ChatSessionResponse(
+                    session_id=s.session_id,
+                    title=s.title or "New Conversation",
+                    last_updated=s.last_updated,
+                    context_data=s.context_data
+                ) for s in sessions
+            ]
+    except Exception as e:
+        logger.error(f"Failed to list chat sessions: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve chat history.")
 
 
-def get_session_history(user_uuid: str):
-    history = []
-    with SessionLocal() as session:
-        records = session.query(ChatHistory).filter(
-            ChatHistory.user_uuid == user_uuid).order_by(ChatHistory.timestamp.asc()).all()
-        for r in records:
-            if r.role == "user":
-                history.append(HumanMessage(content=r.content))
-            else:
-                history.append(AIMessage(content=r.content))
-    return history
+@chat_router.get("/sessions/{session_id}", response_model=ChatSessionResponse)
+async def get_chat_session(session_id: str, current_user: User = Depends(get_current_user)):
+    try:
+        with SessionLocal() as session:
+            chat_session = session.query(ChatSession).filter_by(session_id=session_id, user_uuid=current_user.user_uuid).first()
+            if not chat_session:
+                raise HTTPException(status_code=404, detail="Session not found.")
+            
+            messages = [
+                ChatMessageResponse(
+                    role=m.role,
+                    content=m.content,
+                    timestamp=m.timestamp
+                ) for m in chat_session.messages
+            ]
+            
+            return ChatSessionResponse(
+                session_id=chat_session.session_id,
+                title=chat_session.title or "New Conversation",
+                last_updated=chat_session.last_updated,
+                context_data=chat_session.context_data,
+                messages=messages
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get chat session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve session details.")
 
 
-@chat_router.post("/")
+@chat_router.post("")
 async def chat(request: ChatRequest, current_user: User = Depends(get_current_user)):
     initial_state = {
         "user_uuid": current_user.user_uuid,
-        "active_account_id": request.active_account_id,
+        "session_id": request.session_id,
+        "active_account_id": request.active_account_id or "ALL",
         "user_input": request.input,
-        "chat_history": get_session_history(current_user.user_uuid),
+        "chat_history": get_session_history(current_user.user_uuid, request.session_id),
         "selected_worker": None,
         "worker_summary": None,
         "cache_id": None,
@@ -53,6 +84,13 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
     q = execute_chat_graph(initial_state)
 
     async def generate():
+        # First event: session_id (especially if it was newly created)
+        # We wait a bit for the graph to start and create the session if needed
+        while initial_state.get('session_id') is None:
+            await asyncio.sleep(0.1)
+        
+        yield f"[SESSION_ID:{initial_state['session_id']}]"
+
         while True:
             await asyncio.sleep(0.01)
             if not q.empty():
@@ -65,12 +103,13 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
 
 
 @chat_router.post("/explain")
-async def explain_ui_data(request: ExplanationRequest):
+async def explain_ui_data(request: ExplanationRequest, current_user: User = Depends(get_current_user)):
     initial_state = {
-        "user_uuid": request.user_uuid,
+        "user_uuid": current_user.user_uuid,
+        "session_id": None, # Explanations currently don't use sessions or create new ones
         "active_account_id": "ALL",
         "user_input": f"Please explain the {request.chart_type} data I am looking at.",
-        "chat_history": get_session_history(request.user_uuid),
+        "chat_history": get_session_history(current_user.user_uuid),
         "selected_worker": "explainer",
         "worker_summary": None,
         "cache_id": None,

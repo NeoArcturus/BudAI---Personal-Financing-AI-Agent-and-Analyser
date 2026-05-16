@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Integer, LargeBinary
+from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Integer, LargeBinary, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from config import Base
@@ -59,10 +59,46 @@ class Transaction(Base):
     account = relationship("Account", back_populates="transactions")
 
 
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+    session_id = Column(String, primary_key=True, index=True)
+    user_uuid = Column(String, ForeignKey("users.user_uuid"), index=True)
+    title = Column(String)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    context_data = Column(JSON, nullable=True)
+    messages = relationship("ChatHistory", back_populates="session", cascade="all, delete-orphan")
+
+
 class ChatHistory(Base):
     __tablename__ = "chat_history"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_uuid = Column(String, index=True)
+    session_id = Column(String, ForeignKey("chat_sessions.session_id"), index=True, nullable=True)
     role = Column(String)
     content = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
+    session = relationship("ChatSession", back_populates="messages")
+
+
+class ForecastParameters(Base):
+    __tablename__ = "forecast_parameters"
+    user_uuid = Column(String, ForeignKey("users.user_uuid"), primary_key=True, index=True)
+    kappa = Column(Float, default=2.0)
+    theta = Column(Float, default=0.04)
+    xi = Column(Float, default=0.1)
+    rho = Column(Float, default=-0.5)
+    lambda_val = Column(Float, default=0.1)
+    mu_j = Column(Float, default=-0.05)
+    sigma_j = Column(Float, default=0.1)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class BackgroundTask(Base):
+    __tablename__ = "background_tasks"
+    task_id = Column(String, primary_key=True, index=True)
+    user_uuid = Column(String, ForeignKey("users.user_uuid"), index=True)
+    type = Column(String)
+    status = Column(String, default="pending") # pending, processing, completed, failed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+

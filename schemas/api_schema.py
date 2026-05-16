@@ -1,5 +1,6 @@
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import List, Optional, Any, Dict
+from datetime import datetime
 
 
 class LoginRequest(BaseModel):
@@ -15,7 +16,15 @@ class RegisterRequest(BaseModel):
 class ChatRequest(BaseModel):
     input: str
     active_account_id: Optional[str] = None
-    user_id: str
+    session_id: Optional[str] = None
+    chat_history: Optional[List[Dict[str, str]]] = None
+    context_data: Optional[Dict[str, Any]] = None
+
+
+class ExplanationRequest(BaseModel):
+    user_uuid: str
+    chart_type: str | None = None
+    raw_data: Any
 
 
 class MediaExecuteRequest(BaseModel):
@@ -39,3 +48,17 @@ class TransactionLabelCorrectionRequest(BaseModel):
 
 class RetrainCategorizerRequest(BaseModel):
     force: bool = True
+
+
+class ChatMessageResponse(BaseModel):
+    role: str
+    content: str
+    timestamp: datetime
+
+
+class ChatSessionResponse(BaseModel):
+    session_id: str
+    title: str
+    last_updated: datetime
+    context_data: Optional[Dict[str, Any]] = None
+    messages: List[ChatMessageResponse] = []

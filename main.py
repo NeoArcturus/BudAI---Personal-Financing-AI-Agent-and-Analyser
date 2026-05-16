@@ -13,6 +13,7 @@ from controllers.account_controller import account_router
 from controllers.chat_controller import chat_router
 from controllers.media_controller import media_router
 from controllers.categorizer_controller import categorizer_router
+from controllers.advisor_controller import advisor_router
 from services.api_integrator.access_token_generator import AccessTokenGenerator
 from services.mcp_bridge import MCPBridge
 
@@ -27,15 +28,25 @@ def refresh_all_tokens():
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT truelayer_provider_id, user_uuid FROM banks")
+                "SELECT bank_name, truelayer_provider_id, user_uuid FROM banks")
             providers = cursor.fetchall()
         if not providers:
             return
+        
+        logger.info(f"[TOKEN REFRESH] Starting background refresh for {len(providers)} providers.")
         token_gen = AccessTokenGenerator()
-        for provider_id, user_uuid in providers:
-            token_gen.refresh_token(provider_id, user_uuid)
+        for bank_name, provider_id, user_uuid in providers:
+            try:
+                success = token_gen.refresh_token(provider_id, user_uuid)
+                if success:
+                    logger.info(f"[TOKEN REFRESH] Successfully refreshed tokens for {bank_name}.")
+                else:
+                    logger.warning(f"[TOKEN REFRESH] Failed to refresh tokens for {bank_name}.")
+            except Exception as e:
+                logger.error(f"[TOKEN REFRESH] Error refreshing {bank_name}: {e}")
+                
     except Exception as e:
-        logger.error(f"Token refresh failed: {e}")
+        logger.error(f"Critical error in token refresh scheduler: {e}")
 
 
 @asynccontextmanager
@@ -75,6 +86,7 @@ app.include_router(account_router)
 app.include_router(chat_router)
 app.include_router(media_router)
 app.include_router(categorizer_router)
+app.include_router(advisor_router)
 
 if __name__ == "__main__":
     import uvicorn

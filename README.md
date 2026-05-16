@@ -1,193 +1,106 @@
-# BudAI - Personal Financing AI Agent and Analyzer
+# BudAI: The "Digital Twin" Financial Intelligence System
 
-## Project Description
+**BudAI** is a high-performance, full-stack personal finance assistant that has evolved from a reactive dashboard into a proactive, context-aware "Digital Twin." It utilizes a multi-agent AI orchestration layer, deep learning, semantic memory, and quantitative mathematics to provide hallucination-resistant analysis, highly personalized forecasting, and interactive visualizations.
 
-BudAI is a comprehensive, full-stack personal finance assistant designed to act as an empathetic, highly capable financial advisor. By securely integrating with users' bank accounts via TrueLayer, BudAI ingests and processes transactional data to provide actionable insights, budget categorization, and predictive forecasting. At its core, the system relies on a robust FastAPI backend and an advanced local LLM orchestration layer powered by LangChain, LangGraph, and Ollama. This architecture allows users to interact with their financial data through natural language, asking complex questions about past spending trends or future wealth velocity, and receiving highly accurate, context-aware responses.
+---
 
-Technical reliability and user experience are central to BudAI's design, highlighted by its recent migration to a multi-agent node orchestration framework. This state-graph approach drastically reduces LLM hallucination risks by cleanly separating intent routing, specialized analytical workers (such as categorizers and forecasters), and persona-driven response generation. Furthermore, the system seamlessly bridges the gap between text and UI by using deterministic backend logic to trigger interactive visualizations—like cash-flow diagrams, expense charts, and financial health radars—directly within the Next.js frontend. The result is a secure, responsive, and deeply interactive dashboard that transforms raw banking data into a personalized financial roadmap.
+## Core Capabilities: The AI Upgrade
+
+- **Neuro-Stochastic Forecasting:** A cutting-edge hybrid projection engine. A **PyTorch LSTM** extracts your "Financial DNA" (volatility, jump frequency) from transaction sequences, which dynamically drives a high-speed **C++ Monte Carlo simulation** (Bates Model) mathematically clamped to your live balance.
+- **Semantic Memory (RAG):** Multi-year pattern recognition powered by a local **FAISS Vector Database**. Every transaction is semantically embedded (`all-MiniLM-L6-v2`), allowing the AI to recall your historical travel habits, hidden fee structures, and seasonal spending spikes.
+- **Asynchronous Learning Loop:** An active learning categorizer (XGBoost). When you manually correct a transaction label, FastAPI `BackgroundTasks` instantly retrains the model, cleanses your entire historical ledger, recalibrates your LSTM forecasting parameters, and re-indexes your semantic memory—all without freezing the UI.
+- **Multi-Resolution Financial Profile (MRFP):** To prevent LLM hallucinations, BudAI builds an 8k-token dense context block (Liquidity, Recurring Rhythm, Merchant Footprint, RAG Narrative) and injects it directly into the LLM system prompt.
+- **Persistent Chat Sessions:** Seamless conversation management across sessions, allowing you to pick up complex financial planning discussions exactly where you left off.
+- **Advisor HUD & Instant Sync:** Real-time localized 2-3 sentence widget insights formatted strictly in GBP (£) and SHA-256 deduplicated, zero-latency transaction syncing via **TrueLayer**.
+
+---
 
 ## Tech Stack
 
-BudAI is a full-stack personal finance assistant that combines:
+### Backend (The Core)
+- **Framework:** FastAPI (Python 3.10+)
+- **AI Orchestration:** LangGraph, LangChain, Ollama (Local LLM - `qwen3:4b`, `qwen3.5:4b`)
+- **Deep Learning & Math:** PyTorch (LSTM), scikit-learn (HistGradientBoosting), C++ (Shared Objects for Bates MC Engine)
+- **Semantic Storage (RAG):** FAISS (Facebook AI Similarity Search), SentenceTransformers
+- **Database:** SQLite + SQLAlchemy ORM
+- **Task Scheduling:** APScheduler (Token rotation), FastAPI BackgroundTasks (ML Learning Loop)
 
-- a `FastAPI` backend for auth, account sync, chat, and tool execution,
-- a `Next.js` frontend (`budai-frontend`) for dashboard + visualizations,
-- local multi-agent LLM orchestration (`LangChain`, `LangGraph`, and `Ollama`) for conversational financial analysis,
-- and `Python/C++ forecasting + analytics` services backed by `SQLite`.
+### Frontend (The Narrator)
+- **Framework:** Next.js 16 (App Router), React 19
+- **Styling:** Tailwind CSS 4, HeroUI v3 (Beta)
+- **Visualization:** Chart.js with `CoreChartEngine`
+- **State Management:** TanStack Query (Data Fetching), Liquid State Dashboard Architecture
 
-## Current Architecture
+---
 
-### Backend (active API)
-
-- Primary entrypoint: `main.py` (FastAPI, port `8080`).
-- Database: SQLite by default (`budai_memory.db`) via SQLAlchemy models.
-- Token refresh job: APScheduler runs every 45 minutes to refresh TrueLayer access tokens.
-- Auth model: bearer token currently uses `user_uuid` returned by login.
-- AI Orchestration: Multi-agent state graph using `LangGraph`. Includes an Intent Router, specialized worker nodes, a programmatic UI tagger, and a dedicated Persona response generator.
-
-### Frontend
-
-- Location: `budai-frontend/`
-- Stack: Next.js 16, React 19, Tailwind 4, Chart.js.
-- Expected backend base URL: `http://localhost:8080`.
-- Read more on the frontend in the `budai-frontend/README.md` file for more details.
-
-## Implemented Capabilities
-
-- TrueLayer connection flow _`(auth link, callback token exchange, refresh, revoke)`_.
-- User login/bootstrap with `local user storage`.
-- Account discovery, account transaction retrieval, and provider revocation.
-- Streaming AI chat endpoint backed by a modular state graph and local Ollama models.
-- Multi-agent orchestration for **_`robust intent routing`_** and **_`hallucination-resistant`_** tool execution.
-- Deterministic UI trigger generation to bypass LLM formatting unreliability.
-- Tool execution endpoint for analytics/forecasting payloads:
-  - `classification summaries`,
-  - `category spend aggregation`,
-  - `historical expense timelines`,
-  - `cash-flow analysis`,
-  - `expense forecasting`,
-  - `balance forecasting`,
-  - `health radar` and `financial health metrics`.
-- Multi-account resolution (`ALL`, bank name(s), or account id).
-- Chart payload caching via `chart_cache` table (`CACHE_*` ids).
-
-## Project Structure (Current)
+## Project Structure
 
 ```text
-BudAI---Personal-Financing-AI-Agent-and-Analyser/
-├── main.py
-├── config.py
-├── requirements.txt
-├── models/
-│   ├── database_models.py
-│   └── graph_state.py
-├── controllers/
-│   ├── auth_controller.py
-│   ├── account_controller.py
-│   ├── chat_controller.py
-│   └── media_controller.py
-├── middleware/
-│   └── auth_middleware.py
-├── schemas/
-│   └── api_schema.py
+.
+├── main.py                 # FastAPI Entrypoint & Background Schedulers
+├── config.py               # Security, DB, & Environment Configuration
+├── controllers/            # API Routers (Auth, Accounts, Chat, Media, Categorizer, Advisor)
+├── models/                 # SQLAlchemy Database Models (Users, Transactions, ChatSessions, ForecastParameters)
+├── schemas/                # Pydantic Validation Schemas
 ├── services/
-│   ├── orchestrator_graph.py
-│   ├── tools.py
-│   ├── api_integrator/
-│   ├── workers/
-│   │   ├── analyser_worker.py
-│   │   ├── forecaster_worker.py
-│   │   ├── categorizer_worker.py
-│   │   └── health_worker.py
-│   ├── Categorizer_Agent/
-│   ├── Forecaster_Agent/
-│   └── Analyser_Agent/
-└── budai-frontend/
-    ├── package.json
-    └── ...
+│   ├── orchestrator_graph.py # LangGraph Multi-Agent Logic & Intent Routing
+│   ├── profile_builder.py  # Compiles the Multi-Resolution Financial Profile (MRFP)
+│   ├── memory_service.py   # FAISS Vector DB Management & RAG Search
+│   ├── workers/            # Specialized AI Worker Nodes (Analyser, Forecaster, Memory, etc.)
+│   ├── api_integrator/     # TrueLayer OAuth & Deduplicated Ingestion Pipeline
+│   ├── Categorizer_Agent/  # XGBoost Categorization, Preprocessing & Training
+│   └── Forecaster_Agent/   # PyTorch LSTM Models & C++ Monte Carlo Engine Bridge
+├── mcp_servers/            # Model Context Protocol (MCP) tool servers (Memory, Macro, etc.)
+└── budai-frontend/         # Next.js Application
 ```
 
 ---
 
-## Backend Setup
+## Setup and Installation
 
-`1. Create and activate a virtual environment`
+### 1. Prerequisites
+- Python 3.10+
+- Node.js 20+
+- C++ Compiler (GCC/Clang) for building the forecasting engine
+- [Ollama](https://ollama.com/) installed and running locally
 
-```
+### 2. Backend Setup
+```bash
+# Create and activate virtual environment
 python -m venv .venv
 source .venv/bin/activate
-```
 
-`2. Install dependencies`
-
-```
+# Install dependencies
 pip install -r requirements.txt
-```
 
-`3. Configure environment variables`
+# Compile C++ Forecasting Engine
+cd services/Forecaster_Agent/mathematics/algorithm
+g++ -O3 -shared -fPIC -std=c++17 -o ../hybrid_forecaster.so algorithm.cpp hybrid_algorithm.cpp
+cd ../../../..
 
-Create a .env file in the project root:
+# Configure Environment
+cp .env.example .env # Add your TrueLayer Credentials & ENCRYPTION_KEY
 
-```
-DATABASE_URL=sqlite:///budai_memory.db
-SECRET_KEY=replace-this-secret
+# Pull required LLM models
+ollama pull qwen3:4b
+ollama pull qwen3.5:4b
 
-BASE_URL=[https://api.truelayer.com/data/v1]
-AUTH_LINK_URL=[https://auth.truelayer.com]
-CLIENT_ID=your_truelayer_client_id
-CLIENT_SECRET=your_truelayer_client_secret
-REDIRECT_URI=http://localhost:8080/callback
-```
-
-ENCRYPTION_KEY=your_fernet_key
-
-`4. Run backend API`
-
-```
+# Start the server
 uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
-`5. Frontend Setup`
-
-```
+### 3. Frontend Setup
+```bash
 cd budai-frontend
 npm install
 npm run dev
 ```
 
-Frontend runs at `http://localhost:3000` by default.
-
 ---
 
-## API Endpoints (Current)
+## Security & Architecture Standards
 
-Auth
-
-```
-|-POST /api/auth/login
-|-GET /api/auth/truelayer/status
-|-GET /callback
-|-POST /api/auth/connections/extend
-|-POST /api/auth/connections/revoke
-```
-
-Accounts
-
-```
-|-GET /api/accounts/
-|-GET /api/accounts/{account_id}/transactions
-|-DELETE /api/accounts/{provider_id}
-```
-
-Chat
-
-```
-POST /api/chat/ (streaming text response)
-```
-
-Media / Analytics execution
-
-```
-POST /api/media/execute
-```
-
-tool_name currently supports:
-
-```
-|-plot_cash_flow_mixed
-|-classify_financial_data
-|-create_bargraph_chart_and_save
-|-find_total_spent_for_given_category
-|-plot_health_radar
-|-plot_expenses
-|-generate_expense_forecast
-|-generate_financial_forecast
-```
-
----
-
-## Notes
-
-- The orchestration graph is configured for local Ollama at `http://localhost:11434`. Ensure the required models are pulled and running (e.g., qwen3:4b for intent routing and qwen3.5:4b for persona generation).
-
-- Some advanced forecasting logic depends on native C++ components under services/Forecaster_Agent/mathematics/algorithm/.
+- **Hardware Acceleration:** All ML tools (SentenceTransformers, LSTM, XGBoost) dynamically detect and utilize GPU/MPS/CUDA for maximum performance.
+- **Token Encryption:** Bank-access tokens are encrypted at rest using Fernet (AES-128).
+- **Local AI Privacy:** All LLM processing and Vector DB (FAISS) storage occurs locally, ensuring sensitive financial histories never leave your infrastructure.
+- **Strict Grounding:** The AI acts strictly on the deterministic data provided by the C++ engine and MRFP block, ensuring zero numerical hallucinations.

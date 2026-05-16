@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   Trash2,
 } from "lucide-react";
-import { Button, Link, Avatar, Card, Chip } from "@heroui/react";
+import { Button, Link, Avatar, Card, Chip, Skeleton } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { apiFetch } from "@/lib/api";
 
@@ -22,13 +22,30 @@ export default function ConnectionsPage() {
   const { userName, accounts } = useBudAI();
   const [, setConnectionStatus] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 1000);
+
     apiFetch("/api/auth/truelayer/status", {}, true)
       .then((res) => res.json())
-      .then((data) => setConnectionStatus(data))
-      .catch((err) => console.error(err));
-  }, []);
+      .then((data) => {
+        setConnectionStatus(data);
+        if (accounts.length > 0) {
+          setIsLoading(false);
+          clearTimeout(timer);
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+        setIsLoading(false);
+      });
+
+    return () => clearTimeout(timer);
+  }, [accounts]);
 
   const handleConnect = async () => {
     setIsConnecting(true);
@@ -49,13 +66,12 @@ export default function ConnectionsPage() {
 
   return (
     <div className="flex h-screen w-full bg-obsidian font-geist overflow-hidden">
-      {/* Background Glows (Slightly increased opacity to 10 for depth) */}
+
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-[10%] -left-[5%] w-[70%] h-[70%] rounded-full bg-neon-cyan/10 blur-[180px]"></div>
         <div className="absolute -bottom-[10%] -right-[5%] w-[70%] h-[70%] rounded-full bg-deep-pink/10 blur-[180px]"></div>
       </div>
 
-      {/* Sidebar */}
       <div className="relative z-10 w-64 h-full obsidian-glass flex flex-col justify-between py-8 px-6 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
         <div>
           <div className="flex items-center gap-3 mb-12">
@@ -123,7 +139,6 @@ export default function ConnectionsPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="relative z-10 flex-1 flex flex-col pt-8 px-8 h-full">
         <div className="flex items-center justify-between mb-8 shrink-0">
           <div>
@@ -148,7 +163,32 @@ export default function ConnectionsPage() {
             <h3 className="text-white font-bold text-lg px-2 tracking-tight">
               Active Institutions
             </h3>
-            {accounts.length === 0 && !isConnecting && (
+            {isLoading ? (
+              Array.from({ length: 2 }).map((_, i) => (
+                <Card
+                  key={i}
+                  className="obsidian-glass rounded-3xl p-6 shadow-2xl"
+                >
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3 w-full">
+                      <Skeleton className="w-12 h-12 rounded-2xl bg-white/5" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-5 w-32 rounded bg-white/5" />
+                        <Skeleton className="h-3 w-24 rounded bg-white/5" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <Skeleton className="h-14 rounded-2xl bg-white/5" />
+                    <Skeleton className="h-14 rounded-2xl bg-white/5" />
+                  </div>
+                  <div className="flex gap-3">
+                    <Skeleton className="h-11 flex-1 rounded-xl bg-white/5" />
+                    <Skeleton className="h-11 w-11 rounded-xl bg-white/5" />
+                  </div>
+                </Card>
+              ))
+            ) : accounts.length === 0 && !isConnecting ? (
               <Card className="obsidian-glass rounded-3xl p-12 shadow-2xl flex flex-col items-center justify-center text-center">
                 <CreditCard className="w-16 h-16 text-[#5E6272] mb-4 opacity-20" />
                 <p className="text-white font-bold text-xl mb-2">
@@ -165,68 +205,69 @@ export default function ConnectionsPage() {
                   Link First Account
                 </Button>
               </Card>
-            )}
-            {accounts.map((acc, i) => (
-              <Card
-                key={i}
-                className="obsidian-glass rounded-3xl p-6 shadow-2xl hover:border-white/20 transition-all group"
-              >
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
-                      <span className="text-white font-black text-xl">
-                        {acc.bank_name?.charAt(0) || "B"}
-                      </span>
+            ) : (
+              accounts.map((acc, i) => (
+                <Card
+                  key={i}
+                  className="obsidian-glass rounded-3xl p-6 shadow-2xl hover:border-white/20 transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                        <span className="text-white font-black text-xl">
+                          {acc.bank_name?.charAt(0) || "B"}
+                        </span>
+                      </div>
+                      <div>
+                        <h4 className="text-white font-bold text-lg tracking-tight">
+                          {acc.bank_name}
+                        </h4>
+                        <p className="text-[#8B8E98] text-xs font-mono tracking-wider">
+                          •••• {acc.account_number?.slice(-4) || "0000"}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-white font-bold text-lg tracking-tight">
-                        {acc.bank_name}
-                      </h4>
-                      <p className="text-[#8B8E98] text-xs font-mono tracking-wider">
-                        •••• {acc.account_number?.slice(-4) || "0000"}
+                    <Chip className="bg-brand-green/10 text-brand-green border border-brand-green/20 px-3 py-1 font-bold uppercase tracking-wider flex items-center justify-center h-7 text-[10px]">
+                      Connected
+                    </Chip>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div className="p-3.5 rounded-2xl bg-white/5 border border-white/5">
+                      <p className="text-[10px] text-[#5E6272] uppercase font-bold tracking-widest mb-1.5">
+                        Last Sync
+                      </p>
+                      <p className="text-white text-sm font-medium">
+                        2 minutes ago
+                      </p>
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-white/5 border border-white/5">
+                      <p className="text-[10px] text-[#5E6272] uppercase font-bold tracking-widest mb-1.5">
+                        Expiry
+                      </p>
+                      <p className="text-white text-sm font-medium">
+                        84 days left
                       </p>
                     </div>
                   </div>
-                  <Chip className="bg-brand-green/10 text-brand-green border border-brand-green/20 px-3 py-1 font-bold uppercase tracking-wider flex items-center justify-center h-7 text-[10px]">
-                    Connected
-                  </Chip>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="p-3.5 rounded-2xl bg-white/5 border border-white/5">
-                    <p className="text-[10px] text-[#5E6272] uppercase font-bold tracking-widest mb-1.5">
-                      Last Sync
-                    </p>
-                    <p className="text-white text-sm font-medium">
-                      2 minutes ago
-                    </p>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      onPress={handleConnect}
+                      className="flex-1 flex items-center justify-center bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl h-11 font-bold transition-colors"
+                    >
+                      <RefreshCcw size={16} className="mr-2" /> Re-authenticate
+                    </Button>
+                    <Button
+                      isIconOnly
+                      className="w-11 min-w-11 h-11 bg-deep-pink/10 hover:bg-deep-pink/20 text-deep-pink border border-deep-pink/20 rounded-xl flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <Trash2 size={18} />
+                    </Button>
                   </div>
-                  <div className="p-3.5 rounded-2xl bg-white/5 border border-white/5">
-                    <p className="text-[10px] text-[#5E6272] uppercase font-bold tracking-widest mb-1.5">
-                      Expiry
-                    </p>
-                    <p className="text-white text-sm font-medium">
-                      84 days left
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <Button
-                    onPress={handleConnect}
-                    className="flex-1 flex items-center justify-center bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl h-11 font-bold transition-colors"
-                  >
-                    <RefreshCcw size={16} className="mr-2" /> Re-authenticate
-                  </Button>
-                  <Button
-                    isIconOnly
-                    className="w-11 min-w-11 h-11 bg-deep-pink/10 hover:bg-deep-pink/20 text-deep-pink border border-deep-pink/20 rounded-xl flex items-center justify-center transition-colors cursor-pointer"
-                  >
-                    <Trash2 size={18} />
-                  </Button>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              ))
+            )}
           </div>
 
           <div className="space-y-6">

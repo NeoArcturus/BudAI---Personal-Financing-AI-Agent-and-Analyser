@@ -5,7 +5,8 @@ import json
 import sys
 import logging
 import langchain
-from models.database_models import ChatHistory
+import uuid
+from models.database_models import ChatHistory, ChatSession
 from config import SessionLocal
 from services.workers import analyser_worker, forecaster_worker, categorizer_worker, health_worker, memory_worker
 from models.graph_state import BudAIState
@@ -15,7 +16,7 @@ from langchain_core.callbacks import BaseCallbackHandler, StdOutCallbackHandler
 from langchain_ollama import ChatOllama
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
-from typing import Literal
+from typing import Literal, Optional
 import asyncio
 import queue
 import time
@@ -48,11 +49,16 @@ def strip_thinking(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
-def get_session_history(user_uuid: str):
+def get_session_history(user_uuid: str, session_id: Optional[str] = None):
     history = []
     with SessionLocal() as session:
-        records = session.query(ChatHistory).filter(
-            ChatHistory.user_uuid == user_uuid).order_by(ChatHistory.timestamp.asc()).all()
+        query = session.query(ChatHistory).filter(ChatHistory.user_uuid == user_uuid)
+        if session_id:
+            query = query.filter(ChatHistory.session_id == session_id)
+        else:
+            query = query.filter(ChatHistory.session_id == None)
+            
+        records = query.order_by(ChatHistory.timestamp.asc()).all()
         for r in records:
             if r.role == "user":
                 history.append(HumanMessage(content=r.content))
@@ -72,7 +78,7 @@ def ingest_context_node(state: BudAIState):
 
 def intent_router_node(state: BudAIState):
     logger.info(f"Received query: {state['user_input']}")
-    chat_history = get_session_history(state['user_uuid'])
+    chat_history = get_session_history(state['user_uuid'], state.get('session_id'))
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are an INVISIBLE, ROBOTIC query routing mechanism for a financial backend. YOU ARE NOT AN AI ASSISTANT. YOU ARE NOT BUDAI.
@@ -187,7 +193,7 @@ def create_response_generator_node(q: queue.Queue):
             keep_alive=300
         )
 
-        chat_history = get_session_history(state['user_uuid'])
+        chat_history = get_session_history(state['user_uuid'], state.get('session_id'))
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are BudAI, a warm, highly capable, and empathetic personal finance intelligence system acting as the user's trusted financial advisor.
@@ -272,6 +278,7 @@ def create_response_generator_node(q: queue.Queue):
                 if clean_content:
                     new_msg = ChatHistory(
                         user_uuid=state['user_uuid'],
+                        session_id=state.get('session_id'),
                         role="assistant",
                         content=clean_content
                     )
@@ -295,25 +302,6 @@ def create_response_generator_node(q: queue.Queue):
                     logger.info("LLM output was empty after cleaning.")
         except Exception as db_e:
             logger.error(f"Failed to store LLM output in database: {db_e}")
-            for attempt in range(3):
-                try:
-                    with SessionLocal() as session:
-                        session.rollback()
-                        safe_clean_content = clean_content if 'clean_content' in locals() else final_output.strip()
-                        new_msg = ChatHistory(
-                            user_uuid=state['user_uuid'],
-                            role="assistant",
-                            content=safe_clean_content
-                        )
-                        session.add(new_msg)
-                        session.commit()
-                        logger.info(
-                            f"Database commit successful on attempt {attempt + 1}")
-                        break
-                except Exception as retry_e:
-                    if attempt == 2:
-                        logger.error(f"All attempts failed: {retry_e}")
-                    time.sleep(2 ** attempt)
 
         if ui_tag:
             q.put(f"\n\n{ui_tag}")
@@ -372,7 +360,7 @@ def create_explainer_node(q: queue.Queue):
             keep_alive=300
         )
 
-        chat_history = get_session_history(state['user_uuid'])
+        chat_history = get_session_history(state['user_uuid'], state.get('session_id'))
         current_date = datetime.now().strftime("%Y-%m-%d")
 
         prompt = ChatPromptTemplate.from_messages([
@@ -439,6 +427,7 @@ def create_explainer_node(q: queue.Queue):
             with SessionLocal() as session:
                 new_msg = ChatHistory(
                     user_uuid=state['user_uuid'],
+                    session_id=state.get('session_id'),
                     role="assistant",
                     content=warm_text
                 )
@@ -459,9 +448,44 @@ def route_initial(state: BudAIState):
 
 def execute_chat_graph(initial_state: dict):
     q = queue.Queue()
+    user_uuid = initial_state['user_uuid']
+    session_id = initial_state.get('session_id')
+    
     with SessionLocal() as session:
+        if not session_id:
+            # Create new session
+            session_id = str(uuid.uuid4())
+            initial_state['session_id'] = session_id
+            new_session = ChatSession(
+                session_id=session_id,
+                user_uuid=user_uuid,
+                title=initial_state['user_input'][:50] + "..." if len(initial_state['user_input']) > 50 else initial_state['user_input']
+            )
+            session.add(new_session)
+            session.commit()
+            logger.info(f"Created new chat session: {session_id}")
+        else:
+            # Verify session exists
+            existing_session = session.query(ChatSession).filter_by(session_id=session_id, user_uuid=user_uuid).first()
+            if not existing_session:
+                # Fallback to new session if invalid ID provided
+                session_id = str(uuid.uuid4())
+                initial_state['session_id'] = session_id
+                new_session = ChatSession(
+                    session_id=session_id,
+                    user_uuid=user_uuid,
+                    title=initial_state['user_input'][:50] + "..." if len(initial_state['user_input']) > 50 else initial_state['user_input']
+                )
+                session.add(new_session)
+                session.commit()
+                logger.info(f"Invalid session ID provided. Created new session: {session_id}")
+            else:
+                existing_session.last_updated = datetime.utcnow()
+                session.commit()
+
         new_msg = ChatHistory(
-            user_uuid=initial_state['user_uuid'],
+            user_uuid=user_uuid,
+            session_id=session_id,
             role="user",
             content=initial_state['user_input']
         )

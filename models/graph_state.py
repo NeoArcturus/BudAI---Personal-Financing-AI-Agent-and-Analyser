@@ -4,6 +4,7 @@ from langchain_core.messages import BaseMessage
 
 class BudAIState(TypedDict, total=False):
     user_uuid: str
+    session_id: Optional[str]
     active_account_id: str
     user_input: str
     chat_history: List[BaseMessage]

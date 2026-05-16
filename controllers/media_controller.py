@@ -8,6 +8,19 @@ from typing import Any, Dict
 from pydantic import BaseModel
 from middleware.auth_middleware import get_current_user
 from config import SessionLocal
+from services.logger_setup import get_core_logger
+
+logger = get_core_logger(__name__)
+
+
+def _log_cache_hit(cache_id: str, chart_data: Any, query_type: str = "FRONTEND"):
+    """Logs a summary of the cached data retrieval."""
+    summary = {
+        "keys": list(chart_data.keys()) if isinstance(chart_data, dict) else [],
+        "labels_count": len(chart_data.get("labels", [])) if isinstance(chart_data, dict) and isinstance(chart_data.get("labels"), list) else "N/A",
+        "datasets_count": len(chart_data.get("datasets", [])) if isinstance(chart_data, dict) and isinstance(chart_data.get("datasets"), list) else "N/A"
+    }
+    logger.warning(f" [CACHE_HIT:{query_type}] Retrieved {cache_id}. Data Summary: {summary}")
 
 from services.mcp_tools.internal_tools import (
     generate_financial_forecast, classify_financial_data, find_total_spent_for_given_category,
@@ -56,6 +69,8 @@ def execute_tool(request: MediaExecuteRequest, current_user=Depends(get_current_
                 {"cache_id": bank_name_or_id}
             ).fetchone()
             if row:
+                chart_data = json.loads(row[0])
+                _log_cache_hit(bank_name_or_id, chart_data, query_type="FRONTEND")
                 return {
                     "status": "success",
                     "metadata": {
@@ -64,7 +79,7 @@ def execute_tool(request: MediaExecuteRequest, current_user=Depends(get_current_
                         "query_type": "CACHED_RETRIEVAL",
                         "resolved_accounts": [{"bank_name": "Cached Data"}]
                     },
-                    "data": json.loads(row[0])
+                    "data": chart_data
                 }
 
     if tool_name not in TOOL_MAPPING:
@@ -92,6 +107,8 @@ def execute_tool(request: MediaExecuteRequest, current_user=Depends(get_current_
                     {"cache_id": cache_id}
                 ).fetchone()
                 if row:
+                    chart_data = json.loads(row[0])
+                    _log_cache_hit(cache_id, chart_data, query_type="INTERNAL")
                     return {
                         "status": "success",
                         "metadata": {
@@ -100,7 +117,7 @@ def execute_tool(request: MediaExecuteRequest, current_user=Depends(get_current_
                             "query_type": "DYNAMIC_GENERATION",
                             "resolved_accounts": [{"bank_name": bank_name_or_id}]
                         },
-                        "data": json.loads(row[0])
+                        "data": chart_data
                     }
 
         return {

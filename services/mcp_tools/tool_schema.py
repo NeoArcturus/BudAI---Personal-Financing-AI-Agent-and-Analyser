@@ -27,6 +27,14 @@ class GenerateFinancialForecastInput(BaseToolInput):
         ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
     days: int = Field(
         60, description="The number of days into the future to forecast.")
+    discipline_multiplier: float = Field(
+        1.0, description="Multiplier for spending discipline (Strict < 1.0, Erratic > 1.0).")
+    drift_adjustment: float = Field(
+        0.0, description="Adjustment to the baseline growth drift.")
+    stress_test_active: bool = Field(
+        False, description="Whether to simulate a major negative life event.")
+    macro_environment: str = Field(
+        "Stable", description="Economic environment: 'Stable', 'Inflationary', or 'Recession'.")
 
 
 class ClassifyFinancialDataInput(BaseToolInput):
@@ -90,6 +98,14 @@ class GenerateExpenseForecastInput(BaseToolInput):
         ..., description="The exact alphanumeric user_uuid string. DO NOT use placeholders.")
     days: int = Field(
         30, description="The number of days into the future to forecast.")
+    discipline_multiplier: float = Field(
+        1.0, description="Multiplier for spending discipline.")
+    drift_adjustment: float = Field(
+        0.0, description="Adjustment to the baseline drift.")
+    stress_test_active: bool = Field(
+        False, description="Whether to simulate a stress test.")
+    macro_environment: str = Field(
+        "Stable", description="Economic environment.")
 
 
 class AnalyzeCriticalSurvivalMetricsInput(BaseToolInput):

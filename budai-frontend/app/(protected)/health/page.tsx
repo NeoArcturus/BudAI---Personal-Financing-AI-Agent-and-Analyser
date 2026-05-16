@@ -9,7 +9,7 @@ import {
   Zap,
   LineChart,
 } from "lucide-react";
-import { Link, Avatar, Card, Spinner, Chip } from "@heroui/react";
+import { Link, Avatar, Card, Spinner, Chip, Skeleton } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { apiFetch } from "@/lib/api";
 import CoreChartEngine from "@/app/(protected)/_components/CoreChartEngine";
@@ -175,7 +175,7 @@ export default function HealthPage() {
 
             <div className="flex-1 w-full flex items-center justify-center">
               {isLoading ? (
-                <Spinner color="accent" />
+                <Skeleton className="w-80 h-80 rounded-full bg-white/5" />
               ) : chartConfig ? (
                 <CoreChartEngine config={chartConfig} />
               ) : (
@@ -188,63 +188,86 @@ export default function HealthPage() {
           </Card>
 
           <div className="flex flex-col gap-6">
-            <Card className="obsidian-glass rounded-3xl p-8 shadow-2xl flex flex-col items-center justify-center text-center">
+            <Card className="obsidian-glass rounded-3xl p-8 shadow-2xl border border-white/5 flex flex-col items-center justify-center text-center">
               <div className="relative w-40 h-40 flex items-center justify-center mb-6">
                 <div className="absolute inset-0 rounded-full border-4 border-white/5"></div>
-                <div className="absolute inset-0 rounded-full border-t-4 border-r-4 border-neon-cyan shadow-[0_0_20px_rgba(0,229,255,0.4)] rotate-45"></div>
+                {!isLoading && (
+                  <div className="absolute inset-0 rounded-full border-t-4 border-r-4 border-neon-cyan shadow-[0_0_20px_rgba(0,229,255,0.4)] rotate-45"></div>
+                )}
                 <div className="flex flex-col items-center">
-                  <span className="text-5xl font-black text-white">84</span>
+                  {isLoading ? (
+                    <Skeleton className="w-16 h-12 rounded-lg bg-white/5" />
+                  ) : (
+                    <span className="text-5xl font-black text-white">84</span>
+                  )}
                   <span className="text-xs text-[#8B8E98] font-bold uppercase tracking-tighter mt-1">
                     Health Score
                   </span>
                 </div>
               </div>
-              <p className="text-[#8B8E98] text-sm max-w-xs leading-relaxed">
-                Your score increased by{" "}
-                <span className="text-brand-green font-bold">+4 points</span>{" "}
-                this month due to improved debt-to-income ratio.
-              </p>
+              {isLoading ? (
+                <div className="space-y-2 w-full max-w-xs px-4">
+                  <Skeleton className="h-3 w-full rounded bg-white/5" />
+                  <Skeleton className="h-3 w-3/4 rounded bg-white/5 mx-auto" />
+                </div>
+              ) : (
+                <p className="text-[#8B8E98] text-sm max-w-xs leading-relaxed">
+                  Your score increased by{" "}
+                  <span className="text-brand-green font-bold">+4 points</span>{" "}
+                  this month due to improved debt-to-income ratio.
+                </p>
+              )}
             </Card>
 
-            <Card className="obsidian-glass rounded-3xl p-6 shadow-2xl flex-1">
+            <Card className="obsidian-glass rounded-3xl p-6 shadow-2xl border border-white/5 flex-1">
               <h4 className="text-white font-bold mb-6 flex items-center gap-2">
                 <Zap size={18} className="text-neon-cyan" />
                 Actionable Insights
               </h4>
               <div className="space-y-4">
-                {[
-                  {
-                    title: "Increase Emergency Fund",
-                    desc: "You have 1.5 months of expenses saved. Goal is 3 months.",
-                    type: "urgent",
-                  },
-                  {
-                    title: "Consolidate Debt",
-                    desc: "High interest on your credit card is dragging down your score.",
-                    type: "warning",
-                  },
-                  {
-                    title: "Investment Diversity",
-                    desc: "90% of your assets are in cash. Consider low-risk index funds.",
-                    type: "info",
-                  },
-                ].map((insight, i) => (
-                  <div
-                    key={i}
-                    className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-all cursor-pointer group"
-                  >
-                    <h5 className="text-white font-bold text-sm mb-1 flex items-center justify-between">
-                      {insight.title}
-                      <ArrowRightLeft
-                        size={14}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-neon-cyan"
-                      />
-                    </h5>
-                    <p className="text-xs text-[#8B8E98] leading-relaxed">
-                      {insight.desc}
-                    </p>
-                  </div>
-                ))}
+                {isLoading
+                  ? Array.from({ length: 3 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="p-4 rounded-2xl bg-white/5 border border-white/5"
+                      >
+                        <Skeleton className="h-4 w-1/2 rounded bg-white/5 mb-2" />
+                        <Skeleton className="h-3 w-full rounded bg-white/5" />
+                      </div>
+                    ))
+                  : [
+                      {
+                        title: "Increase Emergency Fund",
+                        desc: "You have 1.5 months of expenses saved. Goal is 3 months.",
+                        type: "urgent",
+                      },
+                      {
+                        title: "Consolidate Debt",
+                        desc: "High interest on your credit card is dragging down your score.",
+                        type: "warning",
+                      },
+                      {
+                        title: "Investment Diversity",
+                        desc: "90% of your assets are in cash. Consider low-risk index funds.",
+                        type: "info",
+                      },
+                    ].map((insight, i) => (
+                      <div
+                        key={i}
+                        className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-all cursor-pointer group"
+                      >
+                        <h5 className="text-white font-bold text-sm mb-1 flex items-center justify-between">
+                          {insight.title}
+                          <ArrowRightLeft
+                            size={14}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-neon-cyan"
+                          />
+                        </h5>
+                        <p className="text-xs text-[#8B8E98] leading-relaxed">
+                          {insight.desc}
+                        </p>
+                      </div>
+                    ))}
               </div>
             </Card>
           </div>

@@ -1,7 +1,7 @@
-// app/(protected)/home/page.tsx
+
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useBudAI } from "@/app/context/AppContext";
 import CashFlowWidget from "@/app/(protected)/_components/CashFlowWidget";
 import SpendingTrendWidget from "@/app/(protected)/_components/SpendingTrendWidget";
@@ -11,7 +11,6 @@ import LedgerTableWidget from "@/app/(protected)/_components/LedgerTableWidget";
 import {
   Search,
   Bell,
-  Settings,
   LayoutDashboard,
   ArrowRightLeft,
   Clock,
@@ -149,11 +148,35 @@ export default function HomePage() {
   const { userName } = useBudAI();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const [widgets, setWidgets] = useState<WidgetInstance[]>([
+  const [widgets, setWidgets] = useState<WidgetInstance[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const defaultWidgets: WidgetInstance[] = [
     { id: "portfolio-1", type: "portfolio", height: 450, colSpan: 1 },
     { id: "cashFlow-1", type: "cashFlow", height: 450, colSpan: 1 },
     { id: "ledger-1", type: "ledger", height: 450, colSpan: 2 },
-  ]);
+  ];
+
+  useEffect(() => {
+    const saved = localStorage.getItem("budai_dashboard_widgets");
+    if (saved) {
+      try {
+        setWidgets(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse saved widgets", e);
+        setWidgets(defaultWidgets);
+      }
+    } else {
+      setWidgets(defaultWidgets);
+    }
+    setIsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem("budai_dashboard_widgets", JSON.stringify(widgets));
+    }
+  }, [widgets, isLoaded]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -356,30 +379,38 @@ export default function HomePage() {
         </div>
 
         <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pb-24 relative">
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={widgets.map((w) => w.id)}
-              strategy={rectSortingStrategy}
+          {!isLoaded ? (
+            <div className="w-full h-96 flex items-center justify-center">
+              <span className="text-neon-cyan/50 animate-pulse font-medium tracking-widest uppercase text-xs">
+                Restoring Workspace...
+              </span>
+            </div>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
             >
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
-                {widgets.map((widget) => (
-                  <SortableWidgetItem
-                    key={widget.id}
-                    id={widget.id}
-                    height={widget.height}
-                    colSpan={widget.colSpan}
-                    onResize={handleResizeWidget}
-                  >
-                    {renderWidgetContent(widget)}
-                  </SortableWidgetItem>
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+              <SortableContext
+                items={widgets.map((w) => w.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
+                  {widgets.map((widget) => (
+                    <SortableWidgetItem
+                      key={widget.id}
+                      id={widget.id}
+                      height={widget.height}
+                      colSpan={widget.colSpan}
+                      onResize={handleResizeWidget}
+                    >
+                      {renderWidgetContent(widget)}
+                    </SortableWidgetItem>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          )}
 
           <div className="w-full flex justify-center mt-12 mb-8">
             <Button
@@ -394,7 +425,7 @@ export default function HomePage() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-[24px]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl">
           <div className="obsidian-glass rounded-3xl w-full max-w-md shadow-[0_0_50px_rgba(0,229,255,0.1)] overflow-hidden flex flex-col font-geist">
             <div className="p-6 border-b border-white/8 flex items-center justify-between">
               <h2 className="text-white font-bold text-lg tracking-tight">

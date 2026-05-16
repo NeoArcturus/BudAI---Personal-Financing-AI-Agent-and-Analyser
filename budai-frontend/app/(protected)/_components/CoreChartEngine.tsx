@@ -1,4 +1,4 @@
-// app/(protected)/_components/CoreChartEngine.tsx
+
 "use client";
 
 import React, { useEffect, useRef } from "react";
@@ -49,7 +49,7 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
       responsive: true,
       maintainAspectRatio: false,
       animation: {
-        duration: 1200,
+        duration: 600,
         easing: "easeOutQuart",
       },
       plugins: {
@@ -137,7 +137,11 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
           ...baseOptions.plugins,
         },
         scales: isCircular
-          ? { x: { display: false }, y: { display: false } }
+          ? {
+              ...config.options?.scales,
+              x: { display: false },
+              y: { display: false },
+            }
           : {
               ...config.options?.scales,
               ...baseOptions.scales,
@@ -158,8 +162,8 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
   if (!config) return null;
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center">
-      <canvas ref={canvasRef}></canvas>
+    <div className="relative w-full h-full min-h-0 flex items-center justify-center overflow-hidden">
+      <canvas ref={canvasRef} className="w-full h-full"></canvas>
     </div>
   );
 }

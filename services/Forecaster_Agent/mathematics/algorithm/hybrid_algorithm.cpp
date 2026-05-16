@@ -7,10 +7,15 @@
 
 extern "C"
 {
-    int run_hybrid_forecast(double S0, double mu, int buffer_size, int paths, const char *account_id, double *mean_out, double *careless_out, double *optimal_out)
-    {
-        HestonParams hp = {S0, 0.04, 2.0, 0.04, 0.1, -0.5};
-        JumpParams jp = {0.1, -0.05, 0.1};
+    int run_hybrid_forecast_v2(
+        double S0, double mu, 
+        double kappa, double theta, double xi, double rho,
+        double lambda, double mu_J, double sigma_J,
+        int buffer_size, int paths, const char *account_id, 
+        double *mean_out, double *careless_out, double *optimal_out
+    ) {
+        HestonParams hp = {S0, theta, kappa, theta, xi, rho};
+        JumpParams jp = {lambda, mu_J, sigma_J};
         double dt = 1.0;
 
         std::hash<std::string> hasher;

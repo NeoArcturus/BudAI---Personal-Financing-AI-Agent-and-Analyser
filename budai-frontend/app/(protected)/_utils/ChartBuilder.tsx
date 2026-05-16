@@ -30,7 +30,7 @@ const baseOptions = {
   responsive: true,
   maintainAspectRatio: false,
   animation: {
-    duration: 1000,
+    duration: 600,
     easing: "easeOutQuart" as const,
   },
   interaction: {
@@ -71,8 +71,8 @@ const baseOptions = {
 };
 
 const colorPalette = [
-  "#00E5FF", // Neon Cyan
-  "#FF3366", // Deep Pink
+  "#00E5FF",
+  "#FF3366",
   "#7FFF00",
   "#B900FF",
   "#FFEA00",
@@ -104,7 +104,7 @@ const getColorForMetric = (
 };
 
 const getProgressiveAnimation = (dataLength: number) => {
-  const totalDuration = 2000;
+  const totalDuration = 800;
   const delayBetweenPoints = totalDuration / Math.max(1, dataLength);
 
   return {
@@ -152,7 +152,7 @@ const getProgressiveAnimation = (dataLength: number) => {
 const getDelayedAnimation = () => {
   let delayed = false;
   return {
-    duration: 1000,
+    duration: 600,
     easing: "easeOutQuart",
     onComplete: () => {
       delayed = true;
@@ -172,11 +172,16 @@ export const buildChartConfig = (
   payloadData: BankChartData[],
   params: ToolParameters,
   customTitle?: string,
+  options?: { disableAnimation?: boolean },
 ): NativeChartConfig | null => {
+  const animationOverride = options?.disableAnimation
+    ? { duration: 0, delay: 0 }
+    : undefined;
+
   if (type === "categorized") {
     const allLabels = Array.from(
       new Set(
-        payloadData.flatMap((b) => b.data.map((d) => String(d.Category))),
+        payloadData.flatMap((b) => (b.data || []).map((d) => String(d.Category))),
       ),
     );
     const datasets = payloadData.map((b, i) => {
@@ -188,7 +193,7 @@ export const buildChartConfig = (
       return {
         label: `${b.bank_name} Spent (£)`,
         data: allLabels.map((l) => {
-          const pt = b.data.find((d) => String(d.Category) === l);
+          const pt = (b.data || []).find((d) => String(d.Category) === l);
           return pt ? Number(pt.Total_Amount) : 0;
         }),
         backgroundColor: metricColor,
@@ -202,7 +207,8 @@ export const buildChartConfig = (
       data: { labels: allLabels, datasets },
       options: {
         ...baseOptions,
-        animation: getDelayedAnimation() as unknown as Record<string, unknown>,
+        animation: (animationOverride ||
+          getDelayedAnimation()) as unknown as Record<string, unknown>,
         plugins: {
           ...baseOptions.plugins,
           title: {
@@ -241,13 +247,15 @@ export const buildChartConfig = (
             backgroundColor: colorPalette,
             borderWidth: 0,
             hoverOffset: 12,
+            radius: "80%",
           },
         ],
       },
       options: {
         ...baseOptions,
-        cutout: "75%",
-        animation: getDelayedAnimation() as unknown as Record<string, unknown>,
+        cutout: "65%",
+        animation: (animationOverride ||
+          getDelayedAnimation()) as unknown as Record<string, unknown>,
         scales: { x: { display: false }, y: { display: false } },
         plugins: {
           ...baseOptions.plugins,
@@ -266,27 +274,38 @@ export const buildChartConfig = (
 
   if (type === "cash_flow_mixed") {
     const allMonths = Array.from(
-      new Set(payloadData.flatMap((b) => b.data.map((d) => String(d.Month)))),
-    ).sort(
-      (a, b) => new Date(`01 ${a}`).getTime() - new Date(`01 ${b}`).getTime(),
-    );
+      new Set(
+        payloadData.flatMap((b) => b.data.map((d) => String(d.Month || ""))),
+      ),
+    )
+      .filter((m) => m !== "")
+      .sort((a, b) => {
+        try {
+          return new Date(`01 ${a}`).getTime() - new Date(`01 ${b}`).getTime();
+        } catch {
+          return a.localeCompare(b);
+        }
+      });
 
     const netBalance = allMonths.map((m) =>
       payloadData.reduce(
         (s, b) =>
-          s + Number(b.data.find((d) => d.Month === m)?.Net_Balance || 0),
+          s +
+          Number(b.data.find((d) => String(d.Month) === m)?.Net_Balance || 0),
         0,
       ),
     );
     const income = allMonths.map((m) =>
       payloadData.reduce(
-        (s, b) => s + Number(b.data.find((d) => d.Month === m)?.Income || 0),
+        (s, b) =>
+          s + Number(b.data.find((d) => String(d.Month) === m)?.Income || 0),
         0,
       ),
     );
     const expense = allMonths.map((m) =>
       payloadData.reduce(
-        (s, b) => s + Number(b.data.find((d) => d.Month === m)?.Expense || 0),
+        (s, b) =>
+          s + Number(b.data.find((d) => String(d.Month) === m)?.Expense || 0),
         0,
       ),
     );
@@ -327,7 +346,8 @@ export const buildChartConfig = (
       },
       options: {
         ...baseOptions,
-        animation: getDelayedAnimation() as unknown as Record<string, unknown>,
+        animation: (animationOverride ||
+          getDelayedAnimation()) as unknown as Record<string, unknown>,
         plugins: {
           ...baseOptions.plugins,
           title: {
@@ -342,8 +362,9 @@ export const buildChartConfig = (
   }
 
   if (type === "health_radar") {
-    const labels = payloadData[0]?.data.map((d) => String(d.Metric)) || [];
-    const scores = payloadData[0]?.data.map((d) => Number(d.Score)) || [];
+    const dataArray = payloadData[0]?.data || [];
+    const labels = dataArray.map((d) => String(d.Metric || ""));
+    const scores = dataArray.map((d) => Number(d.Score || 0));
 
     return {
       type: "radar",
@@ -366,7 +387,8 @@ export const buildChartConfig = (
       },
       options: {
         ...baseOptions,
-        animation: getDelayedAnimation() as unknown as Record<string, unknown>,
+        animation: (animationOverride ||
+          getDelayedAnimation()) as unknown as Record<string, unknown>,
         scales: {
           x: { display: false },
           y: { display: false },
@@ -394,9 +416,33 @@ export const buildChartConfig = (
   }
 
   if (type === "expense_forecast" || type === "balance_forecast") {
-    const allDays = Array.from(
-      new Set(payloadData.flatMap((b) => b.data.map((d) => String(d.Day)))),
-    ).sort((a, b) => Number(a.split(" ")[1]) - Number(b.split(" ")[1]));
+    const allLabels = Array.from(
+      new Set(
+        payloadData.flatMap((b) =>
+          (b.data || []).map((d) => String(d.Day || d.Month || d.Date || "")),
+        ),
+      ),
+    )
+      .filter((l) => l !== "")
+      .sort((a, b) => {
+        const numA = Number(a.split(" ")[1]);
+        const numB = Number(b.split(" ")[1]);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+
+        try {
+          const dateA = new Date(a).getTime();
+          const dateB = new Date(b).getTime();
+          if (!isNaN(dateA) && !isNaN(dateB)) return dateA - dateB;
+        } catch {
+          try {
+            const mDateA = new Date(`01 ${a}`).getTime();
+            const mDateB = new Date(`01 ${b}`).getTime();
+            if (!isNaN(mDateA) && !isNaN(mDateB)) return mDateA - mDateB;
+          } catch {}
+        }
+        return a.localeCompare(b);
+      });
+
     const datasets: ChartDataset<"line">[] = [];
 
     if (type === "balance_forecast") {
@@ -407,11 +453,18 @@ export const buildChartConfig = (
             : getColorForMetric("balance", i);
         datasets.push({
           label: `${b.bank_name} Expected`,
-          data: allDays.map((day) =>
-            Number(
-              b.data.find((d) => d.Day === day)?.["Expected Balance"] || 0,
-            ),
-          ),
+          data: allLabels.map((label) => {
+            const pt = (b.data || []).find(
+              (d) => String(d.Day || d.Month || d.Date || "") === label,
+            );
+            return Number(
+              pt?.["Expected Balance"] ||
+                pt?.["Balance"] ||
+                pt?.["expected_balance"] ||
+                pt?.["balance"] ||
+                0,
+            );
+          }),
           borderColor: metricColor,
           backgroundColor: `${metricColor}1A`,
           fill: true,
@@ -429,13 +482,18 @@ export const buildChartConfig = (
             : getColorForMetric("spend", i);
         datasets.push({
           label: `${b.bank_name} Spend`,
-          data: allDays.map((day) =>
-            Number(
-              b.data.find((d) => d.Day === day)?.[
-                "Projected Daily Spend (£)"
-              ] || 0,
-            ),
-          ),
+          data: allLabels.map((label) => {
+            const pt = (b.data || []).find(
+              (d) => String(d.Day || d.Month || d.Date || "") === label,
+            );
+            return Number(
+              pt?.["Projected Daily Spend (£)"] ||
+                pt?.["Projected Spend"] ||
+                pt?.["spend"] ||
+                pt?.["Amount"] ||
+                0,
+            );
+          }),
           borderColor: metricColor,
           backgroundColor: `${metricColor}1A`,
           fill: true,
@@ -449,18 +507,19 @@ export const buildChartConfig = (
 
     return {
       type: "line",
-      data: { labels: allDays, datasets },
+      data: { labels: allLabels, datasets },
       options: {
         ...baseOptions,
-        animation: getProgressiveAnimation(allDays.length) as unknown as Record<
-          string,
-          unknown
-        >,
+        animation: (animationOverride ||
+          getProgressiveAnimation(
+            allLabels.length,
+          )) as unknown as Record<string, unknown>,
         plugins: {
           ...baseOptions.plugins,
           title: {
             display: true,
-            text: customTitle || `AI Forecast Analysis (${params.days} Days)`,
+            text:
+              customTitle || `AI Forecast Analysis (${params.days || ""} Days)`,
             color: "#ffffff",
             font: { size: 16 },
           },
@@ -471,9 +530,28 @@ export const buildChartConfig = (
 
   if (type.startsWith("historical")) {
     const timeType = type.split("_")[1] || "monthly";
+
     const allDates = Array.from(
-      new Set(payloadData.flatMap((b) => b.data.map((d) => String(d.Date)))),
-    ).sort();
+      new Set(
+        payloadData.flatMap((b) =>
+          (b.data || []).map((d) => String(d.Date || d.Month || "")),
+        ),
+      ),
+    )
+      .filter((d) => d !== "")
+      .sort((a, b) => {
+        if (a.includes(" ") || a.includes("-")) {
+          try {
+            return (
+              new Date(`01 ${a}`).getTime() - new Date(`01 ${b}`).getTime()
+            );
+          } catch {
+            return a.localeCompare(b);
+          }
+        }
+        return a.localeCompare(b);
+      });
+
     const datasets: ChartDataset<"line">[] = [];
 
     payloadData.forEach((b, idx) => {
@@ -484,9 +562,12 @@ export const buildChartConfig = (
 
       datasets.push({
         label: b.bank_name,
-        data: allDates.map((date) =>
-          Number(b.data.find((d) => d.Date === date)?.Amount || 0),
-        ),
+        data: allDates.map((date) => {
+          const pt = (b.data || []).find(
+            (d) => String(d.Date || d.Month || "") === date,
+          );
+          return pt ? Number(pt.Amount || pt.Total_Amount || 0) : 0;
+        }),
         borderColor: metricColor,
         fill: false,
         tension: 0.4,
@@ -502,9 +583,10 @@ export const buildChartConfig = (
       data: { labels: allDates, datasets },
       options: {
         ...baseOptions,
-        animation: getProgressiveAnimation(
-          allDates.length,
-        ) as unknown as Record<string, unknown>,
+        animation: (animationOverride ||
+          getProgressiveAnimation(
+            allDates.length,
+          )) as unknown as Record<string, unknown>,
         plugins: {
           ...baseOptions.plugins,
           title: {
@@ -522,3 +604,4 @@ export const buildChartConfig = (
 
   return null;
 };
+

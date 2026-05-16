@@ -2,7 +2,7 @@ import requests
 import time
 import uuid
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 from services.api_integrator.access_token_generator import AccessTokenGenerator
 from config import SessionLocal, TRUELAYER_BASE_URL, ENCRYPTION_KEY
@@ -24,33 +24,50 @@ class UserAccounts:
                    "Authorization": f"Bearer {token}"}
         res = None
         for attempt in range(max_retries):
+            logger.info(f"Making request to {url} (Attempt {attempt + 1})")
             res = requests.get(url, headers=headers, params=params)
             if res.status_code != 429:
                 break
+            logger.warning(
+                f"Rate limited (429) for {url}. Retrying in {2**attempt}s...")
             time.sleep(2 ** attempt)
 
         if res is not None and res.status_code == 401 and provider_id:
+            logger.info(
+                f"Token expired for {provider_id}. Attempting refresh...")
             token_gen = AccessTokenGenerator()
             new_token = token_gen.refresh_token(provider_id, self.user_id)
             if new_token:
+                logger.info(f"Token refreshed successfully for {provider_id}")
                 headers["Authorization"] = f"Bearer {new_token}"
                 res = requests.get(url, headers=headers, params=params)
 
         if res is not None and res.status_code == 403:
             err_data = res.json()
+            logger.error(f"Access forbidden (403) for {url}: {err_data}")
             if isinstance(err_data, dict) and (err_data.get("error") == "sca_exceeded" or "PSU" in str(err_data)):
                 raise PermissionError("SECURITY LOCK")
+
+        if res is not None:
+            logger.info(
+                f"Request to {url} completed with status {res.status_code}")
+
         return res
 
     def initialise_accounts(self, bank_uuid, user_uuid):
+        logger.info(
+            f"Starting account initialization for Bank: {bank_uuid}, User: {user_uuid}")
         try:
             with SessionLocal() as session:
                 bank = session.query(Bank).filter_by(
                     bank_uuid=bank_uuid, user_uuid=user_uuid).first()
 
                 if not bank:
+                    logger.warning(f"Bank connection not found: {bank_uuid}")
                     return False
 
+                logger.info(
+                    f"Decrypting tokens for bank: {bank.bank_name or bank.truelayer_provider_id}")
                 access_token_raw = bank.access_token
                 if isinstance(access_token_raw, memoryview):
                     access_token_raw = access_token_raw.tobytes()
@@ -59,16 +76,24 @@ class UserAccounts:
                     access_token_raw).decode()
                 provider_id = bank.truelayer_provider_id
 
+                logger.info(
+                    f"Fetching accounts from TrueLayer for provider: {provider_id}")
                 account_res = self._make_request(
                     self.base_url, access_token, provider_id)
 
                 if account_res is not None and account_res.status_code == 200:
                     results = account_res.json().get("results", [])
+                    logger.info(
+                        f"Found {len(results)} accounts for provider {provider_id}")
                     if not results:
                         return False
 
                     for acc_det in results:
                         acc_id = acc_det.get("account_id")
+                        display_name = acc_det.get(
+                            "display_name", "Unknown Account")
+                        logger.info(
+                            f"Processing account: {display_name} ({acc_id})")
 
                         account_number_info = acc_det.get("account_number")
                         if isinstance(account_number_info, list) and len(account_number_info) > 0:
@@ -80,6 +105,7 @@ class UserAccounts:
                             account_number_info.get("sort_code", ""))
                         acc_no = str(account_number_info.get("number", ""))
 
+                        logger.info(f"Fetching balance for account: {acc_id}")
                         acc_balance = 0.0
                         bal_res = self._make_request(
                             f"{self.base_url}/{acc_id}/balance", access_token, provider_id)
@@ -87,17 +113,23 @@ class UserAccounts:
                             bal_data = bal_res.json().get("results", [{}])[0]
                             acc_balance = bal_data.get(
                                 "available", bal_data.get("current", 0.0))
+                            logger.info(
+                                f"Account {acc_id} balance: {acc_balance}")
 
                         existing_acc = session.query(Account).filter_by(
                             account_id=acc_id).first()
 
                         if existing_acc:
+                            logger.info(
+                                f"Updating existing account record: {acc_id}")
                             existing_acc.user_uuid = user_uuid
                             existing_acc.bank_uuid = bank_uuid
                             existing_acc.account_number = acc_no
                             existing_acc.sort_code = sort_code
                             existing_acc.account_balance = float(acc_balance)
                         else:
+                            logger.info(
+                                f"Creating new account record: {acc_id}")
                             new_acc = Account(
                                 account_id=acc_id,
                                 user_uuid=user_uuid,
@@ -110,60 +142,150 @@ class UserAccounts:
 
                         session.commit()
 
+                        logger.info(
+                            f"Fetching transactions for account: {acc_id}")
                         tx_url = f"{self.base_url}/{acc_id}/transactions"
-                        tx_params = {"from": "2025-01-01", "to": "2025-12-31"}
+                        from_date = (datetime.utcnow() -
+                                     timedelta(days=180)).strftime('%Y-%m-%d')
+                        to_date = datetime.utcnow().strftime('%Y-%m-%d')
+                        tx_params = {"from": from_date, "to": to_date}
                         tx_res = self._make_request(
                             tx_url, access_token, provider_id, params=tx_params)
 
                         if tx_res is not None and tx_res.status_code == 200:
                             tx_data = tx_res.json().get("results", [])
-                            for tx in tx_data:
-                                tx_id = tx.get("transaction_id",
-                                               str(uuid.uuid4()))
-                                date_str = tx.get("timestamp")
+                            logger.info(
+                                f"Retrieved {len(tx_data)} raw transactions for account {acc_id}")
+                            self._process_and_store_transactions(
+                                session, tx_data, user_uuid, bank_uuid, acc_id)
 
-                                if date_str:
-                                    try:
-                                        date_val = datetime.fromisoformat(
-                                            date_str.replace("Z", "+00:00"))
-                                    except Exception:
-                                        date_val = datetime.utcnow()
-                                else:
-                                    date_val = datetime.utcnow()
-
-                                amount = float(tx.get("amount", 0.0))
-                                original_desc = str(tx.get("description", ""))
-                                classification_list = tx.get(
-                                    "transaction_classification", [])
-
-                                if isinstance(classification_list, list) and classification_list:
-                                    classification_str = " ".join(
-                                        [str(c) for c in classification_list])
-                                    desc_val = f"{original_desc} {classification_str}".strip(
-                                    )
-                                else:
-                                    desc_val = original_desc
-
-                                existing_tx = session.query(Transaction).filter_by(
-                                    transaction_uuid=tx_id).first()
-                                if not existing_tx:
-                                    new_tx = Transaction(
-                                        transaction_uuid=tx_id,
-                                        user_uuid=user_uuid,
-                                        bank_uuid=bank_uuid,
-                                        account_id=acc_id,
-                                        date=date_val,
-                                        amount=amount,
-                                        category="Uncategorized",
-                                        description=desc_val
-                                    )
-                                    session.add(new_tx)
-                            session.commit()
-
+                    logger.info(
+                        f"Finished initialization for bank connection: {bank_uuid}")
                     return True
+
+                logger.warning(
+                    f"Failed to fetch accounts for provider {provider_id}. Status: {account_res.status_code if account_res else 'No response'}")
                 return False
         except Exception as e:
+            logger.error(f"Error initializing accounts: {e}", exc_info=True)
             return False
+
+    def _process_and_store_transactions(self, session, tx_data, user_uuid, bank_uuid, account_id):
+        import hashlib
+        from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+        from services.Categorizer_Agent.categorizer.preprocessor import Preprocessor
+        import os
+
+        if not tx_data:
+            logger.info(
+                f"No transaction data to process for account {account_id}")
+            return
+
+        logger.info(
+            f"Processing {len(tx_data)} transactions for account {account_id}")
+        new_txs = []
+        for tx in tx_data:
+            tx_id = tx.get("transaction_id", str(uuid.uuid4()))
+            date_str = tx.get("timestamp")
+
+            if date_str:
+                try:
+                    date_val = datetime.fromisoformat(
+                        date_str.replace("Z", "+00:00"))
+                except Exception:
+                    date_val = datetime.utcnow()
+            else:
+                date_val = datetime.utcnow()
+
+            amount = float(tx.get("amount", 0.0))
+            original_desc = str(tx.get("description", ""))
+            classification_list = tx.get("transaction_classification", [])
+
+            if isinstance(classification_list, list) and classification_list:
+                classification_str = " ".join(
+                    [str(c) for c in classification_list])
+                desc_val = f"{original_desc} {classification_str}".strip()
+            else:
+                desc_val = original_desc
+
+            # Content-based Deduplication Hash
+            tx_hash = hashlib.sha256(
+                f"{user_uuid}_{account_id}_{date_val.strftime('%Y-%m-%d')}_{amount}_{desc_val}".encode()).hexdigest()
+
+            # Check if exists by UUID or Hash
+            existing_tx = session.query(Transaction).filter(
+                (Transaction.transaction_uuid == tx_id) |
+                (Transaction.transaction_uuid == tx_hash)
+            ).first()
+
+            if not existing_tx:
+                new_txs.append({
+                    "transaction_uuid": tx_id,
+                    "user_uuid": user_uuid,
+                    "bank_uuid": bank_uuid,
+                    "account_id": account_id,
+                    "date": date_val,
+                    "amount": amount,
+                    "description": desc_val,
+                    "category": "Uncategorized"
+                })
+
+        if not new_txs:
+            logger.info(
+                f"All {len(tx_data)} transactions for account {account_id} are already in the database. Skipping.")
+            return
+
+        logger.info(
+            f"Found {len(new_txs)} new transactions to categorize and store for account {account_id}")
+
+        # Prepare for Categorization
+        df_new = pd.DataFrame(new_txs)
+        agent = CategorizerAgent()
+        proc = Preprocessor(df_new, agent.local_st_path)
+
+        xgb_model_path = os.path.join(agent.model_dir, "gbm_model.joblib")
+        enc_path = os.path.join(agent.enc_dir, "label_encoder.joblib")
+
+        if os.path.exists(xgb_model_path) and os.path.exists(enc_path):
+            logger.info(
+                f"Running AI Categorization for {len(new_txs)} transactions...")
+            clean_df, embeddings = proc.preprocess_for_inference()
+            categorized_df = agent.categorizer.predict(
+                clean_df, embeddings, xgb_model_path, enc_path)
+            # Map categories back
+            category_map = categorized_df.set_index(
+                "transaction_uuid")["Category"].to_dict()
+            for tx in new_txs:
+                tx["category"] = category_map.get(
+                    tx["transaction_uuid"], "Uncategorized")
+            logger.info("AI Categorization completed.")
+        else:
+            logger.warning(
+                f"Categorization models not found at {xgb_model_path}. Storing as 'Uncategorized'.")
+
+        # Sort by date (chronological) before storing
+        new_txs.sort(key=lambda x: x["date"])
+
+        # Bulk store
+        logger.info(f"Committing {len(new_txs)} transactions to database...")
+        # Bulk store
+        for tx_dict in new_txs:
+            new_tx = Transaction(**tx_dict)
+            session.add(new_tx)
+
+        session.commit()
+
+        # Phase 6: Index in ChromaDB
+        from services.memory_service import MemoryService
+        try:
+            mem = MemoryService()
+            mem.index_transactions(new_txs, user_uuid)
+        except Exception as e:
+            logger.error(
+                f"Failed to index transactions in semantic memory: {e}")
+
+        logger.info(
+            f"Successfully processed, categorized, and stored {len(new_txs)} new transactions for account {account_id}")
 
     def get_all_accounts(self):
         all_accounts = []
@@ -329,9 +451,15 @@ class UserAccounts:
                     data = result.json()
                     transactions_list = data.get(
                         'results', data) if isinstance(data, dict) else data
+
+                    # Consistently store new transactions
+                    self._process_and_store_transactions(
+                        session, transactions_list, user_uuid, row[2], account_id)
+
                     all_txs.extend(transactions_list)
 
-            return pd.DataFrame(all_txs)
+            # Re-fetch from DB to ensure we return the categorized, deduplicated records
+            return self.get_transactions(bank_name_or_id, user_uuid, start_date=from_date, end_date=to_date)
 
         except Exception as e:
             return pd.DataFrame()

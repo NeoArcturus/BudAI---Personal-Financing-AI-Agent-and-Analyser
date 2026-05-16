@@ -31,8 +31,8 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["Geist", "Inter", "sans-serif"],
-        geist: ["Geist", "sans-serif"],
+        sans: ["var(--font-jakarta)", "sans-serif"],
+        geist: ["var(--font-jakarta)", "sans-serif"],
       },
     },
   },
