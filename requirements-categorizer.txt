@@ -1,0 +1,15 @@
+# Categorizer specialized dependencies
+mcp
+sqlalchemy
+psycopg2-binary
+pandas
+numpy
+langchain-core
+python-dotenv
+diskcache
+joblib
+scikit-learn
+xgboost
+sentence-transformers
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch

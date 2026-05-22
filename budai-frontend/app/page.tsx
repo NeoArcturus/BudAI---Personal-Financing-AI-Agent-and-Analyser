@@ -2,12 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Button,
-  Link,
-  Accordion,
-  Chip,
-} from "@heroui/react";
+import { Button, Link, Accordion, Chip } from "@heroui/react";
 import {
   Zap,
   TrendingUp,
@@ -17,10 +12,11 @@ import {
   EyeOff,
   Activity,
   Database,
-  BrainCircuit,
   Menu,
   ChevronDown,
+  BrainCircuit,
 } from "lucide-react";
+import { motion } from "framer-motion";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -31,7 +27,6 @@ export default function LandingPage() {
     if (token) {
       router.push("/home");
     } else {
-
       const timer = setTimeout(() => setIsLoaded(true), 0);
       return () => clearTimeout(timer);
     }
@@ -39,132 +34,173 @@ export default function LandingPage() {
 
   if (!isLoaded) return null;
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.15,
+        delayChildren: 0.2,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.8,
+        ease: [0.16, 1, 0.3, 1],
+      },
+    },
+  };
+
   return (
-    <div className="min-h-screen bg-[#08090D] text-[#dce4e5] selection:bg-cyan-500/30 selection:text-cyan-200 bg-grid-pattern relative overflow-x-hidden">
-
-      <div className="fixed inset-0 z-0 pointer-events-none opacity-50 mix-blend-screen">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-500/20 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-pink-500/10 blur-[150px]" />
-      </div>
-
-      <nav className="fixed top-0 w-full z-50 h-20 obsidian-glass border-b border-white/5 flex justify-between items-center px-6 md:px-10">
+    <div className="min-h-screen text-foreground selection:bg-primary/30 selection:text-primary relative overflow-x-hidden bg-transparent font-sans">
+      <nav className="fixed top-0 w-full z-50 h-16 bg-black/20 backdrop-blur-xl border-b-[0.5px] border-white/5 flex justify-between items-center px-6 md:px-10 transition-all">
         <div className="flex items-center gap-2">
-          <Activity className="text-cyan-400 w-8 h-8" />
-          <span className="font-bold text-white text-xl tracking-tight">
+          <Activity className="text-primary w-6 h-6" />
+          <span className="font-bold text-foreground text-lg tracking-tighter uppercase italic">
             BudAI
           </span>
         </div>
 
         <div className="hidden md:flex items-center gap-10">
           <Link
-            className="text-sm font-medium text-white/60 hover:text-cyan-400 transition-colors"
+            className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 hover:text-primary transition-all"
             href="#features"
           >
-            Features
+            Capabilities
           </Link>
           <Link
-            className="text-sm font-medium text-white/60 hover:text-cyan-400 transition-colors"
+            className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 hover:text-primary transition-all"
             href="#engine"
           >
-            Intelligence Engine
+            Engine
           </Link>
           <Link
-            className="text-sm font-medium text-white/60 hover:text-cyan-400 transition-colors"
+            className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 hover:text-primary transition-all"
             href="#security"
           >
-            Security
+            Protocol
           </Link>
           <Link
-            className="text-sm font-medium text-white/60 hover:text-cyan-400 transition-colors"
+            className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 hover:text-primary transition-all"
             href="#faq"
           >
-            FAQ
+            Support
           </Link>
         </div>
 
         <div className="flex items-center gap-4">
           <Link
             href="/login"
-            className="hidden md:block text-sm font-medium text-white/60 hover:text-white px-4 transition-colors"
+            className="hidden md:block text-[10px] font-bold uppercase tracking-widest text-foreground/40 hover:text-foreground px-4 transition-all"
           >
             Login
           </Link>
           <Button
             onPress={() => router.push("/register")}
-            className="bg-cyan-400 text-black font-bold px-6 h-10 rounded-lg neon-glow-primary hover:bg-cyan-300"
+            className="bg-primary text-primary-foreground font-black text-[10px] uppercase tracking-widest px-6 h-9 rounded-md shadow-[0_0_15px_rgba(0,127,255,0.2)] hover:shadow-[0_0_25px_rgba(0,127,255,0.4)] transition-all border-none"
           >
-            Get Started
+            Initialize
           </Button>
           <Button
             isIconOnly
             variant="ghost"
-            className="md:hidden text-white/60"
+            className="md:hidden text-foreground/60 border-none"
           >
-            <Menu size={24} />
+            <Menu size={20} />
           </Button>
         </div>
       </nav>
 
-      <main className="relative z-10 pt-20">
+      <main className="relative z-10 pt-16">
+        <section className="relative min-h-[90vh] flex items-center justify-center px-6 py-24">
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="max-w-4xl mx-auto text-center flex flex-col items-center gap-10"
+          >
+            <motion.div
+              variants={itemVariants}
+              className="inline-flex items-center gap-3 px-4 py-1.5 rounded-lg border-[0.5px] border-primary/30 bg-primary/5 text-primary text-[9px] font-black uppercase tracking-[0.3em] shadow-[0_0_15px_rgba(0,127,255,0.05)]"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              <span>Financial Intelligence Link Active</span>
+            </motion.div>
 
-        <section className="relative min-h-[80vh] flex items-center justify-center px-6 py-24 bg-hero-abstract">
-          <div className="max-w-4xl mx-auto text-center flex flex-col items-center gap-8">
-            <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 text-cyan-400 text-xs font-bold tracking-wider">
-              <Zap size={14} className="fill-current" />
-              <span>V2.0 ORCHESTRATION ENGINE LIVE</span>
-            </div>
-
-            <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-white leading-tight">
-              Your Financial Intelligence, <br />
-              <span className="text-transparent bg-clip-text bg-linear-to-r from-cyan-400 to-cyan-200">
-                Evolutionized
+            <motion.h1
+              variants={itemVariants}
+              className="text-5xl md:text-8xl font-normal tracking-tighter text-foreground leading-[0.85] uppercase italic"
+            >
+              Master Your <br />
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-primary via-primary/80 to-primary/40 not-italic font-black">
+                Money with AI
               </span>
-            </h1>
+            </motion.h1>
 
-            <p className="text-lg md:text-xl text-white/60 max-w-2xl mx-auto leading-relaxed">
-              BudAI integrates directly with your financial ecosystem to provide
-              actionable insights, predictive forecasting, and empathetic
-              advisory through advanced multi-agent orchestration.
-            </p>
+            <motion.p
+              variants={itemVariants}
+              className="text-base md:text-lg text-foreground/50 max-w-xl mx-auto leading-relaxed font-medium tracking-tight"
+            >
+              The most precise personal finance companion for students and
+              professionals. Achieve complete clarity and hit goals faster.
+            </motion.p>
 
-            <div className="flex flex-col sm:flex-row items-center gap-4 mt-4 w-full sm:w-auto">
+            <motion.div
+              variants={itemVariants}
+              className="flex flex-col sm:flex-row items-center gap-6 mt-4 w-full sm:w-auto"
+            >
               <Button
                 onPress={() => router.push("/register")}
-                className="bg-cyan-400 text-black font-bold px-10 h-14 text-base rounded-xl neon-glow-primary hover:bg-cyan-300 w-full sm:w-auto"
+                className="bg-primary text-primary-foreground font-black uppercase tracking-[0.2em] text-[11px] px-12 h-14 rounded-xl shadow-[0_0_30px_rgba(0,127,255,0.3)] hover:shadow-[0_0_40px_rgba(0,127,255,0.5)] hover:scale-[1.02] transition-all border-none"
               >
-                Get Started Free
+                Access Portal
               </Button>
               <Button
                 variant="outline"
-                className="border-white/10 text-cyan-400 px-10 h-14 text-base rounded-xl obsidian-glass hover:bg-white/5 w-full sm:w-auto"
+                className="border-white/10 text-foreground/60 px-12 h-14 text-[11px] font-bold uppercase tracking-[0.2em] rounded-xl bg-white/5 backdrop-blur-xl hover:bg-white/10 hover:text-foreground transition-all"
               >
-                Book a Demo
+                Protocol Docs
               </Button>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-full max-w-6xl h-64 obsidian-glass rounded-t-[3rem] border-t border-x border-white/10 opacity-60 flex justify-center pt-8 overflow-hidden pointer-events-none">
-            <div className="w-3/4 h-full border border-white/5 rounded-t-2xl bg-white/5 flex p-6 gap-6">
-              <div className="w-1/4 h-full bg-white/5 rounded-xl animate-pulse" />
-              <div className="w-3/4 h-full bg-white/5 rounded-xl flex flex-col gap-4 p-4 relative">
-                <div className="absolute top-4 right-4 bg-cyan-400/20 border border-cyan-400/30 text-cyan-400 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2">
-                  <TrendingUp size={14} /> Wealth Velocity +12%
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 0.6, y: 0 }}
+            transition={{ duration: 1.2, delay: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-full max-w-5xl h-64 bg-black/40 backdrop-blur-3xl rounded-t-[3rem] border-t-[0.5px] border-x-[0.5px] border-white/10 flex justify-center pt-10 overflow-hidden pointer-events-none"
+          >
+            <motion.div
+              animate={{ y: [0, -10, 0] }}
+              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+              className="w-4/5 h-full border-[0.5px] border-white/10 rounded-t-2xl bg-white/[0.02] flex p-8 gap-8 shadow-inner"
+            >
+              <div className="w-1/3 h-full bg-white/5 rounded-xl" />
+              <div className="w-2/3 h-full bg-white/5 rounded-xl flex flex-col gap-6 p-6 relative">
+                <div className="absolute top-6 right-6 bg-primary/10 border border-primary/20 text-primary px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                  <TrendingUp size={12} /> Target: +85%
                 </div>
-                <div className="w-full h-8 bg-white/5 rounded-lg" />
+                <div className="w-1/2 h-6 bg-white/5 rounded-lg" />
                 <div className="w-full flex-1 bg-white/5 rounded-lg" />
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         </section>
 
-        <section className="py-20 border-y border-white/5 bg-black/20 overflow-hidden relative z-20">
-          <div className="text-center mb-10">
-            <h3 className="text-xs font-bold text-white/40 uppercase tracking-[0.3em]">
-              Universal Connectivity
+        <section className="py-24 bg-black/10 backdrop-blur-md border-y border-white/5 overflow-hidden relative z-20">
+          <div className="text-center mb-12">
+            <h3 className="text-[10px] font-black text-primary/40 uppercase tracking-[0.4em]">
+              Seamlessly Connected to your life
             </h3>
           </div>
           <div className="relative flex overflow-x-hidden w-full">
-            <div className="flex animate-marquee whitespace-nowrap gap-20 items-center py-4 opacity-40 px-10">
+            <div className="flex animate-marquee whitespace-nowrap gap-24 items-center py-6 opacity-30 px-12">
               {[
                 "HSBC",
                 "BARCLAYS",
@@ -173,17 +209,12 @@ export default function LandingPage() {
                 "LLOYDS",
                 "CHASE",
                 "STARLING",
-                "HSBC",
-                "BARCLAYS",
-                "MONZO",
-                "REVOLUT",
-                "LLOYDS",
-                "CHASE",
-                "STARLING",
+                "NATIONWIDE",
+                "NATWEST",
               ].map((bank, i) => (
                 <span
                   key={i}
-                  className="text-3xl font-black text-white tracking-tighter italic"
+                  className="text-4xl font-black text-foreground tracking-tighter italic"
                 >
                   {bank}
                 </span>
@@ -192,50 +223,64 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="engine" className="py-32 px-6 relative z-20">
+        <section id="engine" className="py-40 px-6 relative z-20">
           <div className="max-w-6xl mx-auto flex flex-col items-center">
-            <div className="text-center mb-20">
-              <h2 className="text-3xl md:text-5xl font-bold text-white mb-4">
-                The Intelligence Engine
-              </h2>
-              <p className="text-lg text-white/60 max-w-2xl mx-auto">
-                Experience the liquid state dashboard. Real-time data mapped to
-                actionable strategies.
+            <div className="text-center mb-24">
+              <motion.h2
+                initial={{ opacity: 0, scale: 0.95 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                className="text-4xl md:text-6xl font-black text-foreground mb-6 tracking-tighter uppercase italic"
+              >
+                Smart Insights, <br />Simple Actions
+              </motion.h2>
+              <p className="text-lg text-foreground/60 max-w-2xl mx-auto font-medium tracking-wide">
+                Your money tells a story. BudAI helps you read it, offering
+                clear advice to grow your savings and spend smarter every day.
               </p>
             </div>
 
-            <div className="w-full aspect-video max-w-5xl obsidian-glass rounded-3xl border border-white/10 p-4 relative overflow-hidden group shadow-2xl">
-              <div className="w-full h-full bg-[#0d1516]/40 rounded-2xl flex border border-white/5">
-
-                <div className="w-1/4 border-r border-white/5 p-6 hidden md:flex flex-col gap-6">
-                  <div className="h-8 bg-white/10 rounded-lg w-1/2 mb-4" />
-                  <div className="h-4 bg-white/5 rounded-lg w-3/4" />
-                  <div className="h-4 bg-white/5 rounded-lg w-full" />
-                  <div className="h-4 bg-white/5 rounded-lg w-5/6" />
+            <div className="w-full aspect-video max-w-5xl bg-black/40 backdrop-blur-3xl rounded-[3rem] border border-white/10 p-6 relative overflow-hidden group shadow-2xl">
+              <div className="w-full h-full bg-white/5 rounded-[2rem] flex border border-white/5 overflow-hidden">
+                <div className="w-1/4 border-r border-white/5 p-8 hidden md:flex flex-col gap-8">
+                  <div className="h-10 bg-white/10 rounded-xl w-3/4 mb-4" />
+                  <div className="h-5 bg-white/5 rounded-lg w-full" />
+                  <div className="h-5 bg-white/5 rounded-lg w-5/6" />
+                  <div className="h-5 bg-white/5 rounded-lg w-full" />
                 </div>
 
-                <div className="flex-1 p-8 flex flex-col gap-8 relative">
+                <div className="flex-1 p-10 flex flex-col gap-10 relative">
+                  <motion.div
+                    animate={{ y: [0, -8, 0] }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                    className="absolute top-1/4 left-1/4 bg-primary/20 border border-primary/30 text-primary px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-3 shadow-xl z-10 hover:scale-105 transition-transform cursor-default"
+                  >
+                    <TrendingUp size={18} /> Budget Performance +12.4%
+                  </motion.div>
+                  <motion.div
+                    animate={{ y: [0, 8, 0] }}
+                    transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                    className="absolute bottom-1/3 right-1/4 bg-pink-500/20 border border-pink-500/30 text-pink-500 px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-3 shadow-xl z-10 hover:scale-105 transition-transform cursor-default"
+                  >
+                    <Activity size={18} /> Subscription Alert: Netflix
+                  </motion.div>
 
-                  <div className="absolute top-1/4 left-1/4 bg-cyan-400/20 border border-cyan-400/30 text-cyan-400 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 shadow-lg z-10 hover:scale-105 transition-transform cursor-default">
-                    <TrendingUp size={18} /> Wealth Velocity +12.4%
-                  </div>
-                  <div className="absolute bottom-1/3 right-1/4 bg-pink-500/20 border border-pink-500/30 text-pink-500 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 shadow-lg z-10 hover:scale-105 transition-transform cursor-default">
-                    <Activity size={18} /> Unusual Subscription: $49.99
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-6">
-                    <div className="h-32 bg-white/5 rounded-2xl border border-white/5 animate-pulse" />
-                    <div className="h-32 bg-white/5 rounded-2xl border border-white/5" />
-                    <div className="h-32 bg-white/5 rounded-2xl border border-white/5" />
+                  <div className="grid grid-cols-3 gap-8">
+                    <div className="h-40 bg-white/5 rounded-3xl border border-white/5 animate-pulse" />
+                    <div className="h-40 bg-white/5 rounded-3xl border border-white/5" />
+                    <div className="h-40 bg-white/5 rounded-3xl border border-white/5" />
                   </div>
 
-                  <div className="flex-1 bg-white/5 rounded-2xl border border-white/5 p-6">
-                    <div className="w-full h-full border-b border-l border-white/10 flex items-end p-4 gap-4">
+                  <div className="flex-1 bg-white/5 rounded-3xl border border-white/5 p-8">
+                    <div className="w-full h-full border-b border-l border-white/10 flex items-end p-6 gap-6">
                       {[25, 50, 35, 75, 90, 60, 45].map((h, i) => (
-                        <div
+                        <motion.div
                           key={i}
-                          className="flex-1 bg-cyan-400/20 rounded-t-lg border-t border-x border-cyan-400/30 transition-all duration-500 hover:bg-cyan-400/40"
-                          style={{ height: `${h}%` }}
+                          initial={{ height: 0 }}
+                          whileInView={{ height: `${h}%` }}
+                          viewport={{ once: true }}
+                          transition={{ duration: 1.5, delay: i * 0.1, ease: "easeOut" }}
+                          className="flex-1 bg-primary/30 rounded-t-xl border-t border-x border-primary/20 hover:bg-primary/50 transition-colors cursor-pointer"
                         />
                       ))}
                     </div>
@@ -246,213 +291,241 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="features" className="py-32 px-6 relative z-20 bg-black/20">
+        <section
+          id="features"
+          className="py-40 px-6 relative z-20 bg-white/[0.02] backdrop-blur-3xl border-y-[0.5px] border-white/5"
+        >
           <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-20">
-              <h2 className="text-3xl md:text-5xl font-bold text-white mb-4">
-                How it Works
-              </h2>
-              <p className="text-lg text-white/60">
-                Three phases to total financial clarity.
+            <div className="text-center mb-24">
+              <motion.h2
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="text-4xl md:text-6xl font-normal text-foreground mb-6 tracking-tighter uppercase italic"
+              >
+                Three Phases of <br />
+                <span className="font-black not-italic">Clarity</span>
+              </motion.h2>
+              <p className="text-[10px] font-black text-primary uppercase tracking-[0.4em] mb-4">
+                Operational Pipeline
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-10 relative">
-              <div className="hidden md:block absolute top-1/2 left-0 w-full h-px bg-linear-to-r from-transparent via-cyan-400/20 to-transparent -translate-y-1/2 z-0" />
+              <div className="hidden md:block absolute top-1/2 left-0 w-full h-[0.5px] bg-linear-to-r from-transparent via-primary/20 to-transparent -translate-y-1/2 z-0" />
 
               {[
                 {
                   step: "01",
-                  title: "Connect",
+                  title: "Secure Link",
                   icon: Database,
-                  desc: "Securely link your accounts using read-only API access backed by AES-256 encryption.",
+                  desc: "Bank-level read-only access to your institutional data streams.",
                 },
                 {
                   step: "02",
-                  title: "Analyze",
+                  title: "Logic Analysis",
                   icon: BrainCircuit,
-                  desc: "Multi-agent clustering algorithms instantly categorize transactions and build your unique financial graph.",
+                  desc: "Autonomous categorization engine mapping every outflow with precision.",
                 },
                 {
                   step: "03",
-                  title: "Evolve",
+                  title: "Growth Protocol",
                   icon: Sparkles,
-                  desc: "Receive proactive, predictive strategies to optimize cash flow and accelerate wealth creation.",
+                  desc: "Predictive strategies designed to optimize your net capital velocity.",
                 },
               ].map((item, i) => (
-                <div
+                <motion.div
                   key={i}
-                  className="obsidian-glass rounded-3xl p-10 relative z-10 card-hover flex flex-col gap-6"
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.6, delay: i * 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  whileHover={{ y: -5, scale: 1.01 }}
+                  className="bg-black/40 backdrop-blur-xl border-[0.5px] border-white/10 rounded-2xl p-12 relative z-10 flex flex-col gap-10 transition-all group shadow-inner"
                 >
-                  <div className="text-cyan-400 text-6xl font-black opacity-10 absolute top-4 right-6">
+                  <div className="font-mono text-primary text-6xl font-black opacity-5 absolute -top-4 -right-4 italic pointer-events-none group-hover:opacity-10 transition-opacity">
                     {item.step}
                   </div>
-                  <div className="w-14 h-14 rounded-2xl bg-cyan-400/10 border border-cyan-400/20 flex items-center justify-center text-cyan-400">
+                  <div className="w-14 h-14 rounded-xl bg-white/5 border-[0.5px] border-white/10 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,127,255,0.05)] group-hover:border-primary/50 transition-all">
                     <item.icon size={28} />
                   </div>
-                  <h3 className="text-2xl font-bold text-white">
-                    {item.title}
-                  </h3>
-                  <p className="text-white/60 leading-relaxed">{item.desc}</p>
-                </div>
+                  <div className="space-y-4">
+                    <h3 className="text-xl font-black tracking-widest text-foreground uppercase italic">
+                      {item.title}
+                    </h3>
+                    <p className="text-xs text-foreground/40 leading-relaxed font-medium tracking-wide">
+                      {item.desc}
+                    </p>
+                  </div>
+                </motion.div>
               ))}
             </div>
           </div>
         </section>
 
-        <section id="security" className="py-32 px-6 relative z-20">
-          <div className="max-w-6xl mx-auto obsidian-glass rounded-[3rem] p-12 md:p-20 border border-white/10 flex flex-col md:flex-row gap-16 items-center">
-            <div className="flex-1 flex flex-col gap-8 text-center md:text-left items-center md:items-start">
-              <Chip
-                className="border-cyan-400/30 bg-cyan-400/10 text-cyan-400 rounded-lg flex items-center gap-2"
-                variant="secondary"
-              >
+        <section id="security" className="py-40 px-6 relative z-20">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            className="max-w-6xl mx-auto bg-black/40 backdrop-blur-3xl rounded-[4rem] p-12 md:p-24 border border-white/10 flex flex-col md:flex-row gap-20 items-center shadow-2xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 blur-[120px] rounded-full pointer-events-none" />
+
+            <div className="flex-1 flex flex-col gap-10 text-center md:text-left items-center md:items-start relative z-10">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-[0.2em]">
                 <Shield size={14} />
-                <span>ENTERPRISE GRADE</span>
-              </Chip>
-              <h2 className="text-3xl md:text-5xl font-bold text-white">
-                Zero-Compromise Security
+                <span>Your Privacy is our priority</span>
+              </div>
+              <h2 className="text-4xl md:text-6xl font-black text-foreground tracking-tighter uppercase italic leading-[0.95]">
+                Built on Trust, <br />Not Technicality
               </h2>
-              <p className="text-lg text-white/60 max-w-xl">
-                We believe your financial data belongs to you. We employ
-                bank-level encryption, enforce strict MFA, and operate on a
-                strict no-sell data policy.
+              <p className="text-lg text-foreground/60 max-w-xl font-medium tracking-wide leading-relaxed">
+                We believe your financial data belongs to you. We use the same
+                protection as major banks, but with a simple promise: we never
+                sell your data, and we only have read-only access.
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 w-full">
-                <div className="flex items-start gap-4">
-                  <div className="p-2 rounded-lg bg-cyan-400/10 text-cyan-400">
-                    <Lock size={20} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-10 w-full">
+                <div className="flex items-start gap-5">
+                  <div className="p-3 rounded-2xl bg-primary/10 text-primary border border-primary/20">
+                    <Lock size={24} />
                   </div>
                   <div>
-                    <h4 className="font-bold text-white">AES-256 Encryption</h4>
-                    <p className="text-sm text-white/40">
-                      Military-grade protection for data at rest and in transit.
+                    <h4 className="font-black tracking-tight text-foreground uppercase text-sm mb-1">
+                      Bank-Grade Safety
+                    </h4>
+                    <p className="text-xs text-foreground/40 font-medium tracking-wide">
+                      Top-tier protection for your peace of mind.
                     </p>
                   </div>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="p-2 rounded-lg bg-cyan-400/10 text-cyan-400">
-                    <EyeOff size={20} />
+                <div className="flex items-start gap-5">
+                  <div className="p-3 rounded-2xl bg-primary/10 text-primary border border-primary/20">
+                    <EyeOff size={24} />
                   </div>
                   <div>
-                    <h4 className="font-bold text-white">No-Sell Policy</h4>
-                    <p className="text-sm text-white/40">
-                      Your data is never monetized or shared with third parties.
+                    <h4 className="font-black tracking-tight text-foreground uppercase text-sm mb-1">
+                      Pure Privacy
+                    </h4>
+                    <p className="text-xs text-foreground/40 font-medium tracking-wide">
+                      No data selling. No hidden sharing. Ever.
                     </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="w-full md:w-1/3 flex justify-center">
-              <div className="relative w-64 h-64 flex items-center justify-center">
-                <svg className="absolute inset-0 w-full h-full -rotate-90">
+            <div className="w-full md:w-1/3 flex justify-center relative z-10">
+              <div className="relative w-72 h-72 flex items-center justify-center">
+                <motion.svg
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                  className="absolute inset-0 w-full h-full"
+                >
                   <circle
-                    cx="128"
-                    cy="128"
-                    r="120"
+                    cx="144"
+                    cy="144"
+                    r="130"
                     fill="none"
-                    stroke="rgba(0,229,255,0.1)"
-                    strokeWidth="12"
+                    stroke="rgba(255,255,255,0.05)"
+                    strokeWidth="8"
+                    strokeDasharray="10 20"
                   />
                   <circle
-                    cx="128"
-                    cy="128"
-                    r="120"
+                    cx="144"
+                    cy="144"
+                    r="110"
                     fill="none"
-                    stroke="#00e5ff"
-                    strokeWidth="12"
-                    strokeDasharray="754"
-                    strokeDashoffset="0"
-                    className="drop-shadow-[0_0_15px_rgba(0,229,255,0.6)]"
+                    stroke="rgba(0,127,255,0.2)"
+                    strokeWidth="2"
                   />
-                </svg>
-                <div className="text-center z-10">
-                  <span className="block text-6xl font-black text-white">
-                    100
-                  </span>
-                  <span className="text-xs text-cyan-400 font-bold tracking-[0.2em] uppercase">
-                    Security Score
-                  </span>
+                </motion.svg>
+                <div className="relative w-56 h-56 rounded-full bg-white/5 border border-white/10 backdrop-blur-2xl flex items-center justify-center shadow-inner">
+                  <div className="text-center">
+                    <Shield className="w-12 h-12 text-primary mx-auto mb-3 drop-shadow-[0_0_15px_rgba(0,127,255,0.6)]" />
+                    <span className="block text-2xl font-black text-foreground tracking-tighter uppercase italic">
+                      SECURE
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          </motion.div>
         </section>
 
-        <div className="w-full bg-black/40 py-4 border-y border-white/5 overflow-hidden flex z-30 relative">
-          <div className="flex animate-marquee whitespace-nowrap gap-16 items-center text-xs font-mono text-white/40 uppercase tracking-widest">
+        <div className="w-full bg-black/10 backdrop-blur-md py-6 border-y-[0.5px] border-white/5 overflow-hidden flex z-30 relative">
+          <div className="flex animate-marquee whitespace-nowrap gap-16 items-center text-[9px] font-black text-primary/40 uppercase tracking-[0.4em]">
             {[
-              "Transactions Processed: 4,291,003",
-              "Inference Latency: 42ms",
-              "Active Agents: 12,045",
-              "Uptime: 99.99%",
-              "Financial Graph Nodes: 1.2B",
+              "Official Bank Links Active",
+              "Sovereign Data Protection",
+              "Real-time Logic Analysis",
+              "GBP Asset Velocity Tracking",
+              "Multi-Factor Security Layer",
             ].map((stat, i) => (
-              <span key={i} className="flex items-center gap-3">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(0,229,255,0.8)]" />
+              <span key={i} className="flex items-center gap-4">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(0,127,255,0.8)]" />
                 {stat}
               </span>
             ))}
 
             {[
-              "Transactions Processed: 4,291,003",
-              "Inference Latency: 42ms",
-              "Active Agents: 12,045",
-              "Uptime: 99.99%",
-              "Financial Graph Nodes: 1.2B",
+              "Official Bank Links Active",
+              "Sovereign Data Protection",
+              "Real-time Logic Analysis",
+              "GBP Asset Velocity Tracking",
+              "Multi-Factor Security Layer",
             ].map((stat, i) => (
-              <span key={`dup-${i}`} className="flex items-center gap-3 ml-16">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(0,229,255,0.8)]" />
+              <span key={`dup-${i}`} className="flex items-center gap-4 ml-16">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(0,127,255,0.8)]" />
                 {stat}
               </span>
             ))}
           </div>
         </div>
 
-        <section id="faq" className="py-32 px-6 relative z-20">
+        <section id="faq" className="py-40 px-6 relative z-20">
           <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-5xl font-bold text-white">
-                Common Queries
+            <div className="text-center mb-20">
+              <h2 className="text-4xl md:text-6xl font-normal text-foreground tracking-tighter uppercase italic">
+                Support <span className="font-black not-italic">Protocols</span>
               </h2>
             </div>
 
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-6">
               {[
                 {
                   id: "1",
-                  title: "How secure is my financial data?",
+                  title: "Data Sovereignty & Safety",
                   content:
-                    "We use AES-256 encryption, enforce strict MFA, and have a zero-sell data policy. We only maintain read-only access to your accounts via official banking APIs.",
+                    "We maintain the highest standard of read-only institutional access. Your assets remain entirely under your control.",
                 },
                 {
                   id: "2",
-                  title: "Which banks do you support?",
+                  title: "Student & Professional Utility",
                   content:
-                    "We support over 10,000 financial institutions globally, including major UK/EU banks like HSBC, Monzo, Revolut, and Barclays via Open Banking protocols.",
+                    "Engineered to map complex spending cycles—from loan distributions to professional career trajectories.",
                 },
                 {
                   id: "3",
-                  title: "How accurate is the categorization?",
+                  title: "Autonomous Configuration",
                   content:
-                    "Our multi-agent orchestration engine achieves 99.9% categorization accuracy by analyzing merchant data, location context, and historical spending patterns.",
+                    "Once initialized, our logic engine operates continuously without manual input requirements.",
                 },
               ].map((faq) => (
                 <Accordion
                   key={faq.id}
-                  className="obsidian-glass border border-white/10 rounded-2xl overflow-hidden"
+                  className="bg-black/40 backdrop-blur-xl border-[0.5px] border-white/10 rounded-2xl overflow-hidden shadow-inner"
                 >
                   <Accordion.Item>
                     <Accordion.Heading>
-                      <Accordion.Trigger className="w-full p-6 font-bold text-white flex justify-between items-center hover:bg-white/5 transition-colors">
+                      <Accordion.Trigger className="w-full p-8 font-black text-foreground uppercase tracking-[0.2em] text-[10px] flex justify-between items-center hover:bg-white/5 transition-all">
                         {faq.title}
-                        <ChevronDown size={20} className="text-cyan-400" />
+                        <ChevronDown size={18} className="text-primary" />
                       </Accordion.Trigger>
                     </Accordion.Heading>
-                    <Accordion.Panel className="px-6 pb-6 text-white/60">
-                      <div className="pt-4 border-t border-white/5">
+                    <Accordion.Panel className="px-8 pb-8 text-foreground/40 font-medium tracking-wide text-xs leading-relaxed">
+                      <div className="pt-6 border-t-[0.5px] border-white/5">
                         {faq.content}
                       </div>
                     </Accordion.Panel>
@@ -464,132 +537,137 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-white/5 bg-[#08090D] pt-24 pb-12 px-6 relative z-20">
+      <footer className="border-t-[0.5px] border-white/5 bg-black/40 backdrop-blur-3xl pt-32 pb-16 px-6 relative z-20">
         <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-16 mb-20">
-            <div className="lg:col-span-2 flex flex-col gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-20 mb-24">
+            <div className="lg:col-span-2 flex flex-col gap-10">
               <div className="flex items-center gap-3">
-                <Activity className="text-cyan-400 w-8 h-8" />
-                <span className="text-2xl font-bold text-white tracking-tight">
+                <Activity className="text-primary w-6 h-6" />
+                <span className="text-xl font-black text-foreground tracking-tighter uppercase italic">
                   BudAI
                 </span>
               </div>
-              <p className="text-white/40 max-w-xs leading-relaxed">
-                Advanced financial intelligence for the modern professional.
-                Evolutionize your wealth tracking with multi-agent
-                orchestration.
+              <p className="text-foreground/30 max-w-xs leading-relaxed font-medium tracking-wide text-xs">
+                Next-generation financial orchestration for the digital era.
+                Precision wealth mapping powered by autonomous data logic.
               </p>
-              <div className="flex items-center gap-3 text-xs font-bold text-green-500 bg-green-500/10 border border-green-500/20 px-4 py-2 rounded-full w-fit">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                SYSTEM STATUS: ALL SYSTEMS OPERATIONAL
+              <div className="flex items-center gap-3 text-[9px] font-black text-green-500 bg-green-500/5 border-[0.5px] border-green-500/20 px-4 py-2 rounded-lg w-fit uppercase tracking-[0.3em] shadow-[0_0_15px_rgba(34,197,94,0.05)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                System Protocol: Online
               </div>
             </div>
 
-            <div className="flex flex-col gap-6">
-              <h4 className="text-white font-bold text-sm uppercase tracking-widest">
-                Product
+            <div className="flex flex-col gap-8">
+              <h4 className="text-foreground font-black text-[10px] uppercase tracking-[0.4em] opacity-40">
+                Core
               </h4>
-              <Link
-                href="#"
-                className="text-white/40 hover:text-cyan-400 transition-colors text-sm"
-              >
-                Engine
-              </Link>
-              <Link
-                href="#"
-                className="text-white/40 hover:text-cyan-400 transition-colors text-sm"
-              >
-                Forecasting
-              </Link>
-              <Link
-                href="#"
-                className="text-white/40 hover:text-cyan-400 transition-colors text-sm"
-              >
-                Security
-              </Link>
-              <Link
-                href="#"
-                className="text-white/40 hover:text-cyan-400 transition-colors text-sm"
-              >
-                Pricing
-              </Link>
+              <nav className="flex flex-col gap-4">
+                <Link
+                  href="#"
+                  className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Intelligence
+                </Link>
+                <Link
+                  href="#"
+                  className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Projection
+                </Link>
+                <Link
+                  href="#"
+                  className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Security
+                </Link>
+                <Link
+                  href="#"
+                  className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Licensing
+                </Link>
+              </nav>
             </div>
 
-            <div className="flex flex-col gap-6">
-              <h4 className="text-white font-bold text-sm uppercase tracking-widest">
-                Resources
+            <div className="flex flex-col gap-8">
+              <h4 className="text-foreground font-black text-[10px] uppercase tracking-[0.4em] opacity-40">
+                Nexus
               </h4>
-              <Link
-                href="#"
-                className="text-white/40 hover:text-cyan-400 transition-colors text-sm"
-              >
-                Docs
-              </Link>
-              <Link
-                href="#"
-                className="text-white/40 hover:text-cyan-400 transition-colors text-sm"
-              >
-                API
-              </Link>
-              <Link
-                href="#"
-                className="text-white/40 hover:text-cyan-400 transition-colors text-sm"
-              >
-                Community
-              </Link>
-              <Link
-                href="#"
-                className="text-white/40 hover:text-cyan-400 transition-colors text-sm"
-              >
-                Blog
-              </Link>
+              <nav className="flex flex-col gap-4">
+                <Link
+                  href="#"
+                  className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Documentation
+                </Link>
+                <Link
+                  href="#"
+                  className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  API Access
+                </Link>
+                <Link
+                  href="#"
+                  className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Network
+                </Link>
+                <Link
+                  href="#"
+                  className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Updates
+                </Link>
+              </nav>
             </div>
 
-            <div className="flex flex-col gap-6">
-              <h4 className="text-white font-bold text-sm uppercase tracking-widest">
+            <div className="flex flex-col gap-8">
+              <h4 className="text-foreground font-black text-[10px] uppercase tracking-[0.4em] opacity-40">
                 Legal
               </h4>
-              <Link
-                href="#"
-                className="text-white/40 hover:text-cyan-400 transition-colors text-sm"
-              >
-                Privacy
-              </Link>
-              <Link
-                href="#"
-                className="text-white/40 hover:text-cyan-400 transition-colors text-sm"
-              >
-                Terms
-              </Link>
-              <Link
-                href="#"
-                className="text-white/40 hover:text-cyan-400 transition-colors text-sm"
-              >
-                Cookies
-              </Link>
+              <nav className="flex flex-col gap-4">
+                <Link
+                  href="#"
+                  className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Privacy
+                </Link>
+                <Link
+                  href="#"
+                  className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Terms
+                </Link>
+                <Link
+                  href="#"
+                  className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
+                >
+                  Cookies
+                </Link>
+              </nav>
             </div>
           </div>
 
-          <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-white/5 gap-6 text-white/30 text-xs font-medium">
-            <p>© 2024 BudAI Inc. Evolutionizing Intelligence.</p>
-            <div className="flex gap-8">
+          <div className="flex flex-col md:flex-row justify-between items-center pt-10 border-t-[0.5px] border-white/5 gap-8 text-foreground/20 text-[9px] font-black uppercase tracking-[0.3em]">
+            <p>© 2024 BudAI Systems. Autonomous Financial Logic.</p>
+            <div className="flex gap-12">
               <Link
                 href="#"
-                className="text-inherit hover:text-white transition-colors"
+                className="text-inherit hover:text-foreground transition-all"
               >
-                TWITTER
+                X / Twitter
               </Link>
               <Link
                 href="#"
-                className="text-inherit hover:text-white transition-colors"
+                className="text-inherit hover:text-foreground transition-all"
               >
-                LINKEDIN
+                LinkedIn
               </Link>
               <Link
                 href="#"
-                className="text-inherit hover:text-white transition-colors"
+                className="text-inherit hover:text-foreground transition-all"
               >
-                GITHUB
+                GitHub Source
               </Link>
             </div>
           </div>

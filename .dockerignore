@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.venv/
+ml_env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.mypy_cache/
+.pytest_cache/
+
+# Node.js
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Git
+.git/
+.gitignore
+
+# Data & Models
+saved_model/
+saved_label_enc/
+agent_cache/
+embedding_cache/
+memory_store/
+*.db
+*.sqlite3
+*.csv
+*.so
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Misc
+.DS_Store
+.env
+.env.*
+.gemini/
+.github/
+GEMINI.md
+budai-frontend/
+README.md
+Dockerfile*
+docker-compose*

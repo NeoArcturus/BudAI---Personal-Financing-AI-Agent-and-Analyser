@@ -3,12 +3,11 @@ from datetime import datetime
 import re
 import json
 import sys
-import logging
 import langchain
 import uuid
 from models.database_models import ChatHistory, ChatSession
 from config import SessionLocal
-from services.workers import analyser_worker, forecaster_worker, categorizer_worker, health_worker, memory_worker
+from services.workers import analyser_worker, forecaster_worker, categorizer_worker, health_worker, memory_worker, market_worker
 from models.graph_state import BudAIState
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -22,17 +21,18 @@ import queue
 import time
 from services.mcp_bridge import MCPBridge
 from services.mcp_tools.external_tools import export_advisory_state
+from services.logger_setup import get_core_logger
 
-logger = logging.getLogger("uvicorn.error")
+logger = get_core_logger("orchestrator_graph")
 
-langchain.debug = True
+langchain.debug = False
 
 
 class RouteDecision(BaseModel):
     reasoning: str = Field(
         ..., description="Step-by-step reasoning explaining why this worker was selected.")
     selected_worker: Literal["analyser", "forecaster",
-                             "categorizer", "health", "memory", "general"] = Field(...)
+                             "categorizer", "health", "memory", "market", "general"] = Field(...)
 
 
 router_llm = ChatOllama(
@@ -46,38 +46,45 @@ current_year = datetime.now().year
 
 
 def strip_thinking(text: str) -> str:
+    logger.debug("Stripping thinking tags from text")
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
 def get_session_history(user_uuid: str, session_id: Optional[str] = None):
+    logger.info(f"Fetching session history for user {user_uuid}, session {session_id}")
     history = []
-    with SessionLocal() as session:
-        query = session.query(ChatHistory).filter(ChatHistory.user_uuid == user_uuid)
-        if session_id:
-            query = query.filter(ChatHistory.session_id == session_id)
-        else:
-            query = query.filter(ChatHistory.session_id == None)
-            
-        records = query.order_by(ChatHistory.timestamp.asc()).all()
-        for r in records:
-            if r.role == "user":
-                history.append(HumanMessage(content=r.content))
+    try:
+        with SessionLocal() as session:
+            query = session.query(ChatHistory).filter(ChatHistory.user_uuid == user_uuid)
+            if session_id:
+                query = query.filter(ChatHistory.session_id == session_id)
             else:
-                history.append(AIMessage(content=r.content))
+                query = query.filter(ChatHistory.session_id == None)
+                
+            records = query.order_by(ChatHistory.timestamp.asc()).all()
+            logger.debug(f"Found {len(records)} history records")
+            for r in records:
+                if r.role == "user":
+                    history.append(HumanMessage(content=r.content))
+                else:
+                    history.append(AIMessage(content=r.content))
+    except Exception as e:
+        logger.error(f"Failed to fetch session history: {e}")
     return history
 
 
 def ingest_context_node(state: BudAIState):
     bridge = MCPBridge()
     try:
-        local_rules = bridge.read_local_rules()
-    except Exception:
+        local_rules = bridge.read_user_rules()
+        logger.debug("Local rules ingested successfully")
+    except Exception as e:
+        logger.error(f"Failed to ingest local rules: {e}")
         local_rules = {}
     return {"local_rules": local_rules}
 
 
 def intent_router_node(state: BudAIState):
-    logger.info(f"Received query: {state['user_input']}")
     chat_history = get_session_history(state['user_uuid'], state.get('session_id'))
 
     prompt = ChatPromptTemplate.from_messages([
@@ -98,6 +105,7 @@ def intent_router_node(state: BudAIState):
          - Future predictions (Year > {current_year}, "forecast", "predict", "next month") -> forecaster
          - Survival/Debt/Health ("score", "runway", "debt") -> health
          - Memory/Preferences ("remember", "forget", "my preference", "what do you know") -> memory
+         - Economy/Markets/News/FX ("economy", "stock", "market", "inflation", "currency", "exchange rate", "buy abroad") -> market
          - Non-data conversational questions -> general
 
          Think step-by-step and provide detailed reasoning in the 'reasoning' field before outputting the selected worker.
@@ -109,7 +117,7 @@ def intent_router_node(state: BudAIState):
     structured_router_llm = router_llm.with_structured_output(RouteDecision)
     chain = prompt | structured_router_llm
 
-    logger.info("--- STARTING ROUTER COT ---")
+    logger.debug("Invoking Router LLM")
     try:
         result = chain.invoke({
             "input": state['user_input'],
@@ -117,34 +125,39 @@ def intent_router_node(state: BudAIState):
             "chat_history": chat_history
         })
         decision = result.selected_worker
-        logger.info(f"Router Reasoning: {result.reasoning}")
+        logger.info(f"Router Decision: {decision.upper()}")
+        logger.debug(f"Router Reasoning: {result.reasoning}")
     except Exception as e:
-        logger.error(
-            f"LLM Routing Call or Validation Failed: {type(e).__name__} - {e}")
-        logger.info("Defaulting to 'general' route due to validation error.")
+        logger.error(f"LLM Routing Call Failed: {type(e).__name__} - {e}")
+        logger.info("Defaulting to 'general' route")
         decision = "general"
 
-    logger.info("--- ENDING ROUTER COT ---")
-    logger.info(f"Final Routing Decision: {decision.upper()}")
     return {"selected_worker": decision}
 
 
 def route_to_worker(state: BudAIState):
-    return state["selected_worker"]
+    worker = state["selected_worker"]
+    logger.info(f"Routing to worker: {worker}")
+    return worker
 
 
 def ui_router_node(state: BudAIState):
-    logger.info(
-        f"Received cache id: {state.get('cache_id')} | Chart type: {state.get('chart_type')}")
-    if not state.get("cache_id") or not state.get("chart_type"):
+    cache_id = state.get('cache_id')
+    chart_type = state.get('chart_type')
+    logger.debug(f"Cache ID: {cache_id} | Chart Type: {chart_type}")
+    
+    if not cache_id or not chart_type:
+        logger.info("No UI trigger required")
         return {"ui_trigger_tag": ""}
-    constructed_tag = f"[TRIGGER_{state['chart_type']}:{state['cache_id']}]"
-    logger.info(f"Appending Tag: {constructed_tag}")
+        
+    constructed_tag = f"[TRIGGER_{chart_type}:{cache_id}]"
+    logger.info(f"Constructed UI Tag: {constructed_tag}")
     return {"ui_trigger_tag": constructed_tag}
 
 
 def create_response_generator_node(q: queue.Queue):
     def response_generator_node(state: BudAIState):
+        
         class StreamHandler(BaseCallbackHandler):
             def __init__(self):
                 self.is_thinking = False
@@ -195,51 +208,24 @@ def create_response_generator_node(q: queue.Queue):
 
         chat_history = get_session_history(state['user_uuid'], state.get('session_id'))
 
+        from services.profile_builder import ProfileBuilder
+        profile_builder = ProfileBuilder(state['user_uuid'])
+        mrfp = profile_builder.build_profile()
+
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are BudAI, a warm, highly capable, and empathetic personal finance intelligence system acting as the user's trusted financial advisor.
+            ("system", f"""You are BudAI, a precise senior financial advisor.
+             
+        CRITICAL OPERATIONAL MANDATES:
+        1. ZERO HALLUCINATION: Never invent, estimate, or assume financial figures. Only use mathematically verified data provided in the USER PROFILE below.
+        2. NO EMOJIS: Use plain text only. Emojis are strictly forbidden.
+        3. GBP ONLY: All currency must be in GBP (£).
+        4. VERBATIM TRIGGERS: If a tool returns a `[TRIGGER_...:CACHE_...]` tag, you must include it as the final line of your response.
 
-        Always think step-by-step and wrap your internal reasoning inside <think>...</think> tags before answering.
+        ### USER PROFILE
+        {mrfp}
 
-        ### 1. TOOL & INTENT MAPPING (STRICT)
-        - Categorization & Breakdown: Use `classify_financial_data` whenever the user asks to categorize, classify, or break down their spending.
-        - Visual Category Charts: Use `create_bargraph_chart_and_save` if they explicitly want a bar chart or visual distribution of those categories.
-        - Specific Category Totals: Use `find_total_spent_for_given_category` if they ask "how much did I spend on X".
-        - Top Expenses: Use `find_highest_spending_category` if they ask for their biggest drain or highest spend.
-        - Past/Historical Trends: Use `plot_expenses` for daily/weekly/monthly historical spending trends. Do NOT use for forecasting. *CRITICAL: If the user asks for historical charts but does not specify a timeframe (daily/weekly), you MUST default to "Monthly".*
-        - Future/Predictions: Use `generate_expense_forecast` (for spending) or `generate_financial_forecast` (for overall balance).
-        - Wealth/Health: Use `analyze_wealth_acceleration_metrics` or `plot_health_radar` for general financial health.
-        - Survival/Debt: Use `analyze_critical_survival_metrics` for emergency funds, runway, or debt repayment questions.
-        - Cash Flow: Use `plot_cash_flow_mixed` for income vs expense questions.
-
-        ### 2. ACCOUNT SELECTION RULES (CRITICAL)
-        - DEFAULT TO ALL: If the user does not type a specific bank name in their message, you MUST pass "ALL" as the `bank_name_or_id` parameter.
-        - SINGLE BANK: "Plot my Wise expenses" -> You MUST pass "Wise".
-        - MULTIPLE BANKS: "Chart my past expenses for Wise and Barclays" -> You MUST pass "Wise, Barclays" as a single comma-separated string.
-        - ACTIVE ACCOUNT OVERRIDE: ONLY use the 'Active Account ID in UI' if the user explicitly types the exact words "this account" or "current account".
-
-        ### 3. UI & EXECUTION DIRECTIVES (CRITICAL)
-        - TOOL EXECUTION: You have access to tools. You MUST use them to answer data-specific questions. Do not guess or estimate financial figures.
-        - DIRECT PARAMETER MAPPING: You must provide the exact parameters required by the tool.
-        - TOOL HALLUCINATION BAN: You are STRICTLY FORBIDDEN from inventing your own tool names or parameters.
-        - CHART TRIGGERS (ABSOLUTE MANDATE): When a tool's raw output contains a tag formatted exactly like `[TRIGGER_...:CACHE_...]`, you are structurally bound to copy that exact string and paste it as the VERY LAST LINE of your text response.
-        - TRIGGER SAFETY: NEVER append a trigger tag if the tool did not explicitly return one.
-        - INTERNAL TOOL ERROR: In case of any issue while calling tools, DO NOT tell the user what the issue is. Just say - "I am having some troubles fulfilling your request. Please try later."
-        - SCA SECURITY LOCKS: If a tool returns an "SCA Security Lock Activated" message containing a secure re-authentication link, you MUST relay that exact message and markdown link to the user.
-
-        ### 4. YOUR CONVERSATIONAL RULES
-        - Human-Like Warmth: Speak naturally. Weave raw tool data into supportive sentences.
-        - Absolute Accuracy: Use the exact numbers and findings returned by your tools. Never hallucinate numbers.
-        - UI AWARENESS (NO LINKS): Never tell the user to "click the link" to view a chart. Simply say "I have generated a chart for you to visualize this."
-        - Missing Data: If a tool returns "No transactions found", state clearly that the data isn't available. Do not invent reasons why.
-        - STRICT TEXT ONLY: Use plain text exclusively. No emojis allowed.
-        - ZERO TIME HALLUCINATION: Do not hallucinate past years as future dates. Use the current date provided in your context.
-        - CURRENCY FORMATTING: You MUST format all financial values and money amounts using the GBP (£) symbol. Never use the USD ($) symbol.
-
-        ### 5. FRESH EXECUTION MANDATE (ANTI-COPY-PASTE PROTOCOL)
-        - STALE HISTORY ASSUMPTION: Financial data is highly volatile. You must consider all numerical data, chart triggers, and tool outputs stored in the chat history to be instantly stale and expired.
-        - FORCE RE-EXECUTION: If the user repeats a previous request, asks to "recalculate", "explain the data", or asks a question similar to one you have already answered, you are STRICTLY FORBIDDEN from copy-pasting or summarizing the historical answer. You MUST silently execute the relevant tool again to fetch the absolute latest data and then explain it in detail.
-        - ZERO HISTORY HALLUCINATION: Never append a `[TRIGGER_...]` tag based on a past interaction. You may only append a chart trigger if the tool was explicitly called and successfully returned that tag in the CURRENT conversational turn.
-        - NO SHORTCUTS: Do not say "As mentioned earlier..." and repeat old data. Always run the tool and present the fresh results.
+        ### YOUR ROLE
+        Provide warm, technically accurate, and empathetic financial advice based on the user's profile and the data returned by tools.
 """),
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", "User: {input}\nData Summary: {worker_summary}")
@@ -250,7 +236,7 @@ def create_response_generator_node(q: queue.Queue):
             "verbose": True
         })
 
-        logger.info("--- STARTING RESPONSE GENERATOR COT ---")
+        logger.info("Invoking Persona LLM for final response")
         try:
             result = chain.invoke({
                 "input": state['user_input'],
@@ -260,7 +246,6 @@ def create_response_generator_node(q: queue.Queue):
         except Exception as e:
             logger.error(f"Persona LLM Call Failed: {type(e).__name__} - {e}")
             raise e
-        logger.info("--- ENDING RESPONSE GENERATOR COT ---")
 
         stream_handler.finalize()
         warm_text = strip_thinking(result.content)
@@ -273,6 +258,7 @@ def create_response_generator_node(q: queue.Queue):
             final_output = warm_text.strip()
             clean_content = final_output.strip()
 
+        logger.debug("Storing response in database")
         try:
             with SessionLocal() as session:
                 if clean_content:
@@ -284,9 +270,10 @@ def create_response_generator_node(q: queue.Queue):
                     )
                     session.add(new_msg)
                     session.commit()
-                    logger.info("LLM output stored in database.")
+                    logger.info("Assistant message stored successfully")
 
                     if state.get('raw_data') and state.get('chart_type'):
+                        logger.info("Triggering Advisory Export")
                         try:
                             export_res = export_advisory_state.invoke({
                                 "user_uuid": state['user_uuid'],
@@ -294,16 +281,17 @@ def create_response_generator_node(q: queue.Queue):
                                 "raw_data": state['raw_data'],
                                 "ai_analysis": clean_content
                             })
-                            logger.info(f"Advisory Export: {export_res}")
+                            logger.info(f"Advisory Export success: {export_res}")
                         except Exception as mcp_e:
                             logger.error(f"MCP Export Failed: {mcp_e}")
 
                 else:
-                    logger.info("LLM output was empty after cleaning.")
+                    logger.info("LLM output was empty, skipping DB storage")
         except Exception as db_e:
-            logger.error(f"Failed to store LLM output in database: {db_e}")
+            logger.error(f"Failed to store Assistant output in database: {db_e}")
 
         if ui_tag:
+            logger.debug(f"Putting UI tag in queue: {ui_tag}")
             q.put(f"\n\n{ui_tag}")
 
         return {"final_response": final_output}
@@ -312,6 +300,7 @@ def create_response_generator_node(q: queue.Queue):
 
 def create_explainer_node(q: queue.Queue):
     def explainer_node(state: BudAIState):
+        
         class StreamHandler(BaseCallbackHandler):
             def __init__(self):
                 self.is_thinking = False
@@ -361,7 +350,7 @@ def create_explainer_node(q: queue.Queue):
         )
 
         chat_history = get_session_history(state['user_uuid'], state.get('session_id'))
-        current_date = datetime.now().strftime("%Y-%m-%d")
+        current_date_str = datetime.now().strftime("%Y-%m-%d")
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are BudAI, an expert financial explainer. 
@@ -407,22 +396,22 @@ def create_explainer_node(q: queue.Queue):
             "verbose": True
         })
 
-        logger.info("--- STARTING EXPLAINER COT ---")
+        logger.info("Invoking Explainer LLM")
         try:
             result = chain.invoke({
                 "chart_type": state.get('chart_type', 'UNKNOWN_CHART'),
                 "raw_data": json.dumps(state.get('raw_data', {})),
-                "current_date": current_date,
+                "current_date": current_date_str,
                 "chat_history": chat_history
             })
         except Exception as e:
             logger.error(f"Explainer LLM Failed: {e}")
             raise e
-        logger.info("--- ENDING EXPLAINER COT ---")
 
         stream_handler.finalize()
         warm_text = strip_thinking(result.content)
 
+        logger.debug("Storing explainer response in database")
         try:
             with SessionLocal() as session:
                 new_msg = ChatHistory(
@@ -433,17 +422,33 @@ def create_explainer_node(q: queue.Queue):
                 )
                 session.add(new_msg)
                 session.commit()
+                logger.info("Explainer message stored successfully")
         except Exception as db_e:
-            logger.error(f"Failed to store Explainer LLM output: {db_e}")
+            logger.error(f"Failed to store Explainer Assistant output: {db_e}")
 
         return {"final_response": warm_text}
     return explainer_node
 
 
 def route_initial(state: BudAIState):
-    if state.get("is_explanation"):
+    is_explanation = state.get("is_explanation")
+    if is_explanation:
         return "explainer"
     return "intent_router"
+
+
+def generate_session_title(session_id: str, first_msg: str):
+    try:
+        llm = ChatOllama(model="qwen3:4b", temperature=0.1)
+        res = llm.invoke(f"Generate a concise 3-4 word professional title for a financial chat starting with: '{first_msg}'. Output only the title, no quotes or punctuation.")
+        title = res.content.strip().replace('"', '').replace('Title: ', '')
+        with SessionLocal() as session:
+            db_session = session.query(ChatSession).filter_by(session_id=session_id).first()
+            if db_session:
+                db_session.title = title
+                session.commit()
+    except Exception:
+        pass
 
 
 def execute_chat_graph(initial_state: dict):
@@ -451,47 +456,52 @@ def execute_chat_graph(initial_state: dict):
     user_uuid = initial_state['user_uuid']
     session_id = initial_state.get('session_id')
     
-    with SessionLocal() as session:
-        if not session_id:
-            # Create new session
-            session_id = str(uuid.uuid4())
-            initial_state['session_id'] = session_id
-            new_session = ChatSession(
-                session_id=session_id,
-                user_uuid=user_uuid,
-                title=initial_state['user_input'][:50] + "..." if len(initial_state['user_input']) > 50 else initial_state['user_input']
-            )
-            session.add(new_session)
-            session.commit()
-            logger.info(f"Created new chat session: {session_id}")
-        else:
-            # Verify session exists
-            existing_session = session.query(ChatSession).filter_by(session_id=session_id, user_uuid=user_uuid).first()
-            if not existing_session:
-                # Fallback to new session if invalid ID provided
+    try:
+        with SessionLocal() as session:
+            if not session_id:
                 session_id = str(uuid.uuid4())
                 initial_state['session_id'] = session_id
+                logger.info(f"Creating new chat session: {session_id}")
                 new_session = ChatSession(
                     session_id=session_id,
                     user_uuid=user_uuid,
-                    title=initial_state['user_input'][:50] + "..." if len(initial_state['user_input']) > 50 else initial_state['user_input']
+                    title="Analyzing Context..."
                 )
                 session.add(new_session)
                 session.commit()
-                logger.info(f"Invalid session ID provided. Created new session: {session_id}")
+                threading.Thread(target=generate_session_title, args=(session_id, initial_state['user_input'])).start()
             else:
-                existing_session.last_updated = datetime.utcnow()
-                session.commit()
+                logger.debug(f"Verifying session ID: {session_id}")
+                existing_session = session.query(ChatSession).filter_by(session_id=session_id, user_uuid=user_uuid).first()
+                if not existing_session:
+                    session_id = str(uuid.uuid4())
+                    initial_state['session_id'] = session_id
+                    logger.info(f"Invalid session ID, created new: {session_id}")
+                    new_session = ChatSession(
+                        session_id=session_id,
+                        user_uuid=user_uuid,
+                        title=initial_state['user_input'][:50] + "..." if len(initial_state['user_input']) > 50 else initial_state['user_input']
+                    )
+                    session.add(new_session)
+                    session.commit()
+                else:
+                    existing_session.last_updated = datetime.utcnow()
+                    session.commit()
+                    logger.debug("Session updated")
 
-        new_msg = ChatHistory(
-            user_uuid=user_uuid,
-            session_id=session_id,
-            role="user",
-            content=initial_state['user_input']
-        )
-        session.add(new_msg)
-        session.commit()
+            new_msg = ChatHistory(
+                user_uuid=user_uuid,
+                session_id=session_id,
+                role="user",
+                content=initial_state['user_input']
+            )
+            session.add(new_msg)
+            session.commit()
+            logger.info("User message stored in history")
+    except Exception as e:
+        logger.error(f"Database operation failed in execute_chat_graph: {e}")
 
+    logger.debug("Compiling LangGraph workflow")
     workflow = StateGraph(BudAIState)
 
     workflow.add_node("ingest_context", ingest_context_node)
@@ -501,6 +511,7 @@ def execute_chat_graph(initial_state: dict):
     workflow.add_node("categorizer", categorizer_worker.run_categorizer_worker)
     workflow.add_node("health", health_worker.run_health_worker)
     workflow.add_node("ui_tagger", ui_router_node)
+    workflow.add_node("market", market_worker.run_market_worker)
     workflow.add_node("response_generator", create_response_generator_node(q))
     workflow.add_node("explainer", create_explainer_node(q))
     workflow.add_node("memory", memory_worker.run_memory_worker)
@@ -525,6 +536,7 @@ def execute_chat_graph(initial_state: dict):
             "categorizer": "categorizer",
             "health": "health",
             "memory": "memory",
+            "market": "market",
             "general": "response_generator"
         }
     )
@@ -534,11 +546,13 @@ def execute_chat_graph(initial_state: dict):
     workflow.add_edge("categorizer", "ui_tagger")
     workflow.add_edge("health", "ui_tagger")
     workflow.add_edge("memory", "ui_tagger")
+    workflow.add_edge("market", "ui_tagger")
     workflow.add_edge("ui_tagger", "response_generator")
     workflow.add_edge("response_generator", END)
     workflow.add_edge("explainer", END)
 
     budai_app = workflow.compile()
+    logger.info("Graph workflow compiled successfully")
 
     def run_graph():
         loop = asyncio.new_event_loop()
@@ -554,3 +568,4 @@ def execute_chat_graph(initial_state: dict):
 
     threading.Thread(target=run_graph).start()
     return q
+

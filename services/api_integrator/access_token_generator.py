@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 from cryptography.fernet import Fernet
 from sqlalchemy import text
 from config import (
+
     SessionLocal,
     TRUELAYER_CLIENT_ID,
     TRUELAYER_CLIENT_SECRET,
@@ -12,13 +13,12 @@ from config import (
     TRUELAYER_AUTH_URL,
     ENCRYPTION_KEY
 )
+
 import datetime
 import pandas as pd
-
 from models.database_models import Bank
-
-logger = logging.getLogger("uvicorn.error")
-
+from services.logger_setup import get_core_logger
+logger = get_core_logger(__name__)
 
 class AccessTokenGenerator:
     def __init__(self):
@@ -28,7 +28,6 @@ class AccessTokenGenerator:
         self.auth_base_url = TRUELAYER_AUTH_URL
         self.token_url = "https://auth.truelayer.com/connect/token"
         self.cipher_suite = Fernet(ENCRYPTION_KEY)
-
     def get_auth_link(self, user_uuid):
         params = {
             "response_type": "code",
@@ -39,7 +38,6 @@ class AccessTokenGenerator:
             "state": user_uuid
         }
         return f"{self.auth_base_url}?{urlencode(params)}"
-
     def get_reauth_link(self, refresh_token, user_uuid):
         url = "https://auth.truelayer.com/v1/reauthuri"
         payload = {
@@ -47,7 +45,6 @@ class AccessTokenGenerator:
             "response_type": "code",
             "redirect_uri": self.redirect_uri
         }
-
         try:
             response = requests.post(url, json=payload)
             if response.status_code == 200:
@@ -60,10 +57,9 @@ class AccessTokenGenerator:
                 logger.error(
                     f"[ERROR] TrueLayer reauthuri returned {response.status_code}: {response.text}")
         except Exception as e:
+            logger.error("An error occurred in this block", exc_info=True)
             logger.error(f"[ERROR] TrueLayer reauthuri generation failed: {e}")
-
         return None
-
     async def generate_token_from_code(self, code, state):
         payload = {
             "grant_type": "authorization_code",
@@ -74,46 +70,38 @@ class AccessTokenGenerator:
         }
         response = requests.post(self.token_url, data=payload)
         res = response.json()
-
         if "access_token" in res:
             headers = {"Authorization": f"Bearer {res['access_token']}"}
             me_res = requests.get(
                 "https://api.truelayer.com/data/v1/me", headers=headers).json()
-
             provider_id = me_res['results'][0]['provider']['provider_id']
             provider_name = me_res['results'][0]['provider']['display_name']
             provider_logo_uri = me_res['results'][0]['provider']['logo_uri']
             consent_status = me_res['results'][0]['consent_status']
-
             def parse_tl_date(date_str):
                 if not date_str:
                     return None
                 try:
-                    return pd.to_datetime(date_str).to_pydatetime()
+                    return pd.to_datetime(date_str, format='ISO8601').to_pydatetime()
                 except Exception:
+                    logger.error("An error occurred in this block", exc_info=True)
                     return datetime.now()
-
             updated_at = parse_tl_date(
                 me_res['results'][0].get('consent_status_updated_at'))
             created_at = parse_tl_date(
                 me_res['results'][0].get('consent_created_at'))
             expires_at = parse_tl_date(
                 me_res['results'][0].get('consent_expires_at'))
-
             logger.info(f"{updated_at} {created_at} {expires_at}")
-
             enc_access = self.cipher_suite.encrypt(
                 res["access_token"].encode())
             enc_refresh = self.cipher_suite.encrypt(
                 res["refresh_token"].encode())
-
-            # ORM INSERTION (Bug-Free)
             from config import SessionLocal
             bank_id_to_init = None
             with SessionLocal() as session:
                 bank = session.query(Bank).filter_by(
                     truelayer_provider_id=provider_id, user_uuid=state).first()
-
                 if bank:
                     bank.access_token = enc_access
                     bank.refresh_token = enc_refresh
@@ -141,53 +129,38 @@ class AccessTokenGenerator:
                     )
                     session.add(new_bank)
                 session.commit()
-
             logger.info(
                 f"[AUTH LOG] Bank {provider_name} successfully linked/updated.")
-
-            # Trigger immediate account initialization in background
             try:
                 from services.api_integrator.get_account_detail import UserAccounts
                 from fastapi_cache import FastAPICache
                 import asyncio
-
                 logger.info(
                     f"Dispatching background account initialization for {provider_name}...")
                 user_acc = UserAccounts(user_id=state)
-
-                # Do NOT await this, let it run in the executor threadpool
                 loop = asyncio.get_running_loop()
                 loop.run_in_executor(
                     None, user_acc.initialise_accounts, bank_id_to_init, state)
-
-                # We can't clear cache here reliably because init hasn't finished,
-                # but the frontend will poll anyway.
-
             except Exception as init_err:
+                logger.error("An error occurred in this block", exc_info=True)
                 logger.error(
                     f"Failed to trigger immediate initialization: {init_err}")
-
             return True
         else:
             logger.error(
                 f"[AUTH ERROR] TrueLayer token exchange failed: {res}")
-
         return False
-
     async def validate_callback(self, code, state):
         return await self.generate_token_from_code(code, state)
-
     def refresh_token(self, provider_id, user_uuid):
         with SessionLocal() as session:
             row = session.execute(
                 text("SELECT refresh_token FROM banks WHERE truelayer_provider_id = :provider_id AND user_uuid = :user_uuid"),
                 {"provider_id": provider_id, "user_uuid": user_uuid}
             ).fetchone()
-
             if not row:
                 return None
-            refresh_token = self.cipher_suite.decrypt(row[0]).decode()
-
+            refresh_token = self.cipher_suite.decrypt(bytes(row[0])).decode()
         payload = {
             "grant_type": "refresh_token",
             "client_id": self.client_id,
@@ -196,7 +169,6 @@ class AccessTokenGenerator:
         }
         response = requests.post(self.token_url, data=payload)
         res = response.json()
-
         if "access_token" in res:
             enc_access = self.cipher_suite.encrypt(
                 res["access_token"].encode())
@@ -211,7 +183,6 @@ class AccessTokenGenerator:
                 session.commit()
             return res["access_token"]
         return None
-
     def revoke_provider(self, provider_id, user_uuid):
         results = []
         with SessionLocal() as session:
@@ -227,19 +198,14 @@ class AccessTokenGenerator:
                         "SELECT access_token, bank_uuid FROM banks WHERE user_uuid = :user_uuid LIMIT 1"),
                     {"user_uuid": user_uuid}
                 ).fetchone()
-
             if not row:
                 return [{"status": "not_found", "error": "No connected accounts found"}]
-
             enc_access, bank_uuid = row[0], row[1]
-
             try:
                 raw_access = self.cipher_suite.decrypt(enc_access).decode()
                 headers = {"Authorization": f"Bearer {raw_access}"}
-
                 response = requests.delete(
                     "https://auth.truelayer.com/api/delete", headers=headers)
-
                 if response.status_code in [204, 401, 200]:
                     if provider_id:
                         session.execute(text("DELETE FROM transactions WHERE bank_uuid = :bank_uuid"), {
@@ -255,14 +221,13 @@ class AccessTokenGenerator:
                                         "user_uuid": user_uuid})
                         session.execute(text("DELETE FROM banks WHERE user_uuid = :user_uuid"), {
                                         "user_uuid": user_uuid})
-
                     session.commit()
                     results.append({"status": "revoked"})
                 else:
                     results.append(
                         {"status": "failed", "truelayer_error": response.text})
-
             except Exception as e:
+                logger.error("An error occurred in this block", exc_info=True)
                 results.append({"status": "error", "message": str(e)})
-
         return results
+

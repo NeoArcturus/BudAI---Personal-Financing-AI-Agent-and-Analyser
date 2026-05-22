@@ -5,11 +5,12 @@ from config import get_db, SECRET_KEY, ALGORITHM
 from models.database_models import User
 from jose import jwt
 from jose.exceptions import ExpiredSignatureError, JWTError
+from services.logger_setup import get_core_logger
+logger = get_core_logger(__name__)
 
 security = HTTPBearer()
 
-
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -17,7 +18,6 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         if not user_uuid:
             raise HTTPException(
                 status_code=401, detail="Invalid token payload")
-
         user = db.query(User).filter(User.user_uuid == user_uuid).first()
         if not user:
             raise HTTPException(status_code=401, detail="Invalid token")

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { Account, Transaction } from "@/types";
+import { Account, Transaction, BankChartData } from "@/types";
 
 /**
  * Hook to fetch all connected bank accounts with caching.
@@ -13,26 +13,44 @@ export function useAccounts() {
       const data = await res.json();
       return (data.accounts as Account[]) || [];
     },
+    staleTime: 1000 * 60 * 5, // Keep in memory for 5 mins
+    refetchInterval: 1000 * 60 * 5, // Silent refresh every 5 mins
+    refetchOnWindowFocus: false, // Don't hit backend on tab switch
   });
 }
 
 /**
  * Hook to fetch transactions for a specific account with caching.
  */
-export function useTransactions(accountId: string, from?: string, to?: string) {
+export function useTransactions(
+  accountId: string,
+  from?: string,
+  to?: string,
+  initialData?: Transaction[],
+) {
   return useQuery({
     queryKey: ["transactions", accountId, from, to],
     queryFn: async () => {
       const queryParams = new URLSearchParams();
       if (from) queryParams.append("from", from);
       if (to) queryParams.append("to", to);
-      const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : "";
+      const queryStr = queryParams.toString()
+        ? `?${queryParams.toString()}`
+        : "";
 
-      const res = await apiFetch(`/api/accounts/${accountId}/transactions${queryStr}`, {}, true);
+      const res = await apiFetch(
+        `/api/accounts/${accountId}/transactions${queryStr}`,
+        {},
+        true,
+      );
       const data = await res.json();
       return (data.transactions as Transaction[]) || [];
     },
+    initialData,
     enabled: !!accountId,
+    staleTime: 1000 * 60 * 5, // Keep in memory for 5 mins
+    refetchInterval: 1000 * 60 * 5, // Silent refresh every 5 mins
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -44,6 +62,7 @@ export function useSpendingTrends(
   from: string,
   to: string,
   timeType: "monthly" | "weekly" | "daily" = "monthly",
+  initialData?: BankChartData[],
 ) {
   return useQuery({
     queryKey: ["spending-trends", accountId, from, to, timeType],
@@ -68,33 +87,63 @@ export function useSpendingTrends(
         true,
       );
       const result = await res.json();
-      return (result.data as any[]) || [];
+      return (result.data as BankChartData[]) || [];
     },
+    initialData,
     enabled: !!accountId && !!from && !!to,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 5, // Keep in memory for 5 mins
+    refetchInterval: 1000 * 60 * 5, // Silent refresh every 5 mins
+    refetchOnWindowFocus: false,
   });
 }
 
 /**
  * Hook to get AI Advisor summary for a specific widget context.
- * Note: Uses placeholder logic until /api/advisor/summarize exists.
  */
 export function useAdvisorInsight(widgetId: string, contextData: unknown) {
-  return useQuery({
-    queryKey: ["advisor-insight", widgetId, JSON.stringify(contextData)],
+  const initJob = useQuery({
+    queryKey: ["init-advisor", widgetId, JSON.stringify(contextData || [])],
     queryFn: async () => {
-
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      if (widgetId.includes("cashFlow")) {
-        return "Your income has remained stable, but I've detected a 12% rise in subscription services this month. Canceling unused plans could save you £45 monthly.";
-      }
-      if (widgetId.includes("spendingTrend")) {
-        return "Spending is trending downward in discretionary categories, which is excellent. You are currently on track to reach your savings goal 3 weeks ahead of schedule.";
-      }
-      return "I've analyzed your latest transaction patterns. Overall liquidity is healthy, though your emergency fund allocation could be optimized for higher yields.";
+      const res = await apiFetch("/api/advisor/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          widget_id: widgetId,
+          context_data: {
+            data: Array.isArray(contextData) ? contextData.slice(0, 20) : contextData,
+            timestamp: new Date().toISOString()
+          },
+        }),
+      }, true);
+      const data = await res.json();
+      return data.job_id as string;
     },
-    enabled: !!contextData,
-    staleTime: 1000 * 60 * 30,
+    staleTime: Infinity,
+    enabled: !!widgetId,
+  });
+
+  return useQuery({
+    queryKey: ["advisor-insight-poll", initJob.data],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/advisor/status/${initJob.data}`, {
+        method: "GET",
+      }, true);
+      const data = await res.json();
+      if (data.status === "pending") {
+        throw new Error("STILL_PENDING");
+      }
+      if (data.status === "failed") {
+        return "Unable to generate insight at this moment.";
+      }
+      return data.insight as string;
+    },
+    enabled: !!initJob.data,
+    refetchInterval: (query) => {
+        return query.state.data ? false : 2000;
+    },
+    retry: (failureCount, error: any) => {
+        if (error.message === "STILL_PENDING") return true;
+        return failureCount < 2;
+    },
   });
 }

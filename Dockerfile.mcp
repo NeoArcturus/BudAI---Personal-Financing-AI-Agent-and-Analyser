@@ -1,0 +1,38 @@
+# Base image for MCP services
+FROM python:3.12-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+# Install system dependencies (including build-essential for some MCP tools)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    gcc \
+    g++ \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install
+# REQ_FILE is passed as a build-arg to specify which requirements to install
+ARG REQ_FILE=requirements-mcp-base.txt
+COPY ${REQ_FILE} ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy only necessary code
+COPY mcp_servers/ ./mcp_servers/
+COPY services/ ./services/
+COPY models/ ./models/
+COPY config.py .
+COPY .env* ./
+
+# Default environment variables for SSE
+ENV MCP_PORT 8001
+
+# The specific MCP server to run will be passed via Docker Compose command
+# Example: CMD ["python", "-m", "mcp_servers.macro_server", "--sse"]
+CMD ["python", "-m", "mcp_servers.macro_server", "--sse"]

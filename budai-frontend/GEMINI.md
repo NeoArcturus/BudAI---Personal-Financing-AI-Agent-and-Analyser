@@ -1,463 +1,67 @@
-# BudAI Development Context & Engineering Instructions
+# BudAI Engineering Context & UI Standards
 
 ## Project Identity
+**BudAI** is an institutional-grade financial intelligence platform. It provides a "Digital Twin" experience for personal finance, focusing on data precision, risk analysis, and asset growth. 
 
-**BudAI** is an AI-powered personal finance intelligence platform focused on:
-
-- Financial analysis
-- Transaction intelligence
-- Wealth tracking
-- Forecasting
-- AI-assisted financial decision making
-
-The platform follows a **Liquid State Dashboard Architecture** with **Context-Isolated Modals**, emphasizing modularity, responsiveness, and independent widget systems.
+The platform's goal is to present complex financial insights with the clarity and professional tone of a high-tier financial advisor, stripping away all technical jargon and marketing fluff to focus entirely on **Data Integrity**.
 
 ---
 
-# Core Product Architecture
+# Mandatory Terminology Standards
 
-## Primary System Design
+## Prohibited Terms (Banned from UI)
+The following terms are strictly forbidden in all user-facing interfaces, components, and documentation. Use the approved alternatives instead.
 
-BudAI is structured around multiple AI-driven financial workspaces:
+| Banned Term | Approved Alternative | Rationale |
+| :--- | :--- | :--- |
+| **Engine** | Tool, Service, Analysis, Advisor | Too technical; implies a machine rather than an advisor. |
+| **Model** | Projection, Trend, Calculation | Tech-stack jargon; distracts from financial insights. |
+| **Agent / Multi-Agent** | Intelligence, Analysis, Service | Implies external entities; keep focus on unified advisor experience. |
+| **Orchestration** | Analysis, Integration | Jargon; confusing for financial users. |
+| **Phase X (e.g., Phase 5)** | (Omit or use "Advanced") | Internal roadmap terminology; irrelevant to end-users. |
+| **LSTM / Bates / AI** | (Omit or use "Forecast / Insight") | Technical acronyms; maintain "Digital Twin" mystery and focus on data. |
+| **Velocity** | Growth, Rate, Yield | Racing metaphor; violates financial sobriety. |
+| **Turbo / Nitro / Blazing** | (Omit or use "Instant / Real-time") | Competitive/Racing terminology; unprofessional. |
+| **Evolution / Evolutionized** | (Omit or use "Precision / Professional") | Marketing fluff; lacks technical precision. |
+| **Node** | Account, Connection, Profile | Graph theory jargon; use standard financial entities. |
 
-### 1. Global Liquid Dashboard — _The Narrator_
-
-#### Purpose
-
-- Financial intelligence feed
-- Forecasting center
-- Macro-level financial insights
-- AI-generated summaries
-
-#### Rules
-
-- Widgets operate independently
-- Widgets fetch their own data
-- Widgets maintain isolated state management
-
----
-
-### 2. Transaction Intelligence Ledger — _The Auditor_
-
-#### Purpose
-
-- Transaction clustering
-- Category intelligence
-- Spending anomaly detection
-- Transaction audit workflows
-
-#### Rules
-
-- Cluster-based rendering
-- Context-isolated audit modals
-- Dynamic filtering and segmentation
+## Professional Tone & Voice
+- **Institutional-Grade:** Write like a senior wealth manager, not a tech startup.
+- **Sobriety:** Avoid exclamation marks, emojis, and superlative marketing claims (e.g., "Blazing fast", "The best ever").
+- **Clarity:** Use precise financial terms (Asset, Liability, Yield, Accumulation, Outflow, Inflow).
+- **Empathy without Fluff:** The advisor should be supportive but remain mathematically grounded.
 
 ---
 
-### 3. Wealth & Health Portfolio — _The Wealth Manager_
+# Core Architectural Rules
 
-#### Purpose
+## 1. Data-First Integrity
+- **No Hallucinations:** AI outputs must be strictly grounded in verified financial data.
+- **"I do not have data on that":** Use this exact phrase (or equivalent professional tone) when data is missing. Do not guess.
+- **GBP Only:** All financial values must use the **£** symbol. No exceptions for UI placeholders.
 
-- Financial health scoring
-- Asset growth tracking
-- Portfolio health radar
-- Risk monitoring
+## 2. Liquid State Dashboard Architecture
+- **Widget Independence:** Every widget is a self-sustaining entity that fetches its own data and handles its own errors.
+- **No Shared Mutable State:** Avoid coupling widgets to a central "Manager" for data; they should rely on isolated API calls.
+- **Clean De-cluttering:** If a component or text does not directly serve a financial insight or utility, it should be removed. No placeholders or "dummy stats".
 
-#### Rules
-
-- Real-time visualization support
-- Independent health metric widgets
-- Predictive insights integration
-
----
-
-### 4. Global Strategy & Goals — _The Architect_
-
-#### Purpose
-
-- Financial goal planning
-- Scenario simulation
-- Budget constraint modeling
-- Long-term strategy generation
-
-#### Rules
-
-- Goal cards must be modular
-- Simulation systems must be isolated
-- Constraint calculations should remain deterministic
+## 3. Security & Connectivity
+- **Bank-Level Transparency:** Always emphasize "Read-Only API Access" and "AES-256 Encryption".
+- **Status Indicators:** Use grounded status labels like "System Operational" or "Service Unavailable" instead of "Engine Offline".
 
 ---
 
-### 5. Multi-Bank Connection Center — _The Integrator_
-
-#### Purpose
-
-- Bank account integrations
-- Connection management
-- Re-authentication workflows
-- Account synchronization status
-
-#### Rules
-
-- Connection states must be resilient
-- Re-authentication flows must remain isolated
-- Bank integrations should support scalability
-
----
-
-### 6. Command Center — _The HUD Overlay_
-
-#### Purpose
-
-- Semantic search
-- AI command routing
-- Universal action interface
-- Cross-dashboard navigation
-
-#### Rules
-
-- Must remain globally accessible
-- Should support contextual execution
-- Overlay interactions must not block dashboard rendering
-
----
-
-# Technology Stack
-
-## Frontend
-
-- **Framework:** Next.js (App Router)
-- **Language:** TypeScript (Strict Mode)
-- **UI Library:** React
-- **Styling:** Tailwind CSS
-- **Component Library:** HeroUI v3
-
-## Drag & Layout System
-
-- `@dnd-kit/core`
-- `@dnd-kit/sortable`
-
-## Charting
-
-- `chart.js`
-- Centralized rendering through `CoreChartEngine`
-
----
-
-# Mandatory UI & UX Rules
-
-## HeroUI Enforcement
-
-Strictly use HeroUI components whenever applicable.
-
-### Required Replacements
-
-Avoid native HTML elements when HeroUI alternatives exist.
-
-#### Examples
-
-- `<button>` → `<Button>`
-- `<img>` → `<Image>`
-- `<input>` → HeroUI Input components
-- Native modal implementations → HeroUI Modal components
-
-#### Native Elements Are Allowed Only When
-
-- No HeroUI equivalent exists
-- Accessibility requires it
-- Performance optimization requires it
-
----
-
-## Scrollbar Policy
-
-Visible scrollbars are prohibited.
-
-### Required Utility Classes
-
-```tsx
-scrollbar-hide
-[&::-webkit-scrollbar]:hidden
-[-ms-overflow-style:none]
-[scrollbar-width:none]
-```
-
-### Requirements
-
-- Preserve scrolling functionality
-- Maintain touch and wheel scrolling
-- Ensure accessibility is not degraded
-
----
-
-## Widget Independence
-
-Every widget must:
-
-- Manage its own state
-- Fetch its own data
-- Handle its own loading and error states
-- Maintain isolated business logic
-- Include its own account-selection dropdown when required
-
-Widgets must NOT:
-
-- Depend on parent widget state
-- Share mutable state unnecessarily
-- Rely on centralized rendering logic for business operations
-
----
-
-## Layout System Rules
-
-The dashboard must support:
-
-- Resizable widgets
-- Variable grid layouts
-- Dynamic rearrangement
-- Responsive scaling
-
-### Requirements
-
-- Use `dnd-kit`
-- Avoid hardcoded sizing constraints
-- Maintain smooth drag interactions
-- Preserve mobile responsiveness
-
----
-
-# TypeScript & Engineering Standards
-
-## Strict Type Safety
-
-### Rules
-
-- Never use `any`
-- Avoid unsafe casting
-- Define explicit interfaces for:
-  - API responses
-  - Component props
-  - State objects
-  - Tool parameters
-  - Financial models
-
-### Preferred Pattern
-
-```ts
-interface Transaction {
-  id: string;
-  amount: number;
-  category: string;
-}
-```
-
-### Avoid
-
-```ts
-const data: any = response;
-```
-
----
-
-## Data Fetching Rules
-
-### No Mock Data
-
-Mock data is prohibited unless explicitly requested.
-
-Always fetch from real endpoints.
-
----
-
-# Approved API Patterns
-
-## Transactions
-
-```txt
-/api/accounts/{id}/transactions?from={date}&to={date}
-```
-
-## AI Tool Execution
-
-```txt
-/api/media/execute
-```
-
-### Required Payload
-
-```json
-{
-  "tool_name": "string",
-  "parameters": {}
-}
-```
-
-## AI Explanations
-
-```txt
-/api/chat/explain
-```
-
----
-
-# Component-Level Fetching
-
-All widgets must fetch their own data.
-
-### Avoid
-
-- Large centralized fetch managers
-- Global dependency chains
-- Tight coupling between widgets
-
-### Preferred
-
-```tsx
-useEffect(() => {
-  fetchData();
-}, []);
-```
-
-inside the widget/component itself.
-
----
-
-# Code Quality Rules
-
-## Comments
-
-Do not add inline comments unless explicitly requested.
-
-### Avoid
-
-```ts
-// fetch user data
-```
-
----
-
-## Docstrings
-
-### Rules
-
-- Never remove existing docstrings
-- Add docstrings only when necessary
-- Keep docstrings concise and technical
-
----
-
-## Naming & Terminology Restrictions
-
-Do NOT use:
-
-- Racing terminology
-- Racing metaphors
-- Competitive speed analogies
-
-### Examples to Avoid
-
-- “turbo mode”
-- “nitro optimization”
-
-Use precise engineering terminology instead.
-
----
-
-## Emoji Policy
-
-Do not use emojis:
-
-- In code
-- In documentation
-- In variable names
-- In generated outputs
-
----
-
-# State Management Principles
-
-## Preferred Characteristics
-
-State systems should be:
-
-- Predictable
-- Localized
-- Isolated
-- Serializable when possible
-
-### Avoid
-
-- Deep prop drilling
-- Excessive global state
-- Shared mutable structures
-
----
-
-# Charting Standards
-
-All chart rendering must:
-
-- Flow through `CoreChartEngine`
-- Use strongly typed datasets
-- Support responsiveness
-- Handle empty, loading, and error states
-
-### Avoid
-
-- Direct unmanaged Chart.js instances
-- Duplicate chart configuration logic
-
----
-
-# Performance Expectations
-
-The application should prioritize:
-
-- Incremental rendering
-- Component isolation
-- Low re-render frequency
-- Efficient data fetching
-- Responsive drag interactions
-
-### Avoid
-
-- Monolithic rendering trees
-- Heavy synchronous operations in render cycles
-- Unnecessary context-wide updates
-
----
-
-# Expected Development Behavior
-
-When generating or modifying code:
-
-## Always
-
-- Preserve architectural consistency
-- Maintain strict typing
-- Follow HeroUI conventions
-- Keep widgets isolated
-- Respect existing design systems
-- Use production-grade patterns
-
-## Never
-
-- Introduce mock implementations without request
-- Use `any`
-- Break widget independence
-- Add unnecessary abstractions
-- Introduce unrelated libraries
-- Add unnecessary inline comments
-
----
-
-# Output Expectations for Generated Code
-
-Generated code should:
-
-- Be production-ready
-- Be fully typed
-- Be modular
-- Follow BudAI architectural principles
-- Integrate cleanly with existing systems
-- Avoid placeholder implementations unless explicitly requested
+# Engineering Standards
+
+## TypeScript
+- **Strict Mode:** Never use `any`.
+- **Explicit Interfaces:** Every API response and component prop must have a typed interface.
+
+## CSS & UI (Tailwind v4)
+- **CSS-First Config:** Use `app/globals.css` for theming (`@theme`) and utility classes.
+- **No Scrollbars:** Always use `scrollbar-hide` utilities to maintain the "App-like" feel.
+- **HeroUI Enforcement:** Use HeroUI components for all standard UI elements (Buttons, Cards, Modals). Native elements are only allowed for performance-critical or missing components.
+
+## Performance
+- **Component Isolation:** Minimize re-renders by keeping state local to widgets.
+- **Incremental Loading:** Use skeletons and loading states within individual widgets rather than blocking the entire page.

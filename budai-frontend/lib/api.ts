@@ -16,6 +16,7 @@ export const getAuthToken = (): string => {
 export const clearSession = (): void => {
   localStorage.removeItem("budai_token");
   localStorage.removeItem("budai_user_name");
+  document.cookie = "budai_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
 };
 
 export async function apiFetch(

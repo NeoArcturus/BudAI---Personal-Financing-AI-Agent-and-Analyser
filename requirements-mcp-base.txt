@@ -1,0 +1,15 @@
+# Base dependencies for all MCP servers
+mcp
+fastapi
+sqlalchemy
+psycopg2-binary
+pandas
+numpy
+langchain-core
+python-dotenv
+requests
+jinja2
+diskcache
+joblib
+yfinance
+newsdataapi

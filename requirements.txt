@@ -1,18 +1,48 @@
+# Core API & Orchestration
 fastapi
 uvicorn[standard]
-sqlalchemy
-alembic
+jinja2
+fastapi-cache2
+requests
+python-jose[cryptography]
 passlib[bcrypt]
 bcrypt
-python-jose[cryptography]
 cryptography
-pandas
-numpy
+python-dotenv
+pydantic
+apscheduler
+
+# Database
+sqlalchemy
+psycopg2-binary
+alembic
+
+# Task Queuing
+celery
+redis
+
+# AI/LLM Orchestration
+mcp
 langchain
 langchain-core
+langchain-classic
+langgraph
 langchain-ollama
-apscheduler
-pydantic
-python-dotenv
-requests
-jwt
+langchain-mcp-adapters
+
+# Shared Processing & Utilities
+pandas
+numpy
+diskcache
+joblib
+
+# Domain Specific (Included in API/Worker for safety)
+yfinance
+newsdataapi
+scikit-learn
+xgboost
+faiss-cpu
+sentence-transformers
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision

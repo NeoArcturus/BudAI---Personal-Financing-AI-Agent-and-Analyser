@@ -8,6 +8,9 @@ from cryptography.fernet import Fernet
 from pydantic import BaseModel, Field, model_validator
 from config import SessionLocal
 from services.api_integrator.access_token_generator import AccessTokenGenerator
+from services.logger_setup import get_core_logger
+
+logger = get_core_logger(__name__)
 
 
 class BaseToolInput(BaseModel):
@@ -170,22 +173,28 @@ class MemoryExtractionInput(BaseModel):
 
 
 def _cache_chart_data(payload_data):
-    """Caches chart data into the local SQLite database to be retrieved instantly by the frontend."""
+    logger.debug("Caching chart data in tool_schema...")
     cache_id = f"CACHE_{uuid.uuid4().hex}"
-    with SessionLocal() as session:
-        session.execute(text('''CREATE TABLE IF NOT EXISTS chart_cache (
-                            cache_id TEXT PRIMARY KEY,
-                            chart_data TEXT,
-                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'''))
-        session.execute(text('INSERT INTO chart_cache (cache_id, chart_data) VALUES (:cache_id, :chart_data)'),
-                        {"cache_id": cache_id, "chart_data": json.dumps(payload_data)})
-        session.commit()
+    try:
+        with SessionLocal() as session:
+            session.execute(text('''CREATE TABLE IF NOT EXISTS chart_cache (
+                                cache_id TEXT PRIMARY KEY,
+                                chart_data TEXT,
+                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)'''))
+            session.execute(text('INSERT INTO chart_cache (cache_id, chart_data) VALUES (:cache_id, :chart_data)'),
+                            {"cache_id": cache_id, "chart_data": json.dumps(payload_data)})
+            session.commit()
+        logger.info(f"Chart data cached with ID: {cache_id}")
+    except Exception as e:
+        logger.error(f"Failed to cache chart data in tool_schema: {e}", exc_info=True)
+        raise
     return cache_id
 
 
 def _check_and_handle_sca_error(e, acc, user_uuid):
-    """Checks if a TrueLayer API error is an SCA lock, and if so, returns an actionable authentication link."""
+    logger.info(f"Checking for SCA error for account: {acc}")
     if isinstance(e, PermissionError) and "SECURITY LOCK" in str(e):
+        logger.warning(f"SCA Security Lock detected for account: {acc}")
         with SessionLocal() as session:
             row = session.execute(text("""
                 SELECT b.truelayer_provider_id, b.refresh_token
@@ -202,14 +211,16 @@ def _check_and_handle_sca_error(e, acc, user_uuid):
             enc_key = os.getenv(
                 "ENCRYPTION_KEY", b'cw_8H_1M4bX_3nF8vO5n3Y7A8xQ3_1m8aT2vP5_v5r8=')
             cipher_suite = Fernet(enc_key)
-            refresh_token = cipher_suite.decrypt(row[1]).decode()
+            refresh_token = cipher_suite.decrypt(bytes(row[1])).decode()
 
             auth_link = token_gen.get_reauth_link(refresh_token, user_uuid)
 
             if not auth_link:
+                logger.info("No reauth link available, generating fresh auth link.")
                 auth_link = token_gen.get_auth_link(user_uuid)
                 auth_link += f"&provider_id={provider_id}"
         else:
+            logger.info("No refresh token found, generating fresh auth link.")
             auth_link = token_gen.get_auth_link(user_uuid)
 
         return (f"⚠️ **SCA Security Lock Activated**\n\n"
@@ -220,34 +231,52 @@ def _check_and_handle_sca_error(e, acc, user_uuid):
 
 
 def _parse_accounts(bank_name_or_id, user_uuid):
-    """Resolves the requested bank names into actual identifiers available in the database."""
+    logger.debug(f"Parsing accounts in tool_schema for identifier: {bank_name_or_id}")
     if not bank_name_or_id or str(bank_name_or_id).lower() in ["none", ""]:
         return [], ""
 
-    bank_name_or_id = str(bank_name_or_id).replace("'", "").replace("\’", "")
+    # Support comma-separated strings or lists
+    identifiers = []
+    if isinstance(bank_name_or_id, str):
+        identifiers = [i.strip().replace("'", "").replace("\’", "") for i in bank_name_or_id.split(",") if i.strip()]
+    elif isinstance(bank_name_or_id, list):
+        identifiers = [str(i).strip().replace("'", "").replace("\’", "") for i in bank_name_or_id if str(i).strip()]
 
-    if str(bank_name_or_id).upper() == "ALL":
+    if not identifiers:
+        return [], ""
+
+    if "ALL" in [i.upper() for i in identifiers]:
+        logger.info(f"Resolving 'ALL' accounts for user: {user_uuid}")
         with SessionLocal() as session:
             accounts = [row[0] for row in session.execute(
                 text("SELECT b.bank_name FROM banks b WHERE b.user_uuid = :user_uuid"), {"user_uuid": user_uuid}).fetchall()]
         return accounts, "ALL"
-    else:
-        with SessionLocal() as session:
+
+    logger.info(f"Resolving specific accounts: {identifiers}")
+    resolved_names = []
+    first_resolved_id = identifiers[0]
+
+    with SessionLocal() as session:
+        for ident in identifiers:
             row = session.execute(text("""
                 SELECT a.account_id, b.bank_name
                 FROM accounts a
                 JOIN banks b ON a.bank_uuid = b.bank_uuid
-                WHERE (b.bank_name = :bank_name_or_id OR a.account_id = :bank_name_or_id) AND a.user_uuid = :user_uuid
-            """), {"bank_name_or_id": bank_name_or_id, "user_uuid": user_uuid}).fetchone()
+                WHERE (b.bank_name = :ident OR a.account_id = :ident) AND a.user_uuid = :user_uuid
+            """), {"ident": ident, "user_uuid": user_uuid}).fetchone()
 
             if row:
-                return [row[1]], row[0]
+                resolved_names.append(row[1])
+                if ident == identifiers[0]:
+                    first_resolved_id = row[0]
+            else:
+                resolved_names.append(ident)
 
-            return [bank_name_or_id], bank_name_or_id
+    return list(set(resolved_names)), first_resolved_id if len(identifiers) == 1 else ",".join(identifiers)
 
 
 def _get_combined_categorized_data(accounts, suffix, user_uuid):
-    """Runs the categorization pipeline across all requested accounts and returns a merged dataframe."""
+    logger.info(f"Combining categorized data for accounts: {accounts}")
     from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
     combined_df = pd.DataFrame()
     agent = CategorizerAgent()
@@ -256,12 +285,16 @@ def _get_combined_categorized_data(accounts, suffix, user_uuid):
 
     for acc in accounts:
         try:
+            logger.debug(f"Processing categorization for account: {acc}")
             df = agent.execute_cycle(acc, user_uuid, start_date, end_date)
             if df is not None and not df.empty:
                 df['bank_name'] = acc
                 combined_df = pd.concat([combined_df, df], ignore_index=True)
         except Exception as e:
+            logger.error(f"Error during categorization of {acc}: {e}")
             sca_msg = _check_and_handle_sca_error(e, acc, user_uuid)
             if sca_msg:
+                logger.warning(f"Raising SCA exception for {acc}")
                 raise Exception(sca_msg)
+    logger.info(f"Combined data retrieval complete. Total rows: {len(combined_df)}")
     return combined_df

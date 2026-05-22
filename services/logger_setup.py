@@ -15,10 +15,12 @@ def get_core_logger(module_name: str) -> logging.Logger:
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setFormatter(formatter)
 
     logger.addHandler(console_handler)
     logger.propagate = False
+
+    logger.debug(f"Core logger initialized for module: {module_name}")
 
     return logger

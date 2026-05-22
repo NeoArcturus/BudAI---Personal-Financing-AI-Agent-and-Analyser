@@ -72,16 +72,16 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
           grid: { display: false },
           border: { display: false },
           ticks: {
-            color: "#8B8E98",
+            color: "rgba(255,255,255,0.8)",
             font: { size: 11, family: "sans-serif" },
             padding: 10,
           },
         },
         y: {
-          grid: { color: "rgba(255,255,255,0.03)", drawTicks: false },
+          grid: { color: "rgba(255,255,255,0.05)", drawTicks: false },
           border: { display: false },
           ticks: {
-            color: "#8B8E98",
+            color: "rgba(255,255,255,0.8)",
             font: { size: 11, family: "sans-serif" },
             padding: 10,
           },
@@ -130,21 +130,22 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
         datasets: enhancedDatasets,
       },
       options: {
-        ...config.options,
         ...baseOptions,
+        ...config.options,
         plugins: {
-          ...config.options?.plugins,
           ...baseOptions.plugins,
+          ...config.options?.plugins,
         },
         scales: isCircular
           ? {
+              ...baseOptions.scales,
               ...config.options?.scales,
               x: { display: false },
               y: { display: false },
             }
           : {
-              ...config.options?.scales,
               ...baseOptions.scales,
+              ...config.options?.scales,
             },
       },
       plugins: [customGlowPlugin],

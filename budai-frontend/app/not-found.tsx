@@ -9,32 +9,31 @@ export default function NotFound() {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen bg-[#08090D] flex flex-col items-center justify-center p-6 text-center relative overflow-hidden bg-grid-pattern">
+    <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-125 h-125 bg-primary/10 blur-[120px] rounded-full pointer-events-none" />
 
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-125 h-125 bg-cyan-500/10 blur-[120px] rounded-full pointer-events-none" />
-
-      <div className="obsidian-glass p-12 rounded-[2rem] border border-white/10 flex flex-col items-center gap-8 max-w-lg relative z-10">
-        <div className="w-20 h-20 rounded-2xl bg-cyan-400/10 border border-cyan-400/20 flex items-center justify-center text-cyan-400">
+      <div className="obsidian-glass p-12 rounded-[2rem] border border-border flex flex-col items-center gap-8 max-w-lg relative z-10">
+        <div className="w-20 h-20 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,127,255,0.2)]">
           <FileQuestion size={40} />
         </div>
 
-        <div className="space-y-2">
-          <h1 className="text-4xl font-bold text-white tracking-tight">404</h1>
-          <h2 className="text-xl font-semibold text-white/80">
-            Page Not Found
+        <div className="space-y-3">
+          <h1 className="text-6xl font-black text-foreground tracking-tighter italic">404</h1>
+          <h2 className="text-xl font-bold text-foreground/80 uppercase tracking-widest">
+            Record Not Found
           </h2>
-          <p className="text-white/40 leading-relaxed">
+          <p className="text-muted-foreground font-medium leading-relaxed">
             The financial record you are looking for has been archived or does
-            not exist. Check the URL or return to the dashboard.
+            not exist in the current ledger.
           </p>
         </div>
 
         <Button
           onPress={() => router.push("/")}
-          className="bg-cyan-400 text-black font-bold px-8 h-12 rounded-lg neon-glow-primary hover:bg-cyan-300 flex items-center gap-2"
+          className="bg-primary text-primary-foreground font-black px-10 h-14 rounded-2xl neon-glow-primary hover:bg-primary/80 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer uppercase tracking-widest text-xs"
         >
           <Home size={18} />
-          Return Home
+          Return to Hub
         </Button>
       </div>
     </div>

@@ -1,8 +1,15 @@
+// WidgetFlipCard.tsx
 "use client";
 
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, ArrowRight, RotateCcw, Info } from "lucide-react";
+import {
+  Sparkles,
+  ArrowRight,
+  RotateCcw,
+  Info,
+  BrainCircuit,
+} from "lucide-react";
 import { Button, Card, Skeleton, ScrollShadow, Surface } from "@heroui/react";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +17,7 @@ interface WidgetFlipCardProps {
   children: React.ReactNode;
   insight?: string;
   isLoading?: boolean;
+  isDataLoading?: boolean;
   onDiscuss?: () => void;
   className?: string;
 }
@@ -18,6 +26,7 @@ export default function WidgetFlipCard({
   children,
   insight,
   isLoading,
+  isDataLoading,
   onDiscuss,
   className,
 }: WidgetFlipCardProps) {
@@ -25,12 +34,14 @@ export default function WidgetFlipCard({
 
   const toggleFlip = () => setIsFlipped(!isFlipped);
 
+  const showSkeleton = isLoading || isDataLoading;
+
   return (
     <div className={cn("relative w-full h-full perspective-1000", className)}>
       <motion.div
-        className="relative w-full h-full transition-all duration-700 preserve-3d"
+        className="relative w-full h-full transition-all duration-500 preserve-3d"
         animate={{ rotateY: isFlipped ? 180 : 0 }}
-        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+        transition={{ type: "spring", stiffness: 350, damping: 25 }}
       >
         <Surface
           variant="transparent"
@@ -40,12 +51,18 @@ export default function WidgetFlipCard({
 
           <Button
             onPress={toggleFlip}
-            className="absolute top-5 right-14 h-8 px-3 rounded-lg flex items-center justify-center gap-1.5 bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20 hover:bg-neon-cyan/20 z-50 transition-all shadow-[0_0_10px_rgba(0,229,255,0.2)] hover:scale-105 cursor-pointer"
+            className="absolute top-8 right-16 h-8 px-4 rounded-lg flex items-center justify-center gap-2 bg-primary/5 text-primary border-[0.5px] border-primary/20 hover:border-primary/50 z-50 transition-all shadow-[0_0_15px_rgba(0,127,255,0.05)] hover:shadow-[0_0_20px_rgba(0,127,255,0.2)] cursor-pointer"
           >
-            <span className="text-xs font-bold whitespace-nowrap">
-              Ask AI Advisor
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] whitespace-nowrap">
+              Link Advisor
             </span>
-            <Sparkles size={14} className="animate-pulse shrink-0" />
+            <Sparkles
+              size={12}
+              className={cn(
+                "shrink-0",
+                showSkeleton ? "animate-spin" : "animate-pulse",
+              )}
+            />
           </Button>
         </Surface>
 
@@ -53,56 +70,74 @@ export default function WidgetFlipCard({
           variant="transparent"
           className="absolute inset-0 w-full h-full backface-hidden rotate-y-180 z-0 p-0 m-0 border-none bg-transparent"
         >
-          <Card className="w-full h-full bg-[#0d1516]/90 backdrop-blur-3xl rounded-3xl p-0 flex flex-col border border-neon-cyan/20 shadow-[0_0_40px_rgba(0,229,255,0.15)] overflow-hidden">
-            <Card.Header className="flex items-center gap-4 p-8 pb-4 shrink-0">
-              <div className="w-12 h-12 rounded-xl bg-neon-cyan/10 border border-neon-cyan/20 flex items-center justify-center text-neon-cyan shadow-[inset_0_0_15px_rgba(0,229,255,0.1)] shrink-0">
-                <Sparkles size={22} />
+          <Card className="w-full h-full liquid-glass rounded-xl p-0 flex flex-col border-none shadow-inner overflow-hidden">
+            <Card.Header className="flex items-center gap-5 p-10 pb-6 shrink-0 border-b-[0.5px] border-white/5">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,127,255,0.05)] shrink-0">
+                <BrainCircuit size={24} />
               </div>
               <div className="flex flex-col justify-center">
-                <Card.Title className="text-white font-bold text-lg leading-tight tracking-tight m-0">
-                  AI Advisor
-                </Card.Title>
-                <Card.Description className="text-white/50 text-[10px] font-bold uppercase tracking-widest mt-0.5 m-0">
-                  Contextual Intelligence
-                </Card.Description>
+                <h3 className="text-foreground font-black text-xl tracking-tighter uppercase italic m-0">
+                  Neural Insights
+                </h3>
+                <p className="text-primary/50 text-[9px] font-black uppercase tracking-[0.3em] mt-1.5 m-0">
+                  Real-time Logic Stream
+                </p>
               </div>
             </Card.Header>
 
-            <Card.Content className="flex-1 px-8 py-0 overflow-hidden">
-              <ScrollShadow className="h-full pr-2">
-                {isLoading ? (
-                  <div className="space-y-4 pt-4">
-                    <Skeleton className="rounded-lg h-4 w-3/4 bg-white/5" />
-                    <Skeleton className="rounded-lg h-4 w-full bg-white/5" />
-                    <Skeleton className="rounded-lg h-4 w-2/3 bg-white/5" />
+            <Card.Content className="flex-1 px-10 py-0 overflow-hidden min-h-0 relative">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.01)_0%,transparent_70%)] pointer-events-none" />
+              <ScrollShadow
+                hideScrollBar
+                className="h-full pr-2 overflow-y-auto scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] relative z-10"
+              >
+                {showSkeleton ? (
+                  <div className="space-y-6 pt-10">
+                    <Skeleton
+                      className="rounded-lg h-2 w-3/4 bg-white/5"
+                      animationType="shimmer"
+                    />
+                    <Skeleton
+                      className="rounded-lg h-2 w-full bg-white/5"
+                      animationType="shimmer"
+                    />
+                    <Skeleton
+                      className="rounded-lg h-2 w-2/3 bg-white/5"
+                      animationType="shimmer"
+                    />
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-3 mt-4">
-                    <Info size={16} className="text-white/70" />
-                    <p className="text-white/90 text-sm leading-relaxed font-medium italic">
+                  <div className="flex flex-col gap-6 mt-10">
+                    <div className="flex items-center gap-3 text-primary/30">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-pulse" />
+                      <span className="text-[9px] font-black uppercase tracking-[0.4em]">
+                        Advisory Protocol
+                      </span>
+                    </div>
+                    <p className="text-foreground/70 text-[15px] leading-relaxed font-medium tracking-tight">
                       {insight ||
-                        "I'm currently analyzing your financial data to provide actionable advice. Check back in a moment."}
+                        "Processing institutional data streams. Analyzing spend patterns for logic optimization."}
                     </p>
                   </div>
                 )}
               </ScrollShadow>
             </Card.Content>
 
-            <Card.Footer className="p-8 pt-6 mt-auto border-t border-white/5 flex items-center gap-4">
+            <Card.Footer className="p-10 pt-6 mt-auto border-t-[0.5px] border-white/5 flex items-center gap-5 bg-white/[0.01]">
               <Button
                 onPress={onDiscuss}
-                className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold h-12 rounded-xl flex items-center justify-center gap-2 border border-white/10 hover:border-white/20 transition-all cursor-pointer shadow-none"
+                isDisabled={showSkeleton}
+                className="flex-1 bg-primary text-primary-foreground font-black uppercase tracking-[0.2em] text-[11px] h-14 rounded-xl shadow-[0_0_20px_rgba(0,127,255,0.3)] hover:shadow-[0_0_30px_rgba(0,127,255,0.5)] transition-all cursor-pointer border-none flex items-center justify-center gap-3"
               >
-                Discuss with Advisor
+                Sync Advisor
                 <ArrowRight size={18} />
               </Button>
               <Button
                 isIconOnly
                 onPress={toggleFlip}
-                variant="ghost"
-                className="w-12 h-12 min-w-12 rounded-xl text-[#8B8E98] hover:text-white border border-white/10 hover:bg-white/20 flex items-center justify-center transition-all cursor-pointer bg-transparent"
+                className="w-14 h-14 min-w-14 rounded-xl text-foreground/30 hover:text-foreground hover:bg-white/5 flex items-center justify-center transition-all cursor-pointer bg-transparent border-[0.5px] border-white/10"
               >
-                <RotateCcw size={18} />
+                <RotateCcw size={20} />
               </Button>
             </Card.Footer>
           </Card>

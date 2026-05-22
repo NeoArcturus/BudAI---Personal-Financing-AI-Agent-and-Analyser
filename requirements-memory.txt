@@ -1,0 +1,11 @@
+# Memory specialized dependencies
+mcp
+sqlalchemy
+psycopg2-binary
+numpy
+python-dotenv
+joblib
+faiss-cpu
+sentence-transformers
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch

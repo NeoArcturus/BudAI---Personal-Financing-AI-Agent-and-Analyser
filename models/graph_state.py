@@ -1,6 +1,7 @@
 from typing import TypedDict, Dict, Any, List, Optional
 from langchain_core.messages import BaseMessage
-
+from services.logger_setup import get_core_logger
+logger = get_core_logger(__name__)
 
 class BudAIState(TypedDict, total=False):
     user_uuid: str
@@ -16,3 +17,4 @@ class BudAIState(TypedDict, total=False):
     final_response: str
     raw_data: Optional[Any]
     is_explanation: Optional[bool]
+

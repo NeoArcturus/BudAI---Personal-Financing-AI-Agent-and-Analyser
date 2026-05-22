@@ -41,17 +41,17 @@ const baseOptions = {
     legend: {
       position: "top" as const,
       labels: {
-        color: "#94a3b8",
-        font: { family: "Geist, monospace" },
+        color: "rgba(255, 255, 255, 0.7)",
+        font: { family: "var(--font-jakarta), sans-serif" },
         usePointStyle: true,
         boxWidth: 8,
       },
     },
     tooltip: {
-      backgroundColor: "rgba(13, 21, 22, 0.95)",
-      titleColor: "#00E5FF",
-      bodyColor: "#e2e8f0",
-      borderColor: "rgba(255, 255, 255, 0.08)",
+      backgroundColor: "var(--popover)",
+      titleColor: "var(--primary)",
+      bodyColor: "#FFFFFF",
+      borderColor: "rgba(255, 255, 255, 0.1)",
       borderWidth: 1,
       padding: 12,
       usePointStyle: true,
@@ -61,23 +61,30 @@ const baseOptions = {
     y: {
       grace: "5%",
       grid: { color: "rgba(255, 255, 255, 0.05)", drawBorder: false },
-      ticks: { color: "#94a3b8", font: { family: "Geist, monospace" } },
+      ticks: {
+        color: "rgba(255, 255, 255, 0.8)",
+        font: { family: "var(--font-jakarta), sans-serif" },
+      },
     },
     x: {
       grid: { display: false, drawBorder: false },
-      ticks: { color: "#94a3b8", maxTicksLimit: 12, maxRotation: 0 },
+      ticks: {
+        color: "rgba(255, 255, 255, 0.8)",
+        maxTicksLimit: 12,
+        maxRotation: 0,
+      },
     },
   },
 };
 
 const colorPalette = [
-  "#00E5FF",
-  "#FF3366",
-  "#7FFF00",
-  "#B900FF",
-  "#FFEA00",
-  "#00F0FF",
-  "#39FF14",
+  "#0F52BA",
+  "#007FFF",
+  "#3B82F6",
+  "#60A5FA",
+  "#93C5FD",
+  "#BFDBFE",
+  "#DBEAFE",
 ];
 
 const getColorForMetric = (
@@ -91,15 +98,15 @@ const getColorForMetric = (
     lower.includes("optimal") ||
     lower.includes("expected")
   )
-    return "#00E5FF";
+    return "#0F52BA";
   if (
     lower.includes("expense") ||
     lower.includes("spend") ||
     lower.includes("careless") ||
     lower.includes("projected")
   )
-    return "#FF3366";
-  if (lower.includes("income")) return "#B900FF";
+    return "#EF4444";
+  if (lower.includes("income")) return "#10B981";
   return colorPalette[defaultIndex % colorPalette.length];
 };
 
@@ -181,7 +188,9 @@ export const buildChartConfig = (
   if (type === "categorized") {
     const allLabels = Array.from(
       new Set(
-        payloadData.flatMap((b) => (b.data || []).map((d) => String(d.Category))),
+        payloadData.flatMap((b) =>
+          (b.data || []).map((d) => String(d.Category)),
+        ),
       ),
     );
     const datasets = payloadData.map((b, i) => {
@@ -211,14 +220,6 @@ export const buildChartConfig = (
           getDelayedAnimation()) as unknown as Record<string, unknown>,
         plugins: {
           ...baseOptions.plugins,
-          title: {
-            display: true,
-            text:
-              customTitle ||
-              `Spending Breakdown (${params.from_date} to ${params.to_date})`,
-            color: "#ffffff",
-            font: { size: 16 },
-          },
         },
       },
     } as unknown as NativeChartConfig;
@@ -259,14 +260,6 @@ export const buildChartConfig = (
         scales: { x: { display: false }, y: { display: false } },
         plugins: {
           ...baseOptions.plugins,
-          title: {
-            display: true,
-            text:
-              customTitle ||
-              `Expense Distribution (${params.from_date} to ${params.to_date})`,
-            color: "#ffffff",
-            font: { size: 16 },
-          },
         },
       },
     } as unknown as NativeChartConfig;
@@ -350,12 +343,6 @@ export const buildChartConfig = (
           getDelayedAnimation()) as unknown as Record<string, unknown>,
         plugins: {
           ...baseOptions.plugins,
-          title: {
-            display: true,
-            text: customTitle || "Income vs Expense Matrix",
-            color: "#ffffff",
-            font: { size: 16 },
-          },
         },
       },
     } as unknown as NativeChartConfig;
@@ -374,13 +361,13 @@ export const buildChartConfig = (
           {
             label: "Health Index",
             data: scores,
-            backgroundColor: "rgba(0, 229, 255, 0.2)",
-            borderColor: "#00E5FF",
+            backgroundColor: "rgba(0, 127, 255, 0.2)",
+            borderColor: "var(--primary)",
             borderWidth: 2,
-            pointBackgroundColor: "#0D1516",
-            pointBorderColor: "#00E5FF",
+            pointBackgroundColor: "var(--background)",
+            pointBorderColor: "var(--primary)",
             pointHoverBackgroundColor: "#fff",
-            pointHoverBorderColor: "#00E5FF",
+            pointHoverBorderColor: "var(--primary)",
             pointHoverRadius: 6,
           },
         ],
@@ -393,10 +380,10 @@ export const buildChartConfig = (
           x: { display: false },
           y: { display: false },
           r: {
-            angleLines: { color: "rgba(255, 255, 255, 0.08)" },
-            grid: { color: "rgba(255, 255, 255, 0.08)" },
+            angleLines: { color: "rgba(255, 255, 255, 0.15)" },
+            grid: { color: "rgba(255, 255, 255, 0.15)" },
             pointLabels: {
-              color: "#94a3b8",
+              color: "rgba(255, 255, 255, 0.9)",
               font: { family: "Geist, monospace", size: 11 },
             },
             ticks: { display: false, min: 0, max: 100, stepSize: 20 },
@@ -404,12 +391,6 @@ export const buildChartConfig = (
         },
         plugins: {
           ...baseOptions.plugins,
-          title: {
-            display: true,
-            text: customTitle || "Financial Health Profile",
-            color: "#ffffff",
-            font: { size: 16 },
-          },
         },
       },
     } as unknown as NativeChartConfig;
@@ -511,30 +492,22 @@ export const buildChartConfig = (
       options: {
         ...baseOptions,
         animation: (animationOverride ||
-          getProgressiveAnimation(
-            allLabels.length,
-          )) as unknown as Record<string, unknown>,
+          getProgressiveAnimation(allLabels.length)) as unknown as Record<
+          string,
+          unknown
+        >,
         plugins: {
           ...baseOptions.plugins,
-          title: {
-            display: true,
-            text:
-              customTitle || `AI Forecast Analysis (${params.days || ""} Days)`,
-            color: "#ffffff",
-            font: { size: 16 },
-          },
         },
       },
     } as unknown as NativeChartConfig;
   }
 
   if (type.startsWith("historical")) {
-    const timeType = type.split("_")[1] || "monthly";
-
     const allDates = Array.from(
       new Set(
         payloadData.flatMap((b) =>
-          (b.data || []).map((d) => String(d.Date || d.Month || "")),
+          (b.data || []).map((d) => String(d.Date || d.Month || d.date || d.month || "")),
         ),
       ),
     )
@@ -564,9 +537,9 @@ export const buildChartConfig = (
         label: b.bank_name,
         data: allDates.map((date) => {
           const pt = (b.data || []).find(
-            (d) => String(d.Date || d.Month || "") === date,
+            (d) => String(d.Date || d.Month || d.date || d.month || "") === date,
           );
-          return pt ? Number(pt.Amount || pt.Total_Amount || 0) : 0;
+          return pt ? Number(pt.Amount || pt.Total_Amount || pt.amount || pt.total_amount || 0) : 0;
         }),
         borderColor: metricColor,
         fill: false,
@@ -584,19 +557,12 @@ export const buildChartConfig = (
       options: {
         ...baseOptions,
         animation: (animationOverride ||
-          getProgressiveAnimation(
-            allDates.length,
-          )) as unknown as Record<string, unknown>,
+          getProgressiveAnimation(allDates.length)) as unknown as Record<
+          string,
+          unknown
+        >,
         plugins: {
           ...baseOptions.plugins,
-          title: {
-            display: true,
-            text:
-              customTitle ||
-              `${timeType.charAt(0).toUpperCase() + timeType.slice(1)} Expense Analysis`,
-            color: "#ffffff",
-            font: { size: 16 },
-          },
         },
       },
     } as unknown as NativeChartConfig;
@@ -604,4 +570,3 @@ export const buildChartConfig = (
 
   return null;
 };
-

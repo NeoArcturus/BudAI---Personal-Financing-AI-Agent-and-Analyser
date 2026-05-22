@@ -8,6 +8,14 @@ const nextConfig = {
         port: "8080",
         pathname: "/api/media/image/**",
       },
+      {
+        protocol: "https",
+        hostname: "**",
+      },
+      {
+        protocol: "http",
+        hostname: "**",
+      },
     ],
   },
 };

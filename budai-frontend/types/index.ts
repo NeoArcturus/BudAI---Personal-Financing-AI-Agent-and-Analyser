@@ -15,11 +15,14 @@ export interface Account {
 
 export interface Transaction {
   transaction_id: string;
+  transaction_uuid?: string;
   date?: string;
   timestamp?: string;
   amount?: number;
   description?: string;
   category?: string;
+  Category?: string;
+  Amount?: number;
 }
 
 export interface ChatMessage {

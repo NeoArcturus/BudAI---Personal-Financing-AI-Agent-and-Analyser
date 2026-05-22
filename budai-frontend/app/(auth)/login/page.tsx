@@ -38,6 +38,7 @@ export default function LoginPage() {
       if (res.ok && data.token) {
         localStorage.setItem("budai_token", data.token);
         localStorage.setItem("budai_user_name", email.split("@")[0] || "User");
+        document.cookie = `budai_token=${data.token}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
         router.push("/home");
       } else {
         setError(data.detail || "Invalid credentials.");
@@ -51,21 +52,19 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#101115] items-center justify-center font-sans text-white">
-      <Card className="w-full max-w-md bg-[#1A1C24] border border-[#2A2D35] rounded-2xl shadow-2xl relative overflow-hidden">
-        <Card.Header className="text-2xl font-bold mb-2 tracking-tight text-white bg-transparent mt-4 ml-8 flex-col items-start gap-1">
-          <h1>Welcome Back</h1>
-          <div className="z-10 relative">
-            <p className="text-gray-500 text-sm font-normal">
-              Sign in to securely access your dashboard.
-            </p>
-          </div>
+    <div className="flex h-screen w-screen bg-transparent items-center justify-center font-sans text-white relative overflow-hidden">
+      <Card className="w-full max-w-md bg-black/40 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-2xl relative overflow-hidden z-10 p-8">
+        <Card.Header className="flex flex-col items-start gap-1 p-0 mb-8 bg-transparent">
+          <h1 className="text-3xl font-black tracking-tighter text-white uppercase italic m-0">
+            Welcome Back
+          </h1>
+          <p className="text-muted-foreground text-sm font-medium tracking-wide">
+            Securely access your digital twin portal.
+          </p>
         </Card.Header>
-        <Card.Content className="p-8 pt-4 relative">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-[#3D73FF]/5 rounded-bl-full pointer-events-none" />
-
+        <Card.Content className="p-0 relative">
           {error && (
-            <div className="mb-6 text-[#FF5E98] text-sm font-medium bg-[#FF5E98]/10 py-3 px-4 rounded-xl border border-[#FF5E98]/20 z-10 relative">
+            <div className="mb-8 text-pink-500 text-xs font-black uppercase tracking-widest bg-pink-500/10 py-4 px-5 rounded-2xl border border-pink-500/20 z-10 relative shadow-[0_0_20px_rgba(236,72,153,0.1)]">
               {error}
             </div>
           )}
@@ -76,21 +75,21 @@ export default function LoginPage() {
             className="flex flex-col gap-6 w-full z-10 relative"
           >
             <TextField className="w-full" name="Email">
-              <Label className="uppercase tracking-wider text-xs font-semibold mb-1.5 text-cyan-400">
-                Email
+              <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">
+                Security Identity
               </Label>
               <InputGroup
-                className="bg-[#101115] rounded-2xl flex items-center focus-within:ring-1 focus-within:ring-cyan-400 w-full border border-transparent"
+                className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary/50 transition-all w-full border border-white/10 h-14"
                 variant="secondary"
               >
-                <InputGroup.Prefix className="pl-4 pr-2 text-[#8B8E98] flex items-center shrink-0">
+                <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
                   <Mail size={18} />
                 </InputGroup.Prefix>
                 <InputGroup.Input
                   placeholder="name@email.com"
                   type="email"
                   required
-                  className="flex-1 w-full bg-transparent text-white py-3 pr-4 placeholder:text-[#2A2D35] border-none focus:ring-0 focus:outline-none"
+                  className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-5 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -98,37 +97,33 @@ export default function LoginPage() {
             </TextField>
 
             <TextField className="w-full" name="Password">
-              <Label className="uppercase tracking-wider text-xs font-semibold mb-1.5 text-cyan-400">
-                Password
+              <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">
+                Encryption Key
               </Label>
               <InputGroup
-                className="bg-[#101115] rounded-2xl flex items-center focus-within:ring-1 focus-within:ring-cyan-400 w-full border border-transparent"
+                className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary/50 transition-all w-full border border-white/10 h-14"
                 variant="secondary"
               >
-                <InputGroup.Prefix className="pl-4 pr-2 text-[#8B8E98] flex items-center shrink-0">
+                <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
                   <Lock size={18} />
                 </InputGroup.Prefix>
                 <InputGroup.Input
                   placeholder="••••••••"
                   type={isVisible ? "text" : "password"}
                   required
-                  className="flex-1 w-full bg-transparent text-white py-3 pr-2 placeholder:text-[#2A2D35] border-none focus:ring-0 focus:outline-none"
+                  className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-2 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
-                <InputGroup.Suffix className="pr-3 flex items-center shrink-0 relative z-10 pointer-events-auto">
+                <InputGroup.Suffix className="pr-4 flex items-center shrink-0 relative z-10 pointer-events-auto">
                   <Button
                     isIconOnly
                     type="button"
                     aria-label={isVisible ? "Hide Password" : "Show Password"}
                     variant="ghost"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setIsVisible(!isVisible);
-                    }}
                     onPress={() => setIsVisible(!isVisible)}
                     size="sm"
-                    className="hover:cursor-pointer text-[#8B8E98]"
+                    className="hover:cursor-pointer text-muted-foreground hover:text-foreground transition-colors border-none bg-transparent"
                   >
                     {isVisible ? <Eye size={18} /> : <EyeClosed size={18} />}
                   </Button>
@@ -138,24 +133,21 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full mt-2 bg-cyan-400 text-black font-semibold rounded-2xl py-3 hover:bg-cyan-300 cursor-pointer transition-colors flex items-center justify-center gap-2"
+              className="w-full mt-4 bg-primary text-primary-foreground font-black uppercase tracking-widest rounded-2xl h-14 hover:bg-primary/80 cursor-pointer transition-all flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(0,127,255,0.3)] border-none"
             >
               {isLoading && <Loader2 className="animate-spin" size={18} />}
-              Sign In
+              Authorize Access
             </Button>
           </Form>
 
-          <Card.Footer className="text-center text-gray-400 mt-8 text-sm z-10 relative flex justify-center w-full">
-            <span>
-              Don&apos;t have an account?{" "}
-              <Link
-                href="/register"
-                className="inline-flex items-center gap-1 text-cyan-400 hover:underline font-bold"
-              >
-                Create one
-                <Link.Icon />
-              </Link>
-            </span>
+          <Card.Footer className="text-center text-muted-foreground mt-10 text-[11px] z-10 relative flex justify-center w-full font-bold uppercase tracking-widest gap-2">
+            <span>Don&apos;t have an account?</span>
+            <Link
+              href="/register"
+              className="text-primary hover:text-primary/80 transition-colors border-none font-black"
+            >
+              Initialize Node
+            </Link>
           </Card.Footer>
         </Card.Content>
       </Card>
