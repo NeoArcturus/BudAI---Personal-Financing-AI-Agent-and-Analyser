@@ -1,4 +1,4 @@
-// CommodityMarketWidgetClient.tsx
+
 "use client";
 
 import React, { useState, useMemo } from "react";
@@ -53,7 +53,7 @@ export default function CommodityMarketWidgetClient({
       return res.json();
     },
     initialData: selectedRange === "1M" ? initialHistory : undefined,
-    staleTime: 600000, // 10 minutes
+    staleTime: 600000,
   });
 
   const symbols = useMemo(() => {

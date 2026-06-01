@@ -1,34 +1,47 @@
 import warnings
 import sys
-warnings.filterwarnings("ignore")
-import logging
-from mcp.server.fastmcp import FastMCP
+import os
+import asyncio
+from iii import register_worker
 from services.mcp_tools.analyser_tools import plot_expenses, find_total_spent_for_given_category, find_highest_spending_category, plot_cash_flow_mixed
 from services.mcp_tools.external_tools import export_custom_statement
-from services.mcp_tools.shared_utils import _cache_chart_data # For any direct use
 from services.logger_setup import get_core_logger
 
+warnings.filterwarnings("ignore")
 logger = get_core_logger(__name__)
-mcp = FastMCP("Analyser")
 
-logger.info("Registering tools for Analyser MCP Server")
-mcp.add_tool(plot_expenses.func)
-mcp.add_tool(find_total_spent_for_given_category.func)
-mcp.add_tool(find_highest_spending_category.func)
-mcp.add_tool(plot_cash_flow_mixed.func)
-mcp.add_tool(export_custom_statement.func)
+III_ENGINE_URL = os.getenv("III_ENGINE_URL", "ws://iii-engine:49134")
+
+def tool_wrapper(func, args):
+    # Filter out internal iii arguments
+    clean_args = {k: v for k, v in args.items() if not k.startswith("_")}
+    try:
+        if asyncio.iscoroutinefunction(func):
+            try:
+                return asyncio.run(func(**clean_args))
+            except RuntimeError:
+                # Fallback if loop is already running
+                loop = asyncio.get_event_loop()
+                return loop.run_until_complete(func(**clean_args))
+        else:
+            return func(**clean_args)
+    except Exception as e:
+        logger.error(f"Error executing {func.__name__}: {e}", exc_info=True)
+        return f"Error: {str(e)}"
+
+async def main():
+    logger.info("Initializing Analyser Worker with iii")
+    worker = register_worker(III_ENGINE_URL)
+    
+    worker.register_function("analyser::plot_expenses", lambda args: tool_wrapper(plot_expenses.func, args))
+    worker.register_function("analyser::find_total_spent_for_given_category", lambda args: tool_wrapper(find_total_spent_for_given_category.func, args))
+    worker.register_function("analyser::find_highest_spending_category", lambda args: tool_wrapper(find_highest_spending_category.func, args))
+    worker.register_function("analyser::plot_cash_flow_mixed", lambda args: tool_wrapper(plot_cash_flow_mixed.func, args))
+    worker.register_function("analyser::export_custom_statement", lambda args: tool_wrapper(export_custom_statement.func, args))
+    
+    logger.info("Analyser Worker registered. Entering heartbeat loop.")
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
-    import argparse
-    import os
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--sse", action="store_true", help="Run with SSE transport")
-    args = parser.parse_args()
-
-    if args.sse:
-        logger.info(f"Starting Analyser MCP Server with SSE transport")
-        mcp.run(transport="sse")
-    else:
-        logger.info("Initializing Analyser MCP Server")
-        mcp.run()
-        logger.info("Analyser MCP Server has stopped")
+    asyncio.run(main())

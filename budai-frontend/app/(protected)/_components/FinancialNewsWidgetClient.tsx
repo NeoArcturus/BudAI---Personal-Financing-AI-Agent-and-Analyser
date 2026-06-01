@@ -39,7 +39,7 @@ export default function FinancialNewsWidgetClient({
       return res.json();
     },
     initialData: initialNews,
-    staleTime: 7200000, // 2 hours
+    staleTime: 7200000,
   });
 
   const { data: insight, isLoading: isAnalyzing } = useAdvisorInsight(
@@ -84,7 +84,7 @@ export default function FinancialNewsWidgetClient({
               href={item.url}
               className="flex gap-6 items-start p-0 h-auto w-full text-left"
             >
-              {/* Image Section */}
+              {}
               <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 bg-white/5 border-[0.5px] border-white/10 flex items-center justify-center shadow-sm">
                 {item.image_url ? (
                   <Image
@@ -100,7 +100,7 @@ export default function FinancialNewsWidgetClient({
                 )}
               </div>
 
-              {/* Content Section */}
+              {}
               <div className="flex-1 flex flex-col items-start min-w-0">
                 <div className="flex items-center justify-between w-full mb-2">
                   <Text className="text-[9px] font-black uppercase tracking-[0.2em] text-primary font-mono">

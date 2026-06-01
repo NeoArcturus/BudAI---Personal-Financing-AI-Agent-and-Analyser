@@ -25,6 +25,6 @@ void fft(std::vector<std::complex<double>> &x);
 
 std::complex<double> bates_characteristic_function(double u, double T, double r, HestonParams hp, JumpParams jp);
 
-std::vector<std::vector<double>> heston_jump_mc(HestonParams hp, JumpParams jp, double mu, double dt, int days, int paths, int seed);
+std::vector<std::vector<double>> heston_jump_mc(HestonParams hp, JumpParams jp, double mu, double dt, int days, int paths, int seed, const double* deterministic_calendar = nullptr);
 
 #endif

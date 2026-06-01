@@ -33,6 +33,7 @@ import {
   MessageSquare,
   Sparkles,
 } from "lucide-react";
+import { useBudAI } from "@/app/context/AppContext";
 
 interface WidgetInstance {
   id: string;
@@ -101,18 +102,29 @@ function SortableWidgetItem({
     gridColumn: `span ${colSpan} / span ${colSpan}`,
   };
 
-  const handleResizePointerDown = (e: React.PointerEvent) => {
+  const handleResizePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     e.preventDefault();
 
     const startY = e.clientY;
+    const startX = e.clientX;
     const startHeight = height;
+    const startColSpan = colSpan;
 
     const onPointerMove = (moveEvent: PointerEvent) => {
       const deltaY = moveEvent.clientY - startY;
+      const deltaX = moveEvent.clientX - startX;
+
       const newHeight = Math.max(300, startHeight + deltaY);
 
-      const newColSpan = newHeight > 500 ? 2 : 1;
+      // Decouple colSpan from height and tie it to horizontal drag distance instead
+      let newColSpan = startColSpan;
+      if (deltaX > 100) {
+        newColSpan = 2; // Dragging right snaps to 2 columns
+      } else if (deltaX < -100) {
+        newColSpan = 1; // Dragging left snaps back to 1 column
+      }
+
       onResize(id, newHeight, newColSpan);
     };
 
@@ -158,35 +170,46 @@ export default function DashboardClient({
   widgetsMap,
   ticker,
 }: DashboardClientProps) {
+  const { userName } = useBudAI();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [widgets, setWidgets] = useState<WidgetInstance[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
+    if (!userName || userName === "User") {
+      // Wait for the real username to be loaded from AppContext if it's still "User"
+      // but only if we are in a client environment where it might change.
+      // If the user actually IS named "User", this might delay, but it's a safe trade-off.
+      const actualName = localStorage.getItem("budai_user_name");
+      if (actualName && actualName !== userName) return;
+    }
+
     const defaultWidgets: WidgetInstance[] = [
       { id: "portfolio-1", type: "portfolio", height: 450, colSpan: 1 },
       { id: "cashFlow-1", type: "cashFlow", height: 450, colSpan: 1 },
       { id: "ledger-1", type: "ledger", height: 450, colSpan: 2 },
     ];
-    const saved = localStorage.getItem("budai_dashboard_widgets");
+    const storageKey = `budai_widgets_dashboard_${userName}`;
+    const saved = localStorage.getItem(storageKey);
     if (saved) {
       try {
         setWidgets(JSON.parse(saved));
       } catch (e) {
-        console.log(e);
+        console.error("Failed to load widgets:", e);
         setWidgets(defaultWidgets);
       }
     } else {
       setWidgets(defaultWidgets);
     }
     setIsLoaded(true);
-  }, []);
+  }, [userName]);
 
   useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem("budai_dashboard_widgets", JSON.stringify(widgets));
+    if (isLoaded && userName && userName !== "User") {
+      const storageKey = `budai_widgets_dashboard_${userName}`;
+      localStorage.setItem(storageKey, JSON.stringify(widgets));
     }
-  }, [widgets, isLoaded]);
+  }, [widgets, isLoaded, userName]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),

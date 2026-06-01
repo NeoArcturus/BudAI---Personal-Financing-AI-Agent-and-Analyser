@@ -2,9 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Link, Accordion, Chip } from "@heroui/react";
+import { Button, Link, Accordion } from "@heroui/react";
 import {
-  Zap,
   TrendingUp,
   Sparkles,
   Shield,
@@ -52,7 +51,7 @@ export default function LandingPage() {
       y: 0,
       transition: {
         duration: 0.8,
-        ease: [0.16, 1, 0.3, 1],
+        ease: [0.16, 1, 0.3, 1] as const,
       },
     },
   };
@@ -84,7 +83,7 @@ export default function LandingPage() {
             className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 hover:text-primary transition-all"
             href="#security"
           >
-            Protocol
+            Security
           </Link>
           <Link
             className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 hover:text-primary transition-all"
@@ -99,13 +98,13 @@ export default function LandingPage() {
             href="/login"
             className="hidden md:block text-[10px] font-bold uppercase tracking-widest text-foreground/40 hover:text-foreground px-4 transition-all"
           >
-            Login
+            Log In
           </Link>
           <Button
             onPress={() => router.push("/register")}
             className="bg-primary text-primary-foreground font-black text-[10px] uppercase tracking-widest px-6 h-9 rounded-md shadow-[0_0_15px_rgba(0,127,255,0.2)] hover:shadow-[0_0_25px_rgba(0,127,255,0.4)] transition-all border-none"
           >
-            Initialize
+            Sign Up
           </Button>
           <Button
             isIconOnly
@@ -130,7 +129,7 @@ export default function LandingPage() {
               className="inline-flex items-center gap-3 px-4 py-1.5 rounded-lg border-[0.5px] border-primary/30 bg-primary/5 text-primary text-[9px] font-black uppercase tracking-[0.3em] shadow-[0_0_15px_rgba(0,127,255,0.05)]"
             >
               <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              <span>Financial Intelligence Link Active</span>
+              <span>All Systems Operational</span>
             </motion.div>
 
             <motion.h1
@@ -159,13 +158,13 @@ export default function LandingPage() {
                 onPress={() => router.push("/register")}
                 className="bg-primary text-primary-foreground font-black uppercase tracking-[0.2em] text-[11px] px-12 h-14 rounded-xl shadow-[0_0_30px_rgba(0,127,255,0.3)] hover:shadow-[0_0_40px_rgba(0,127,255,0.5)] hover:scale-[1.02] transition-all border-none"
               >
-                Access Portal
+                Go to Dashboard
               </Button>
               <Button
                 variant="outline"
                 className="border-white/10 text-foreground/60 px-12 h-14 text-[11px] font-bold uppercase tracking-[0.2em] rounded-xl bg-white/5 backdrop-blur-xl hover:bg-white/10 hover:text-foreground transition-all"
               >
-                Protocol Docs
+                Learn More
               </Button>
             </motion.div>
           </motion.div>
@@ -179,7 +178,7 @@ export default function LandingPage() {
             <motion.div
               animate={{ y: [0, -10, 0] }}
               transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-              className="w-4/5 h-full border-[0.5px] border-white/10 rounded-t-2xl bg-white/[0.02] flex p-8 gap-8 shadow-inner"
+              className="w-4/5 h-full border-[0.5px] border-white/10 rounded-t-2xl bg-white/2 flex p-8 gap-8 shadow-inner"
             >
               <div className="w-1/3 h-full bg-white/5 rounded-xl" />
               <div className="w-2/3 h-full bg-white/5 rounded-xl flex flex-col gap-6 p-6 relative">
@@ -196,7 +195,7 @@ export default function LandingPage() {
         <section className="py-24 bg-black/10 backdrop-blur-md border-y border-white/5 overflow-hidden relative z-20">
           <div className="text-center mb-12">
             <h3 className="text-[10px] font-black text-primary/40 uppercase tracking-[0.4em]">
-              Seamlessly Connected to your life
+              Securely connect to your institutions
             </h3>
           </div>
           <div className="relative flex overflow-x-hidden w-full">
@@ -232,7 +231,8 @@ export default function LandingPage() {
                 viewport={{ once: true }}
                 className="text-4xl md:text-6xl font-black text-foreground mb-6 tracking-tighter uppercase italic"
               >
-                Smart Insights, <br />Simple Actions
+                Smart Insights, <br />
+                Simple Actions
               </motion.h2>
               <p className="text-lg text-foreground/60 max-w-2xl mx-auto font-medium tracking-wide">
                 Your money tells a story. BudAI helps you read it, offering
@@ -252,14 +252,23 @@ export default function LandingPage() {
                 <div className="flex-1 p-10 flex flex-col gap-10 relative">
                   <motion.div
                     animate={{ y: [0, -8, 0] }}
-                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                    transition={{
+                      duration: 4,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
                     className="absolute top-1/4 left-1/4 bg-primary/20 border border-primary/30 text-primary px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-3 shadow-xl z-10 hover:scale-105 transition-transform cursor-default"
                   >
                     <TrendingUp size={18} /> Budget Performance +12.4%
                   </motion.div>
                   <motion.div
                     animate={{ y: [0, 8, 0] }}
-                    transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                    transition={{
+                      duration: 5,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: 1,
+                    }}
                     className="absolute bottom-1/3 right-1/4 bg-pink-500/20 border border-pink-500/30 text-pink-500 px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-3 shadow-xl z-10 hover:scale-105 transition-transform cursor-default"
                   >
                     <Activity size={18} /> Subscription Alert: Netflix
@@ -279,7 +288,11 @@ export default function LandingPage() {
                           initial={{ height: 0 }}
                           whileInView={{ height: `${h}%` }}
                           viewport={{ once: true }}
-                          transition={{ duration: 1.5, delay: i * 0.1, ease: "easeOut" }}
+                          transition={{
+                            duration: 1.5,
+                            delay: i * 0.1,
+                            ease: "easeOut",
+                          }}
                           className="flex-1 bg-primary/30 rounded-t-xl border-t border-x border-primary/20 hover:bg-primary/50 transition-colors cursor-pointer"
                         />
                       ))}
@@ -293,7 +306,7 @@ export default function LandingPage() {
 
         <section
           id="features"
-          className="py-40 px-6 relative z-20 bg-white/[0.02] backdrop-blur-3xl border-y-[0.5px] border-white/5"
+          className="py-40 px-6 relative z-20 bg-white/2 backdrop-blur-3xl border-y-[0.5px] border-white/5"
         >
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-24">
@@ -303,11 +316,11 @@ export default function LandingPage() {
                 viewport={{ once: true }}
                 className="text-4xl md:text-6xl font-normal text-foreground mb-6 tracking-tighter uppercase italic"
               >
-                Three Phases of <br />
-                <span className="font-black not-italic">Clarity</span>
+                How BudAI <br />
+                <span className="font-black not-italic">Works</span>
               </motion.h2>
               <p className="text-[10px] font-black text-primary uppercase tracking-[0.4em] mb-4">
-                Operational Pipeline
+                Core System Architecture
               </p>
             </div>
 
@@ -317,21 +330,21 @@ export default function LandingPage() {
               {[
                 {
                   step: "01",
-                  title: "Secure Link",
+                  title: "Secure Connection",
                   icon: Database,
-                  desc: "Bank-level read-only access to your institutional data streams.",
+                  desc: "Bank-level, read-only access to your financial data via secure APIs.",
                 },
                 {
                   step: "02",
-                  title: "Logic Analysis",
+                  title: "Intelligent Analysis",
                   icon: BrainCircuit,
-                  desc: "Autonomous categorization engine mapping every outflow with precision.",
+                  desc: "Automated categorization mapping every transaction with precision.",
                 },
                 {
                   step: "03",
-                  title: "Growth Protocol",
+                  title: "Predictive Insights",
                   icon: Sparkles,
-                  desc: "Predictive strategies designed to optimize your net capital velocity.",
+                  desc: "AI-driven forecasting to optimize your cash flow and savings.",
                 },
               ].map((item, i) => (
                 <motion.div
@@ -339,7 +352,11 @@ export default function LandingPage() {
                   initial={{ opacity: 0, y: 30 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
-                  transition={{ duration: 0.6, delay: i * 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{
+                    duration: 0.6,
+                    delay: i * 0.2,
+                    ease: [0.16, 1, 0.3, 1] as const,
+                  }}
                   whileHover={{ y: -5, scale: 1.01 }}
                   className="bg-black/40 backdrop-blur-xl border-[0.5px] border-white/10 rounded-2xl p-12 relative z-10 flex flex-col gap-10 transition-all group shadow-inner"
                 >
@@ -378,7 +395,8 @@ export default function LandingPage() {
                 <span>Your Privacy is our priority</span>
               </div>
               <h2 className="text-4xl md:text-6xl font-black text-foreground tracking-tighter uppercase italic leading-[0.95]">
-                Built on Trust, <br />Not Technicality
+                Built on Trust, <br />
+                Not Technicality
               </h2>
               <p className="text-lg text-foreground/60 max-w-xl font-medium tracking-wide leading-relaxed">
                 We believe your financial data belongs to you. We use the same
@@ -420,7 +438,11 @@ export default function LandingPage() {
               <div className="relative w-72 h-72 flex items-center justify-center">
                 <motion.svg
                   animate={{ rotate: 360 }}
-                  transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                  transition={{
+                    duration: 20,
+                    repeat: Infinity,
+                    ease: "linear",
+                  }}
                   className="absolute inset-0 w-full h-full"
                 >
                   <circle
@@ -457,11 +479,11 @@ export default function LandingPage() {
         <div className="w-full bg-black/10 backdrop-blur-md py-6 border-y-[0.5px] border-white/5 overflow-hidden flex z-30 relative">
           <div className="flex animate-marquee whitespace-nowrap gap-16 items-center text-[9px] font-black text-primary/40 uppercase tracking-[0.4em]">
             {[
-              "Official Bank Links Active",
-              "Sovereign Data Protection",
-              "Real-time Logic Analysis",
-              "GBP Asset Velocity Tracking",
-              "Multi-Factor Security Layer",
+              "Read-Only API Access",
+              "End-to-End Encryption",
+              "Automated Categorization",
+              "Cash Flow Optimization",
+              "Multi-Factor Security",
             ].map((stat, i) => (
               <span key={i} className="flex items-center gap-4">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(0,127,255,0.8)]" />
@@ -470,11 +492,11 @@ export default function LandingPage() {
             ))}
 
             {[
-              "Official Bank Links Active",
-              "Sovereign Data Protection",
-              "Real-time Logic Analysis",
-              "GBP Asset Velocity Tracking",
-              "Multi-Factor Security Layer",
+              "Read-Only API Access",
+              "End-to-End Encryption",
+              "Automated Categorization",
+              "Cash Flow Optimization",
+              "Multi-Factor Security",
             ].map((stat, i) => (
               <span key={`dup-${i}`} className="flex items-center gap-4 ml-16">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(0,127,255,0.8)]" />
@@ -488,7 +510,7 @@ export default function LandingPage() {
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-20">
               <h2 className="text-4xl md:text-6xl font-normal text-foreground tracking-tighter uppercase italic">
-                Support <span className="font-black not-italic">Protocols</span>
+                Support <span className="font-black not-italic">Center</span>
               </h2>
             </div>
 
@@ -496,21 +518,21 @@ export default function LandingPage() {
               {[
                 {
                   id: "1",
-                  title: "Data Sovereignty & Safety",
+                  title: "Data Security & Privacy",
                   content:
-                    "We maintain the highest standard of read-only institutional access. Your assets remain entirely under your control.",
+                    "We maintain the highest standard of read-only access. Your money remains entirely under your control.",
                 },
                 {
                   id: "2",
-                  title: "Student & Professional Utility",
+                  title: "Student & Professional Tools",
                   content:
-                    "Engineered to map complex spending cycles—from loan distributions to professional career trajectories.",
+                    "Designed to track complex spending habits—from student loans to professional income.",
                 },
                 {
                   id: "3",
-                  title: "Autonomous Configuration",
+                  title: "Automated Insights",
                   content:
-                    "Once initialized, our logic engine operates continuously without manual input requirements.",
+                    "Once connected, our platform operates continuously to categorize your transactions without manual input.",
                 },
               ].map((faq) => (
                 <Accordion
@@ -548,12 +570,13 @@ export default function LandingPage() {
                 </span>
               </div>
               <p className="text-foreground/30 max-w-xs leading-relaxed font-medium tracking-wide text-xs">
-                Next-generation financial orchestration for the digital era.
-                Precision wealth mapping powered by autonomous data logic.
+                BudAI. AI-Driven Personal Finance. Securely connect your bank to
+                analyze spending and predict future balances using local AI
+                models.
               </p>
               <div className="flex items-center gap-3 text-[9px] font-black text-green-500 bg-green-500/5 border-[0.5px] border-green-500/20 px-4 py-2 rounded-lg w-fit uppercase tracking-[0.3em] shadow-[0_0_15px_rgba(34,197,94,0.05)]">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                System Protocol: Online
+                API Status: Healthy
               </div>
             </div>
 
@@ -566,13 +589,13 @@ export default function LandingPage() {
                   href="#"
                   className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
                 >
-                  Intelligence
+                  Features
                 </Link>
                 <Link
                   href="#"
                   className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
                 >
-                  Projection
+                  Projections
                 </Link>
                 <Link
                   href="#"
@@ -584,14 +607,14 @@ export default function LandingPage() {
                   href="#"
                   className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
                 >
-                  Licensing
+                  Pricing
                 </Link>
               </nav>
             </div>
 
             <div className="flex flex-col gap-8">
               <h4 className="text-foreground font-black text-[10px] uppercase tracking-[0.4em] opacity-40">
-                Nexus
+                Resources
               </h4>
               <nav className="flex flex-col gap-4">
                 <Link
@@ -610,13 +633,13 @@ export default function LandingPage() {
                   href="#"
                   className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
                 >
-                  Network
+                  Status
                 </Link>
                 <Link
                   href="#"
                   className="text-foreground/30 hover:text-primary transition-all text-[10px] font-bold uppercase tracking-widest"
                 >
-                  Updates
+                  Blog
                 </Link>
               </nav>
             </div>
@@ -649,7 +672,7 @@ export default function LandingPage() {
           </div>
 
           <div className="flex flex-col md:flex-row justify-between items-center pt-10 border-t-[0.5px] border-white/5 gap-8 text-foreground/20 text-[9px] font-black uppercase tracking-[0.3em]">
-            <p>© 2024 BudAI Systems. Autonomous Financial Logic.</p>
+            <p>© 2026 BudAI Systems. All rights reserved.</p>
             <div className="flex gap-12">
               <Link
                 href="#"
@@ -667,7 +690,7 @@ export default function LandingPage() {
                 href="#"
                 className="text-inherit hover:text-foreground transition-all"
               >
-                GitHub Source
+                GitHub
               </Link>
             </div>
           </div>

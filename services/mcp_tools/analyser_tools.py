@@ -11,17 +11,13 @@ from services.logger_setup import get_core_logger
 
 logger = get_core_logger(__name__)
 
-
 @tool(args_schema=PlotExpensesInput)
-def plot_expenses(user_uuid: str, plot_time_type: str, from_date: str, to_date: str, bank_name_or_id: str) -> str:
+def plot_expenses(user_uuid: str, plot_time_type: str, from_date: str, to_date: str, account_ids: list[str]) -> str:
     """Show user's daily/weekly/monthly past expenditure between the said dates."""
-    logger.info(
-        f"Plotting {plot_time_type} expenses for user: {user_uuid} from {from_date} to {to_date}")
     try:
-        accounts, suffix = _parse_accounts(bank_name_or_id, user_uuid)
+        accounts, _ = _parse_accounts(account_ids, user_uuid)
         payload = []
         for acc in accounts:
-            logger.debug(f"Analyzing expenses for account: {acc}")
             ea = ExpenseAnalysis(identifier=acc, user_uuid=user_uuid)
             if ea.fetch_data(from_date, to_date):
                 plot_type = plot_time_type.lower()
@@ -41,94 +37,68 @@ def plot_expenses(user_uuid: str, plot_time_type: str, from_date: str, to_date: 
                     })
                 payload.append({"bank_name": acc, "data": bank_data})
         cache_id = _cache_chart_data(payload)
-        logger.info(f"Expense plot generated with cache ID: {cache_id}")
         return f"Expense plot generated. [TRIGGER_HISTORICAL_{plot_time_type.upper()}_CHART:{cache_id}]"
     except Exception as e:
-        logger.error(f"Failed to plot expenses: {e}", exc_info=True)
+        logger.error(f"Error: {e}")
         return f"Error: {str(e)}"
 
-
 @tool(args_schema=FindTotalSpentInput)
-def find_total_spent_for_given_category(user_uuid: str, category_name: str, bank_name_or_id: str) -> str:
+def find_total_spent_for_given_category(user_uuid: str, category_name: str, account_ids: list[str], from_date: str = None, to_date: str = None) -> str:
     """Calculate the total amount of money spent by the user within a specific given category."""
-    logger.info(
-        f"Calculating total spent in category: {category_name} for user: {user_uuid}")
     try:
-        accounts, suffix = _parse_accounts(bank_name_or_id, user_uuid)
-        df = _get_combined_categorized_data(accounts, suffix, user_uuid)
+        accounts, suffix = _parse_accounts(account_ids, user_uuid)
+        df = _get_combined_categorized_data(accounts, suffix, user_uuid, from_date, to_date)
         if df.empty:
-            logger.warning(
-                "No categorized data found for total spent calculation.")
-            return "Error: No categorized data found."
+            return "Error: No data."
         cat_key = 'category' if 'category' in df.columns else 'Category'
         amt_key = 'amount' if 'amount' in df.columns else 'Amount'
         if category_name.lower() == "all":
             category_totals = []
             for cat in df[cat_key].unique():
                 cat_df = df[df[cat_key] == cat]
-                category_totals.append(
-                    f"- {cat}: £{cat_df[amt_key].abs().sum():.2f}")
-            logger.info("Generated full breakdown of spending.")
+                category_totals.append(f"- {cat}: £{cat_df[amt_key].abs().sum():.2f}")
             return "Breakdown:\n" + "\n".join(category_totals)
         else:
             cat_df = df[df[cat_key].str.lower() == category_name.lower()]
             if cat_df.empty:
-                logger.warning(
-                    f"No transactions found for category: {category_name}")
-                return f"No transactions found for {category_name}."
+                return f"No transactions for {category_name}."
             total = cat_df[amt_key].abs().sum()
-            logger.info(f"Total spent in {category_name}: £{total:.2f}")
             return f"Total spent in {category_name}: £{total:.2f}"
     except Exception as e:
-        logger.error(f"Failed to calculate total spent: {e}", exc_info=True)
+        logger.error(f"Error: {e}")
         return f"Error: {str(e)}"
 
-
 @tool(args_schema=FindHighestSpendingCategoryInput)
-def find_highest_spending_category(user_uuid: str, bank_name_or_id: str) -> str:
+def find_highest_spending_category(user_uuid: str, account_ids: list[str], from_date: str = None, to_date: str = None) -> str:
     """Identify the single spending category where the user has spent the maximum amount of money."""
-    logger.info(f"Identifying highest spending category for user: {user_uuid}")
     try:
-        accounts, suffix = _parse_accounts(bank_name_or_id, user_uuid)
-        df = _get_combined_categorized_data(accounts, suffix, user_uuid)
+        accounts, suffix = _parse_accounts(account_ids, user_uuid)
+        df = _get_combined_categorized_data(accounts, suffix, user_uuid, from_date, to_date)
         if df.empty:
-            logger.warning(
-                "No categorized data found for highest spending category analysis.")
-            return "Error: No categorized data found."
+            return "Error: No data."
         cat_key = 'category' if 'category' in df.columns else 'Category'
         amt_key = 'amount' if 'amount' in df.columns else 'Amount'
         expenses_df = df[df[cat_key].str.lower() != 'income'].copy()
         if expenses_df.empty:
-            logger.warning("No expense categories found in data.")
             return "No expense categories found."
-        grouped = expenses_df.groupby(cat_key)[amt_key].apply(
-            lambda x: x.abs().sum()).reset_index()
+        grouped = expenses_df.groupby(cat_key)[amt_key].apply(lambda x: x.abs().sum()).reset_index()
         highest = grouped.loc[grouped[amt_key].idxmax()]
-        logger.info(
-            f"Highest spending category identified: {highest[cat_key]}")
         return f"Your highest spending category is {highest[cat_key]} with £{highest[amt_key]:.2f}."
     except Exception as e:
-        logger.error(
-            f"Failed to identify highest spending category: {e}", exc_info=True)
+        logger.error(f"Error: {e}")
         return f"Error: {str(e)}"
 
-
 @tool(args_schema=PlotCashFlowMixedInput)
-def plot_cash_flow_mixed(user_uuid: str, bank_name_or_id: str, from_date: str, to_date: str) -> str:
+def plot_cash_flow_mixed(user_uuid: str, account_ids: list[str], from_date: str, to_date: str) -> str:
     """Generate a cash flow visualization showing daily net income vs expenses."""
-    logger.info(
-        f"Plotting cash flow for user: {user_uuid} from {from_date} to {to_date}")
     try:
-        accounts, suffix = _parse_accounts(bank_name_or_id, user_uuid)
+        accounts, _ = _parse_accounts(account_ids, user_uuid)
         from services.api_integrator.get_account_detail import UserAccounts
         payload = []
         for acc in accounts:
-            logger.debug(f"Processing cash flow for account: {acc}")
             user_acc = UserAccounts(user_id=user_uuid)
-            df = user_acc.get_bank_transactions(
-                acc, user_uuid, from_date, to_date)
+            df = user_acc.get_bank_transactions(acc, user_uuid, from_date, to_date)
             if df.empty:
-                logger.warning(f"No transactions found for account: {acc}")
                 continue
             df['date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True)
             df['Month'] = df['date'].dt.strftime('%b %Y')
@@ -147,8 +117,7 @@ def plot_cash_flow_mixed(user_uuid: str, bank_name_or_id: str, from_date: str, t
                 })
             payload.append({"bank_name": acc, "data": bank_data})
         cache_id = _cache_chart_data(payload)
-        logger.info(f"Cash flow chart generated with cache ID: {cache_id}")
         return f"Cash flow chart generated. [TRIGGER_CASH_FLOW_CHART:{cache_id}]"
     except Exception as e:
-        logger.error(f"Failed to plot cash flow: {e}", exc_info=True)
+        logger.error(f"Error: {e}")
         return f"Error: {str(e)}"

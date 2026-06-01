@@ -10,13 +10,21 @@ export const getApiUrl = (path: string): string => {
 };
 
 export const getAuthToken = (): string => {
+  if (typeof window === "undefined") return "";
   return localStorage.getItem("budai_token") || "";
 };
 
 export const clearSession = (): void => {
-  localStorage.removeItem("budai_token");
-  localStorage.removeItem("budai_user_name");
-  document.cookie = "budai_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  if (typeof window !== "undefined") {
+    // Clear only sensitive session data
+    localStorage.removeItem("budai_token");
+    
+    // We preserve budai_user_name and budai_widgets_* to allow 
+    // for preference restoration on next login on this device.
+    
+    document.cookie =
+      "budai_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax";
+  }
 };
 
 export async function apiFetch(
@@ -35,7 +43,9 @@ export async function apiFetch(
   const response = await fetch(getApiUrl(path), { ...init, headers });
   if (response.status === 401 && withAuth) {
     clearSession();
-    if (typeof window !== "undefined") window.location.href = "/login";
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("budai-unauthorized"));
+    }
     throw new Error("Unauthorized");
   }
 
@@ -50,9 +60,6 @@ export async function apiFetch(
   return response;
 }
 
-/**
- * Typed wrapper for apiFetch to handle JSON parsing automatically
- */
 export async function apiRequest<T>(
   path: string,
   init?: RequestInit,

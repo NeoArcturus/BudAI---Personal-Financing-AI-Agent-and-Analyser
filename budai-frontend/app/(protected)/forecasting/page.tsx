@@ -1,4 +1,3 @@
-// page 3.tsx
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
@@ -84,15 +83,15 @@ export default function ForecastingPage() {
 
       if (wealthRes.ok) {
         const result = await wealthRes.json();
-        setWealthForecast(
-          Array.isArray(result.data) ? result.data : [result.data],
-        );
+        const raw = result.data;
+        const unwrapped = (raw && typeof raw === 'object' && 'series' in raw) ? raw.series : (Array.isArray(raw) ? raw : [raw]);
+        setWealthForecast(unwrapped);
       }
       if (expenseRes.ok) {
         const result = await expenseRes.json();
-        setExpenseForecast(
-          Array.isArray(result.data) ? result.data : [result.data],
-        );
+        const raw = result.data;
+        const unwrapped = (raw && typeof raw === 'object' && 'series' in raw) ? raw.series : (Array.isArray(raw) ? raw : [raw]);
+        setExpenseForecast(unwrapped);
       }
     } catch (error) {
       console.error("Forecast Fetch Error:", error);
@@ -129,9 +128,9 @@ export default function ForecastingPage() {
     if (!wealthForecast?.[0]?.data?.length)
       return { projected: 0, change: 0, current: 0 };
     const data = wealthForecast[0].data;
-    const current = Number(data[0]?.["Expected Balance"] || 0);
-    const projected = Number(data[data.length - 1]?.["Expected Balance"] || 0);
-    const change = current !== 0 ? ((projected - current) / current) * 100 : 0;
+    const current = Number(data[0]?.["Expected Balance"] || data[0]?.["Balance"] || 0);
+    const projected = Number(data[data.length - 1]?.["Expected Balance"] || data[data.length - 1]?.["Balance"] || 0);
+    const change = current !== 0 ? ((projected - current) / Math.abs(current)) * 100 : 0;
     return { projected, change, current };
   }, [wealthForecast]);
 
@@ -140,10 +139,10 @@ export default function ForecastingPage() {
       <div className="flex items-center justify-between mb-10 shrink-0">
         <div>
           <h2 className="text-foreground text-3xl font-black tracking-tighter uppercase italic">
-            Monetary Projections
+            Financial Projections
           </h2>
           <p className="text-[9px] font-black text-foreground/30 uppercase tracking-[0.4em] mt-1.5">
-            Market-Aligned Intelligent Forecasting
+            AI-Driven Financial Forecasting
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -152,7 +151,7 @@ export default function ForecastingPage() {
             className="bg-white/5 backdrop-blur-xl text-primary border-[0.5px] border-primary/20 hover:border-primary/50 rounded-xl flex items-center gap-3 font-black text-[10px] uppercase tracking-widest px-8 h-12 cursor-pointer transition-all shadow-inner"
           >
             <Sparkles size={16} />
-            Sync Logic
+            Update Forecast
           </Button>
         </div>
       </div>
@@ -170,7 +169,7 @@ export default function ForecastingPage() {
                     Account Balance
                   </h3>
                   <p className="text-foreground/30 text-[9px] font-black uppercase tracking-[0.4em] mt-1">
-                    Mathematical forecast
+                    Statistical forecast
                   </p>
                 </div>
               </div>
@@ -178,14 +177,14 @@ export default function ForecastingPage() {
             <div className="flex-1 w-full flex items-center justify-center min-h-80 bg-white/1 rounded-xl border-[0.5px] border-white/5 relative overflow-hidden p-8">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.02)_0%,transparent_70%)] pointer-events-none" />
               {isLoading ? (
-                <Skeleton className="w-full h-full rounded-lg bg-white/5" />
+                <Skeleton animationType="shimmer" className="w-full h-full rounded-lg bg-white/5" />
               ) : wealthChartConfig ? (
                 <CoreChartEngine config={wealthChartConfig} />
               ) : (
                 <div className="text-foreground/20 text-center opacity-40">
                   <Clock size={40} className="mx-auto mb-4" />
                   <p className="text-[9px] font-black uppercase tracking-[0.4em]">
-                    Link Active • Pending Ingest
+                    Loading Data...
                   </p>
                 </div>
               )}
@@ -203,7 +202,7 @@ export default function ForecastingPage() {
                     Expenditure
                   </h3>
                   <p className="text-foreground/30 text-[9px] font-black uppercase tracking-[0.4em] mt-1">
-                    Mathematical Forecast
+                    Statistical Forecast
                   </p>
                 </div>
               </div>
@@ -211,14 +210,14 @@ export default function ForecastingPage() {
             <div className="flex-1 w-full flex items-center justify-center min-h-80 bg-white/1 rounded-xl border-[0.5px] border-white/5 relative overflow-hidden p-8">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.02)_0%,transparent_70%)] pointer-events-none" />
               {isLoading ? (
-                <Skeleton className="w-full h-full rounded-lg bg-white/5" />
+                <Skeleton animationType="shimmer" className="w-full h-full rounded-lg bg-white/5" />
               ) : expenseChartConfig ? (
                 <CoreChartEngine config={expenseChartConfig} />
               ) : (
                 <div className="text-foreground/20 text-center opacity-40">
                   <Clock size={40} className="mx-auto mb-4" />
                   <p className="text-[9px] font-black uppercase tracking-[0.4em]">
-                    Model Offline • Awaiting Data
+                    Awaiting Data...
                   </p>
                 </div>
               )}
@@ -230,7 +229,7 @@ export default function ForecastingPage() {
           <Card className="liquid-glass rounded-xl p-10 border-none shadow-inner">
             <h4 className="text-foreground font-black text-[10px] uppercase tracking-[0.4em] mb-10 flex items-center gap-3 italic">
               <ShieldCheck size={18} className="text-primary shrink-0" />
-              Monetary Analysis
+              Financial Analysis
             </h4>
             <div className="space-y-8">
               <div className="p-8 rounded-2xl bg-white/5 border-[0.5px] border-white/10 backdrop-blur-xl shadow-inner">
@@ -239,8 +238,8 @@ export default function ForecastingPage() {
                 </p>
                 {isLoading ? (
                   <div className="space-y-4 py-1">
-                    <Skeleton className="h-12 w-32 rounded-lg bg-white/5" />
-                    <Skeleton className="h-2 w-40 rounded bg-white/5" />
+                    <Skeleton animationType="shimmer" className="h-12 w-32 rounded-lg bg-white/5" />
+                    <Skeleton animationType="shimmer" className="h-2 w-40 rounded bg-white/5" />
                   </div>
                 ) : (
                   <>
@@ -269,14 +268,14 @@ export default function ForecastingPage() {
               <div className="p-8 rounded-2xl bg-primary/5 border-[0.5px] border-primary/20 backdrop-blur-xl">
                 {isLoading ? (
                   <div className="space-y-3">
-                    <Skeleton className="h-2 w-full rounded bg-white/5" />
-                    <Skeleton className="h-2 w-5/6 rounded bg-white/5" />
+                    <Skeleton animationType="shimmer" className="h-2 w-full rounded bg-white/5" />
+                    <Skeleton animationType="shimmer" className="h-2 w-5/6 rounded bg-white/5" />
                   </div>
                 ) : (
                   <p className="text-[11px] text-foreground/60 font-medium leading-relaxed tracking-wide uppercase">
                     {stats.change > 0
-                      ? "Accumulation trend identified. Capital growth rate exceeds historical baseline drift."
-                      : "Logic suggests contraction. Optimize subsistence floor to preserve operational runway."}
+                      ? "Positive growth trend identified. Your savings rate is higher than historical averages."
+                      : "Forecast suggests a decrease in balance. Consider reducing non-essential spending."}
                   </p>
                 )}
               </div>
@@ -332,12 +331,11 @@ export default function ForecastingPage() {
                 onPress={() => setIsModalOpen(true)}
                 className="w-full bg-white/5 hover:bg-white/10 text-foreground/60 hover:text-foreground border-[0.5px] border-white/10 rounded-xl h-14 font-black text-[10px] uppercase tracking-[0.2em] cursor-pointer transition-all shadow-lg"
               >
-                Adjust Constraints
+                Adjust Simulation
               </Button>
               <div className="pt-2">
                 <p className="text-[8px] text-foreground/20 text-center leading-relaxed font-black uppercase tracking-[0.3em]">
-                  Projections utilize mathematical algorithms, along with
-                  artificial intelligence, synchronized with live market states.
+                  Projections are based on historical data and AI models. Always verify with your actual bank balance.
                 </p>
               </div>
             </div>

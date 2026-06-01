@@ -1,4 +1,4 @@
-// SimulationControlsModal.tsx
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -36,19 +36,18 @@ export default function SimulationControlsModal({
 }: SimulationControlsModalProps) {
   const [draft, setDraft] = useState<SimulationOverrides>(initialValues);
 
-  useEffect(() => {
-    if (isOpen) {
-      setDraft(initialValues);
-    }
-  }, [isOpen, initialValues]);
-
   const handleApply = () => {
     onApply(draft);
     onClose();
   };
 
+  const handleClose = () => {
+    setDraft(initialValues);
+    onClose();
+  };
+
   return (
-    <Modal isOpen={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Modal isOpen={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <Modal.Backdrop className="fixed inset-0 z-100 bg-black/40 backdrop-blur-md">
         <Modal.Container className="fixed inset-0 z-101 flex items-center justify-center p-4">
           <Modal.Dialog className="relative max-w-md w-full pointer-events-auto bg-black/60 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-xl shadow-2xl overflow-hidden">
@@ -160,7 +159,7 @@ export default function SimulationControlsModal({
                         {
                           id: "Inflationary",
                           label: "INFLATED ECONOMY",
-                          desc: "Elevated floor, suppressed net velocity",
+                          desc: "Elevated floor, lower growth rate",
                         },
                         {
                           id: "Recession",

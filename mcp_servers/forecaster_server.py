@@ -1,33 +1,43 @@
 import warnings
 import sys
-warnings.filterwarnings("ignore")
-from mcp.server.fastmcp import FastMCP
+import os
+import asyncio
+from iii import register_worker
 from services.mcp_tools.forecaster_tools import generate_financial_forecast, generate_expense_forecast
 from services.logger_setup import get_core_logger
 
+warnings.filterwarnings("ignore")
 logger = get_core_logger("forecaster_server")
-mcp = FastMCP("Forecaster")
 
-logger.debug("Registering tool: generate_financial_forecast")
-mcp.add_tool(generate_financial_forecast.func)
-logger.debug("Registering tool: generate_expense_forecast")
-mcp.add_tool(generate_expense_forecast.func)
+III_ENGINE_URL = os.getenv("III_ENGINE_URL", "ws://iii-engine:49134")
+
+def tool_wrapper(func, args):
+    # Filter out internal iii arguments
+    clean_args = {k: v for k, v in args.items() if not k.startswith("_")}
+    try:
+        if asyncio.iscoroutinefunction(func):
+            try:
+                return asyncio.run(func(**clean_args))
+            except RuntimeError:
+                # Fallback if loop is already running
+                loop = asyncio.get_event_loop()
+                return loop.run_until_complete(func(**clean_args))
+        else:
+            return func(**clean_args)
+    except Exception as e:
+        logger.error(f"Error executing {func.__name__}: {e}", exc_info=True)
+        return f"Error: {str(e)}"
+
+async def main():
+    logger.info("Initializing Forecaster Worker with iii")
+    worker = register_worker(III_ENGINE_URL)
+    
+    worker.register_function("forecaster::generate_financial_forecast", lambda args: tool_wrapper(generate_financial_forecast.func, args))
+    worker.register_function("forecaster::generate_expense_forecast", lambda args: tool_wrapper(generate_expense_forecast.func, args))
+    
+    logger.info("Forecaster Worker registered. Entering heartbeat loop.")
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
-    import argparse
-    import os
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--sse", action="store_true", help="Run with SSE transport")
-    args = parser.parse_args()
-
-    if args.sse:
-        logger.info(f"Starting Forecaster MCP Server with SSE transport")
-        mcp.run(transport="sse")
-    else:
-        logger.info("Starting Forecaster MCP Server")
-        try:
-            mcp.run()
-            logger.info("Forecaster MCP Server running")
-        except Exception as e:
-            logger.error(f"Failed to run Forecaster MCP Server: {e}")
-            raise
+    asyncio.run(main())

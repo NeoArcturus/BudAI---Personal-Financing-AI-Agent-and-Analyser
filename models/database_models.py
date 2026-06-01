@@ -100,3 +100,12 @@ class Liability(Base):
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = relationship("User", back_populates="liabilities")
 
+class AdvisorSummary(Base):
+    __tablename__ = "advisor_summaries"
+    summary_uuid = Column(String, primary_key=True, index=True)
+    user_uuid = Column(String, ForeignKey("users.user_uuid"), index=True)
+    widget_id = Column(String, index=True)
+    data_hash = Column(String, index=True)
+    summary_text = Column(String)
+    timestamp = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+

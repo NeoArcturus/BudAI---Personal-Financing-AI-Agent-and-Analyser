@@ -1,4 +1,3 @@
-// page 2.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -14,8 +13,10 @@ import {
 import { Button, Card, Skeleton } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { apiFetch } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
 export default function ConnectionsPage() {
+  const router = useRouter();
   const { accounts } = useBudAI();
   const [, setConnectionStatus] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -50,7 +51,7 @@ export default function ConnectionsPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.auth_url) {
-          window.location.href = data.auth_url;
+          router.push(data.auth_url);
         }
       }
     } catch (error) {
@@ -65,11 +66,10 @@ export default function ConnectionsPage() {
       <div className="flex items-center justify-between mb-10 shrink-0">
         <div>
           <h2 className="text-foreground text-3xl font-black tracking-tighter uppercase italic">
-            Institutional{" "}
-            <span className="font-normal not-italic">Connections</span>
+            Bank <span className="font-normal not-italic">Connections</span>
           </h2>
           <p className="text-[9px] font-black text-foreground/30 uppercase tracking-[0.4em] mt-1.5">
-            Quantum Data Bridge
+            Secure Data Access
           </p>
         </div>
         <Button
@@ -77,7 +77,7 @@ export default function ConnectionsPage() {
           isPending={isConnecting}
           className="flex items-center justify-center gap-3 bg-primary text-primary-foreground font-black text-[10px] uppercase tracking-widest rounded-xl px-8 h-12 shadow-[0_0_20px_rgba(0,127,255,0.2)] hover:shadow-[0_0_30px_rgba(0,127,255,0.4)] hover:scale-[1.02] transition-all border-none cursor-pointer"
         >
-          <Plus size={16} /> Initialize Link
+          <Plus size={16} /> Connect Bank
         </Button>
       </div>
 
@@ -94,20 +94,20 @@ export default function ConnectionsPage() {
               >
                 <div className="flex items-center justify-between mb-10">
                   <div className="flex items-center gap-5 w-full">
-                    <Skeleton className="w-14 h-14 rounded-xl bg-white/5" />
+                    <Skeleton animationType="shimmer" className="w-14 h-14 rounded-xl bg-white/5" />
                     <div className="space-y-3">
-                      <Skeleton className="h-5 w-40 rounded bg-white/5" />
-                      <Skeleton className="h-3 w-28 rounded bg-white/5" />
+                      <Skeleton animationType="shimmer" className="h-5 w-40 rounded bg-white/5" />
+                      <Skeleton animationType="shimmer" className="h-3 w-28 rounded bg-white/5" />
                     </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-6 mb-10">
-                  <Skeleton className="h-16 rounded-xl bg-white/5" />
-                  <Skeleton className="h-16 rounded-xl bg-white/5" />
+                  <Skeleton animationType="shimmer" className="h-16 rounded-xl bg-white/5" />
+                  <Skeleton animationType="shimmer" className="h-16 rounded-xl bg-white/5" />
                 </div>
                 <div className="flex gap-4">
-                  <Skeleton className="h-12 flex-1 rounded-lg bg-white/5" />
-                  <Skeleton className="h-12 w-12 rounded-lg bg-white/5" />
+                  <Skeleton animationType="shimmer" className="h-12 flex-1 rounded-lg bg-white/5" />
+                  <Skeleton animationType="shimmer" className="h-12 w-12 rounded-lg bg-white/5" />
                 </div>
               </Card>
             ))
@@ -120,8 +120,7 @@ export default function ConnectionsPage() {
                 No Accounts linked
               </p>
               <p className="text-foreground/20 text-[10px] mb-10 max-w-xs font-black uppercase tracking-widest leading-relaxed">
-                Securely authorize an institutional node to initialize logic
-                processing.
+                Securely authorize a bank connection to begin analyzing your finances.
               </p>
               <Button
                 onPress={handleConnect}
@@ -153,7 +152,7 @@ export default function ConnectionsPage() {
                     </div>
                   </div>
                   <div className="bg-green-500/5 text-green-500 border-[0.5px] border-green-500/20 px-3 py-1 font-black uppercase tracking-widest flex items-center justify-center h-6 text-[8px] shadow-sm rounded-md">
-                    SYNC_ACTIVE
+                    Sync Active
                   </div>
                 </div>
 
@@ -181,7 +180,7 @@ export default function ConnectionsPage() {
                     onPress={handleConnect}
                     className="flex-1 flex items-center justify-center bg-white/5 hover:bg-white/10 text-foreground/60 hover:text-foreground border-[0.5px] border-white/10 rounded-xl h-12 font-black text-[9px] uppercase tracking-widest transition-all cursor-pointer shadow-sm"
                   >
-                    <RefreshCcw size={14} className="mr-3" /> Re-Auth account
+                    <RefreshCcw size={14} className="mr-3" /> Reconnect account
                   </Button>
                   <Button
                     isIconOnly
@@ -206,20 +205,20 @@ export default function ConnectionsPage() {
               </div>
               <div>
                 <h4 className="text-foreground font-black text-lg tracking-widest uppercase italic m-0">
-                  Sovereignty
+                  Data Privacy
                 </h4>
                 <p className="text-foreground/30 text-[9px] font-black uppercase tracking-[0.4em] mt-1">
-                  Kernel-Level Protocol
+                  Institutional Standard
                 </p>
               </div>
             </div>
 
             <div className="space-y-4">
               {[
-                { label: "Institutional Logic Streams" },
-                { label: "Quantum Balance States" },
-                { label: "Direct Debit Vectors" },
-                { label: "Neural Identity Verification" },
+                { label: "Institutional Data Streams" },
+                { label: "Real-time Balance States" },
+                { label: "Direct Debit Analysis" },
+                { label: "Secure Identity Verification" },
               ].map((item, i) => (
                 <div
                   key={i}
@@ -239,11 +238,11 @@ export default function ConnectionsPage() {
               </div>
               <div>
                 <p className="text-[11px] text-foreground font-black mb-1 uppercase tracking-widest">
-                  Auth Lifecycle Notice
+                  Connection Status Notice
                 </p>
                 <p className="text-[9px] text-foreground/40 leading-relaxed font-bold uppercase tracking-tight">
-                  90-day re-auth cycle enforced by core protocol. Early
-                  notification triggered in 7 days.
+                  90-day reconnection required for your security. You will be
+                  notified 7 days before expiration.
                 </p>
               </div>
             </div>

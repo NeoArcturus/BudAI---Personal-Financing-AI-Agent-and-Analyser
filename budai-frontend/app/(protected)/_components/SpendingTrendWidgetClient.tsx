@@ -13,26 +13,24 @@ import {
   DatePicker,
   DateField,
   Calendar,
-  CloseButton,
   Badge,
   ToggleButton,
   ToggleButtonGroup,
+  CloseButton,
 } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { today, getLocalTimeZone, DateValue } from "@internationalized/date";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
-import { useAdvisorInsight, useSpendingTrends } from "@/lib/hooks";
+import { useAdvisorInsight, useSpendingTrends, usePersistedState } from "@/lib/hooks";
 import WidgetFlipCard from "./WidgetFlipCard";
 import { useRouter } from "next/navigation";
-import { WidgetContext } from "../home/DashboardClient";
 import { Account, BankChartData } from "@/types";
 import { cn } from "@/lib/utils";
+import { WidgetContext } from "../home/DashboardClient";
 
 interface SpendingTrendWidgetProps {
   initialData?: BankChartData[];
 }
-
-const CONSOLIDATED_ID = "VIRTUAL_ALL_ACCOUNTS";
 
 export default function SpendingTrendWidgetClient({
   initialData,
@@ -41,19 +39,11 @@ export default function SpendingTrendWidgetClient({
   const { onRemove } = React.useContext(WidgetContext);
   const { accounts, createNewSession } = useBudAI();
 
-  const allAccountIds = useMemo(
-    () => accounts.map((a) => a.account_id).join(","),
-    [accounts],
+  const [selectedAccountId, setSelectedAccountId] = usePersistedState<string>(
+    "spending_trend_account",
+    accounts[0]?.account_id || "",
   );
-
-  const [selectedAccountId, setSelectedAccountId] =
-    useState<string>(CONSOLIDATED_ID);
   const [granularity, setGranularity] = useState<string>("monthly");
-
-  const apiAccountId = useMemo(() => {
-    if (selectedAccountId === CONSOLIDATED_ID) return allAccountIds;
-    return selectedAccountId;
-  }, [selectedAccountId, allAccountIds]);
 
   const [startDate, setStartDate] = useState<DateValue | null>(
     today(getLocalTimeZone()).subtract({ months: 6 }),
@@ -75,7 +65,7 @@ export default function SpendingTrendWidgetClient({
     isLoading: isInitialLoading,
     isFetching,
   } = useSpendingTrends(
-    apiAccountId,
+    selectedAccountId,
     fromStr,
     toStr,
     granularity as "daily" | "weekly" | "monthly",
@@ -106,7 +96,7 @@ export default function SpendingTrendWidgetClient({
       chartType,
       chartPayload,
       {
-        bank_name_or_id: apiAccountId,
+        bank_name_or_id: selectedAccountId,
         from_date: fromStr,
         to_date: toStr,
       },
@@ -117,7 +107,7 @@ export default function SpendingTrendWidgetClient({
     chartPayload,
     startDate,
     endDate,
-    apiAccountId,
+    selectedAccountId,
     fromStr,
     toStr,
     granularity,
@@ -131,14 +121,13 @@ export default function SpendingTrendWidgetClient({
   const handleDiscuss = () => {
     const sessionId = createNewSession("Spending Trend Deep Dive", {
       type: "spending_trend",
-      accountId: apiAccountId,
+      accountId: selectedAccountId,
       data: chartPayload,
     });
     router.push(`/advisor?session=${sessionId}`);
   };
 
   const activeAccountName = useMemo(() => {
-    if (selectedAccountId === CONSOLIDATED_ID) return "All Accounts";
     return (
       accounts.find((a) => a.account_id === selectedAccountId)?.bank_name ||
       "Select Account"
@@ -146,15 +135,7 @@ export default function SpendingTrendWidgetClient({
   }, [selectedAccountId, accounts]);
 
   const dropdownItems = useMemo((): Account[] => {
-    const consolidated: Account = {
-      account_id: CONSOLIDATED_ID,
-      bank_name: "All Accounts",
-      account_number: "Consolidated View",
-      sort_code: "",
-      currency: "GBP",
-      balance: 0,
-    };
-    return [consolidated, ...accounts];
+    return [...accounts];
   }, [accounts]);
 
   const isActuallyLoading = isInitialLoading || accounts.length === 0;
@@ -172,12 +153,10 @@ export default function SpendingTrendWidgetClient({
             <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
               Past Expenditure
             </h3>
-            {onRemove && (
-              <CloseButton
-                onPress={onRemove}
-                className="text-foreground/20 hover:text-foreground transition-all rounded-md"
-              />
-            )}
+            <CloseButton
+              onPress={onRemove}
+              className="text-foreground/20 hover:text-foreground transition-all rounded-md"
+            />
           </div>
 
           <div className="flex flex-wrap items-end gap-4 w-full pointer-events-auto">
@@ -353,9 +332,7 @@ export default function SpendingTrendWidgetClient({
                             )}
                           </Badge.Anchor>
                           <Description className="text-[9px] text-foreground/30 font-mono tracking-[0.2em] pointer-events-none mt-1.5 uppercase">
-                            {acc.account_id === CONSOLIDATED_ID
-                              ? acc.account_number
-                              : `Account No: *${acc.account_number?.slice(-4) || "0000"}`}
+                            Account No: *{acc.account_number?.slice(-4) || "0000"}
                           </Description>
                         </div>
                       </Dropdown.Item>
@@ -412,8 +389,14 @@ export default function SpendingTrendWidgetClient({
           <div className="mb-2 shrink-0 p-8">
             {isActuallyLoading ? (
               <div className="space-y-3">
-                <Skeleton className="h-10 w-40 rounded-xl bg-white/5" />
-                <Skeleton className="h-3 w-56 rounded-lg bg-white/5" />
+                <Skeleton
+                  animationType="shimmer"
+                  className="h-10 w-40 rounded-xl bg-white/5"
+                />
+                <Skeleton
+                  animationType="shimmer"
+                  className="h-3 w-56 rounded-lg bg-white/5"
+                />
               </div>
             ) : (
               <>

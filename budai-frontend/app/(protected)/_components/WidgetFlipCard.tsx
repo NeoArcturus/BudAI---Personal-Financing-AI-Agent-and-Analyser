@@ -1,4 +1,3 @@
-// WidgetFlipCard.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -7,7 +6,6 @@ import {
   Sparkles,
   ArrowRight,
   RotateCcw,
-  Info,
   BrainCircuit,
 } from "lucide-react";
 import { Button, Card, Skeleton, ScrollShadow, Surface } from "@heroui/react";
@@ -54,7 +52,7 @@ export default function WidgetFlipCard({
             className="absolute top-8 right-16 h-8 px-4 rounded-lg flex items-center justify-center gap-2 bg-primary/5 text-primary border-[0.5px] border-primary/20 hover:border-primary/50 z-50 transition-all shadow-[0_0_15px_rgba(0,127,255,0.05)] hover:shadow-[0_0_20px_rgba(0,127,255,0.2)] cursor-pointer"
           >
             <span className="text-[9px] font-black uppercase tracking-[0.2em] whitespace-nowrap">
-              Link Advisor
+              Open Advisor
             </span>
             <Sparkles
               size={12}
@@ -77,10 +75,10 @@ export default function WidgetFlipCard({
               </div>
               <div className="flex flex-col justify-center">
                 <h3 className="text-foreground font-black text-xl tracking-tighter uppercase italic m-0">
-                  Neural Insights
+                  AI Insights
                 </h3>
                 <p className="text-primary/50 text-[9px] font-black uppercase tracking-[0.3em] mt-1.5 m-0">
-                  Real-time Logic Stream
+                  Real-time Analysis
                 </p>
               </div>
             </Card.Header>
@@ -111,12 +109,12 @@ export default function WidgetFlipCard({
                     <div className="flex items-center gap-3 text-primary/30">
                       <div className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-pulse" />
                       <span className="text-[9px] font-black uppercase tracking-[0.4em]">
-                        Advisory Protocol
+                        Advisor Access
                       </span>
                     </div>
                     <p className="text-foreground/70 text-[15px] leading-relaxed font-medium tracking-tight">
                       {insight ||
-                        "Processing institutional data streams. Analyzing spend patterns for logic optimization."}
+                        "Analyzing your financial data. Identifying trends and opportunities for optimization."}
                     </p>
                   </div>
                 )}
@@ -129,7 +127,7 @@ export default function WidgetFlipCard({
                 isDisabled={showSkeleton}
                 className="flex-1 bg-primary text-primary-foreground font-black uppercase tracking-[0.2em] text-[11px] h-14 rounded-xl shadow-[0_0_20px_rgba(0,127,255,0.3)] hover:shadow-[0_0_30px_rgba(0,127,255,0.5)] transition-all cursor-pointer border-none flex items-center justify-center gap-3"
               >
-                Sync Advisor
+                Talk to Advisor
                 <ArrowRight size={18} />
               </Button>
               <Button

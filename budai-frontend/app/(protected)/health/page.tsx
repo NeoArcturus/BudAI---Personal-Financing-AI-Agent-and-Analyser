@@ -1,4 +1,3 @@
-// page 4.tsx
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
@@ -13,6 +12,10 @@ export default function HealthPage() {
   const { accounts } = useBudAI();
   const [isLoading, setIsLoading] = useState(false);
   const [healthData, setHealthData] = useState(null);
+  const [healthMetrics, setHealthMetrics] = useState<{
+    overall_score: number;
+    recommendations: { title: string; desc: string; type: string }[];
+  } | null>(null);
   const [localAccountId, setLocalAccountId] = useState<string>("");
 
   useEffect(() => {
@@ -25,22 +28,43 @@ export default function HealthPage() {
     if (!localAccountId) return;
     setIsLoading(true);
     try {
-      const response = await apiFetch(
-        "/api/media/execute",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            tool_name: "plot_health_radar",
-            parameters: {
-              bank_name_or_id: localAccountId,
-            },
-          }),
-        },
-        true,
-      );
-      if (response.ok) {
-        const result = await response.json();
+      const [radarRes, metricsRes] = await Promise.all([
+        apiFetch(
+          "/api/media/execute",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              tool_name: "plot_health_radar",
+              parameters: { bank_name_or_id: localAccountId },
+            }),
+          },
+          true,
+        ),
+        apiFetch(
+          "/api/media/execute",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              tool_name: "get_financial_health_metrics",
+              parameters: { user_uuid: "CURRENT_USER" },
+            }),
+          },
+          true,
+        ),
+      ]);
+
+      if (radarRes.ok) {
+        const result = await radarRes.json();
         setHealthData(result.data);
+      }
+
+      if (metricsRes.ok) {
+        const result = await metricsRes.json();
+        setHealthMetrics(
+          typeof result.data === "string"
+            ? JSON.parse(result.data)
+            : result.data,
+        );
       }
     } catch (error) {
       console.error(error);
@@ -71,7 +95,7 @@ export default function HealthPage() {
         </h2>
         <div className="flex items-center gap-4">
           <div className="bg-green-500/5 text-green-500 border-[0.5px] border-green-500/20 px-4 py-1.5 text-[9px] font-black uppercase tracking-[0.3em] shadow-sm rounded-lg">
-            Status: Operational
+            System Healthy
           </div>
         </div>
       </div>
@@ -88,7 +112,7 @@ export default function HealthPage() {
                   Benchmarking
                 </h3>
                 <p className="text-foreground/30 text-[9px] font-black uppercase tracking-[0.4em] mt-1">
-                  Peer Logic Comparison
+                  Industry Benchmarking
                 </p>
               </div>
             </div>
@@ -97,7 +121,7 @@ export default function HealthPage() {
           <div className="flex-1 w-full flex items-center justify-center min-h-80 bg-white/1 rounded-xl border-[0.5px] border-white/5 relative overflow-hidden p-8">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.02)_0%,transparent_70%)] pointer-events-none" />
             {isLoading ? (
-              <Skeleton className="w-80 h-80 rounded-full bg-white/5" />
+              <Skeleton animationType="shimmer" className="w-80 h-80 rounded-full bg-white/5" />
             ) : chartConfig ? (
               <CoreChartEngine config={chartConfig} />
             ) : (
@@ -107,7 +131,7 @@ export default function HealthPage() {
                   className="mx-auto mb-4 animate-spin-slow"
                 />
                 <p className="text-[9px] font-black uppercase tracking-[0.4em]">
-                  Syncing Diagnostic Link...
+                  Syncing Financial Data...
                 </p>
               </div>
             )}
@@ -123,28 +147,35 @@ export default function HealthPage() {
               )}
               <div className="flex flex-col items-center">
                 {isLoading ? (
-                  <Skeleton className="w-16 h-12 rounded-lg bg-white/5" />
+                  <Skeleton
+                    animationType="shimmer"
+                    className="w-16 h-12 rounded-lg bg-white/5"
+                  />
                 ) : (
                   <span className="text-6xl font-normal text-foreground tracking-tighter italic font-mono">
-                    84
+                    {healthMetrics?.overall_score || 0}
                   </span>
                 )}
                 <span className="text-[9px] text-foreground/30 font-black uppercase tracking-[0.4em] mt-3">
-                  Quantum Score
+                  Financial Score
                 </span>
               </div>
             </div>
             {isLoading ? (
               <div className="space-y-3 w-full max-w-xs px-4">
-                <Skeleton className="h-2 w-full rounded bg-white/5" />
-                <Skeleton className="h-2 w-3/4 rounded bg-white/5 mx-auto" />
+                <Skeleton
+                  animationType="shimmer"
+                  className="h-2 w-full rounded bg-white/5"
+                />
+                <Skeleton
+                  animationType="shimmer"
+                  className="h-2 w-3/4 rounded bg-white/5 mx-auto"
+                />
               </div>
             ) : (
               <div className="bg-white/5 backdrop-blur-xl border-[0.5px] border-white/10 rounded-xl p-5 max-w-xs shadow-inner">
                 <p className="text-foreground/60 text-[11px] leading-relaxed font-medium uppercase tracking-wide">
-                  Neural delta improved by{" "}
-                  <span className="text-green-500 font-black">+4 points</span>{" "}
-                  this cycle via optimized debt leverage.
+                  Your score is based on liquidity runway, debt drag, and net worth velocity.
                 </p>
               </div>
             )}
@@ -153,7 +184,7 @@ export default function HealthPage() {
           <Card className="liquid-glass rounded-xl p-10 shadow-inner flex-1 border-none">
             <h4 className="text-foreground font-black text-[10px] uppercase tracking-[0.4em] mb-10 flex items-center gap-3 italic">
               <Zap size={18} className="text-primary shrink-0" />
-              Protocols
+              Recommendations
             </h4>
             <div className="space-y-5">
               {isLoading
@@ -162,27 +193,17 @@ export default function HealthPage() {
                       key={i}
                       className="p-6 rounded-xl bg-white/5 border-[0.5px] border-white/10 space-y-3"
                     >
-                      <Skeleton className="h-3 w-1/2 rounded bg-white/5" />
-                      <Skeleton className="h-2 w-full rounded bg-white/5" />
+                      <Skeleton
+                        animationType="shimmer"
+                        className="h-3 w-1/2 rounded bg-white/5"
+                      />
+                      <Skeleton
+                        animationType="shimmer"
+                        className="h-2 w-full rounded bg-white/5"
+                      />
                     </div>
                   ))
-                : [
-                    {
-                      title: "Augment Reserve",
-                      desc: "Liquidity coverage: 1.5 mo. Threshold: 3.0 mo.",
-                      type: "urgent",
-                    },
-                    {
-                      title: "De-leverage Card",
-                      desc: "Liability drag detected. Consolidation required.",
-                      type: "warning",
-                    },
-                    {
-                      title: "Diversify Index",
-                      desc: "Cash concentration at 90%. Exposure recommended.",
-                      type: "info",
-                    },
-                  ].map((insight, i) => (
+                : (healthMetrics?.recommendations || []).map((insight, i) => (
                     <div
                       key={i}
                       className="p-6 rounded-xl bg-white/2 border-[0.5px] border-white/5 hover:border-primary/40 transition-all cursor-pointer group shadow-sm"

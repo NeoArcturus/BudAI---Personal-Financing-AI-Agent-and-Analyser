@@ -11,7 +11,7 @@ export default function GlobalChatButton() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Don't show the button if we are already on the advisor page
+
   if (pathname === "/advisor") return null;
 
   const handleOpenChat = () => {

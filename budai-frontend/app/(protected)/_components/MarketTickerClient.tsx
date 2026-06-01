@@ -25,7 +25,7 @@ export default function MarketTickerClient({ initialData }: MarketTickerProps) {
       return json.tickers || [];
     },
     initialData,
-    refetchInterval: 1000 * 60 * 15, // 15 mins
+    refetchInterval: 1000 * 60 * 15,
   });
 
   if ((isLoading && !initialData) || !data || data.length === 0) return null;
@@ -50,7 +50,7 @@ export default function MarketTickerClient({ initialData }: MarketTickerProps) {
             </div>
           </div>
         ))}
-        {/* Duplicate for infinite marquee effect */}
+        {}
         {data.map((item: MarketTickerItem, i: number) => (
           <div key={`dup-${i}`} className="flex items-center gap-3">
             <span className="text-foreground/30 font-black text-[9px] tracking-[0.3em] uppercase italic">

@@ -316,7 +316,7 @@ class UserAccounts:
     def get_account_balance(self, bank_name_or_id, user_uuid, account_type="TRANSACTION"):
         with SessionLocal() as session:
             acc = session.query(Account).join(Bank).filter(
-                (Bank.bank_name == bank_name_or_id) | (
+                (Bank.bank_name.ilike(f"%{bank_name_or_id}%")) | (
                     Account.account_id == bank_name_or_id),
                 Account.user_uuid == user_uuid
             ).first()

@@ -17,6 +17,8 @@ export const Sidebar = () => {
   const pathname = usePathname();
   const { userName } = useBudAI();
 
+  if (pathname === "/advisor") return null;
+
   const navItems = [
     {
       href: "/home",
@@ -69,7 +71,7 @@ export const Sidebar = () => {
                   "flex items-center gap-4 px-4 py-3 rounded-xl transition-all border-[0.5px]",
                   isActive
                     ? "text-primary bg-primary/10 backdrop-blur-xl shadow-[0_0_20px_rgba(0,127,255,0.05)] border-primary/30"
-                    : "text-foreground/40 hover:text-foreground hover:bg-white/5 border-transparent hover:border-white/5"
+                    : "text-foreground/40 hover:text-foreground hover:bg-white/5 border-transparent hover:border-white/5",
                 )}
               >
                 <item.icon size={18} />
@@ -83,8 +85,8 @@ export const Sidebar = () => {
       </div>
 
       <div className="flex items-center gap-3 pt-6 border-t-[0.5px] border-white/5 mt-8 px-2">
-        <Avatar className="w-8 h-8 bg-primary shrink-0 shadow-[0_0_15px_rgba(0,127,255,0.3)] border-[0.5px] border-white/10 text-primary-foreground font-black text-[10px]">
-           <Avatar.Fallback>{userName?.charAt(0) || "U"}</Avatar.Fallback>
+        <Avatar className="w-8 h-8 bg-primary shrink-0 shadow-[0_0_15px_rgba(0,127,255,0.3)] border-[0.5px] border-white/10 text-primary-foreground font-black text-sm flex items-center justify-center">
+          <Avatar.Fallback>{userName?.charAt(0) || "U"}</Avatar.Fallback>
         </Avatar>
         <div className="overflow-hidden">
           <p
@@ -94,7 +96,7 @@ export const Sidebar = () => {
             {userName || "User"}
           </p>
           <p className="text-primary/50 font-black text-[8px] truncate tracking-[0.2em] uppercase">
-            Core Node
+            Primary Profile
           </p>
         </div>
       </div>

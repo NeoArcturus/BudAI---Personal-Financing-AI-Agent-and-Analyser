@@ -13,14 +13,14 @@ import {
   DatePicker,
   DateField,
   Calendar,
-  CloseButton,
   Badge,
+  CloseButton,
 } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { Account, BankChartData, Transaction } from "@/types";
 import { today, getLocalTimeZone, DateValue } from "@internationalized/date";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
-import { useTransactions, useAdvisorInsight } from "@/lib/hooks";
+import { useTransactions, useAdvisorInsight, usePersistedState } from "@/lib/hooks";
 import WidgetFlipCard from "./WidgetFlipCard";
 import { useRouter } from "next/navigation";
 import { WidgetContext } from "../home/DashboardClient";
@@ -40,8 +40,6 @@ const NEON_COLORS = [
   "#1D4ED8",
 ];
 
-const CONSOLIDATED_ID = "VIRTUAL_ALL_ACCOUNTS";
-
 export default function ExpenseDistributionWidgetClient({
   initialData,
 }: ExpenseDistributionWidgetProps) {
@@ -49,18 +47,10 @@ export default function ExpenseDistributionWidgetClient({
   const { onRemove } = React.useContext(WidgetContext);
   const { accounts, createNewSession } = useBudAI();
 
-  const allAccountIds = useMemo(
-    () => accounts.map((a) => a.account_id).join(","),
-    [accounts],
+  const [selectedAccountId, setSelectedAccountId] = usePersistedState<string>(
+    "expense_dist_account",
+    accounts[0]?.account_id || "",
   );
-
-  const [selectedAccountId, setSelectedAccountId] =
-    useState<string>(CONSOLIDATED_ID);
-
-  const apiAccountId = useMemo(() => {
-    if (selectedAccountId === CONSOLIDATED_ID) return allAccountIds;
-    return selectedAccountId;
-  }, [selectedAccountId, allAccountIds]);
 
   const [startDate, setStartDate] = useState<DateValue | null>(
     today(getLocalTimeZone()).subtract({ months: 3 }),
@@ -81,7 +71,7 @@ export default function ExpenseDistributionWidgetClient({
     data: transactions = [],
     isLoading: isInitialLoading,
     isFetching,
-  } = useTransactions(apiAccountId, fromStr, toStr, initialData);
+  } = useTransactions(selectedAccountId, fromStr, toStr, initialData);
 
   const aggregatedData = useMemo(() => {
     const categories: Record<string, number> = {};
@@ -115,7 +105,7 @@ export default function ExpenseDistributionWidgetClient({
 
     const bankName =
       accounts.find((a) => a.account_id === selectedAccountId)?.bank_name ||
-      (selectedAccountId === CONSOLIDATED_ID ? "All Accounts" : "Account");
+      "Account";
 
     const payload: BankChartData[] = [
       {
@@ -131,7 +121,7 @@ export default function ExpenseDistributionWidgetClient({
       "categorized_doughnut",
       payload,
       {
-        bank_name_or_id: apiAccountId,
+        bank_name_or_id: selectedAccountId,
         from_date: fromStr,
         to_date: toStr,
       },
@@ -142,7 +132,6 @@ export default function ExpenseDistributionWidgetClient({
     startDate,
     endDate,
     selectedAccountId,
-    apiAccountId,
     accounts,
     fromStr,
     toStr,
@@ -156,31 +145,19 @@ export default function ExpenseDistributionWidgetClient({
   const handleDiscuss = () => {
     const sessionId = createNewSession("Expense Distribution Analysis", {
       type: "expense_distribution",
-      accountId: apiAccountId,
+      accountId: selectedAccountId,
       data: aggregatedData,
     });
     router.push(`/advisor?session=${sessionId}`);
   };
 
   const activeAccountName = useMemo(() => {
-    if (selectedAccountId === CONSOLIDATED_ID) return "All Accounts";
     return (
       accounts.find((a) => a.account_id === selectedAccountId)?.bank_name ||
       "Select Account"
     );
   }, [selectedAccountId, accounts]);
 
-  const dropdownItems = useMemo((): Account[] => {
-    const consolidated: Account = {
-      account_id: CONSOLIDATED_ID,
-      bank_name: "All Accounts",
-      account_number: "Consolidated View",
-      sort_code: "",
-      currency: "GBP",
-      balance: 0,
-    };
-    return [consolidated, ...accounts];
-  }, [accounts]);
   return (
     <WidgetFlipCard
       insight={insight}
@@ -193,12 +170,10 @@ export default function ExpenseDistributionWidgetClient({
             <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
               Expense Category Distribution
             </h3>
-            {onRemove && (
-              <CloseButton
-                onPress={onRemove}
-                className="text-foreground/20 hover:text-foreground transition-all rounded-md"
-              />
-            )}
+            <CloseButton
+              onPress={onRemove}
+              className="text-foreground/20 hover:text-foreground transition-all rounded-md"
+            />
           </div>
 
           <div className="flex flex-wrap items-end gap-4 w-full pointer-events-auto">
@@ -346,7 +321,7 @@ export default function ExpenseDistributionWidgetClient({
                   placement="bottom left"
                 >
                   <Dropdown.Menu
-                    items={dropdownItems}
+                    items={accounts}
                     selectionMode="single"
                     selectedKeys={new Set([selectedAccountId])}
                     onSelectionChange={(keys: Selection) => {
@@ -374,9 +349,7 @@ export default function ExpenseDistributionWidgetClient({
                             )}
                           </Badge.Anchor>
                           <Description className="text-[9px] text-foreground/30 font-mono tracking-[0.2em] pointer-events-none mt-1.5 uppercase">
-                            {acc.account_id === CONSOLIDATED_ID
-                              ? acc.account_number
-                              : `Account No: *${acc.account_number?.slice(-4) || "0000"}`}
+                            Account No: *{acc.account_number?.slice(-4) || "0000"}
                           </Description>
                         </div>
                       </Dropdown.Item>
@@ -393,8 +366,14 @@ export default function ExpenseDistributionWidgetClient({
             <div className="mb-2 shrink-0 px-2">
               {isInitialLoading ? (
                 <div className="space-y-2">
-                  <Skeleton className="h-9 w-40 rounded-xl bg-secondary" />
-                  <Skeleton className="h-4 w-56 rounded-lg bg-secondary" />
+                  <Skeleton
+                    animationType="shimmer"
+                    className="h-9 w-40 rounded-xl bg-secondary"
+                  />
+                  <Skeleton
+                    animationType="shimmer"
+                    className="h-4 w-56 rounded-lg bg-secondary"
+                  />
                 </div>
               ) : (
                 <>
@@ -419,7 +398,10 @@ export default function ExpenseDistributionWidgetClient({
 
             <div className="flex-1 w-full min-h-62.5 mb-6 relative flex items-center justify-center shrink-0">
               {isInitialLoading && transactions.length === 0 ? (
-                <Skeleton className="w-48 h-48 rounded-full bg-secondary" />
+                <Skeleton
+                  animationType="shimmer"
+                  className="w-48 h-48 rounded-full bg-secondary"
+                />
               ) : config ? (
                 <div
                   className={`w-full h-full flex items-center justify-center ${isFetching ? "opacity-70 transition-opacity" : ""}`}
@@ -443,10 +425,19 @@ export default function ExpenseDistributionWidgetClient({
                 ? Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="flex justify-between items-center">
                       <div className="flex items-center gap-3">
-                        <Skeleton className="w-3 h-3 rounded-md bg-secondary" />
-                        <Skeleton className="h-4 w-24 rounded bg-secondary" />
+                        <Skeleton
+                          animationType="shimmer"
+                          className="w-3 h-3 rounded-md bg-secondary"
+                        />
+                        <Skeleton
+                          animationType="shimmer"
+                          className="h-4 w-24 rounded bg-secondary"
+                        />
                       </div>
-                      <Skeleton className="h-4 w-16 rounded bg-secondary" />
+                      <Skeleton
+                        animationType="shimmer"
+                        className="h-4 w-16 rounded bg-secondary"
+                      />
                     </div>
                   ))
                 : aggregatedData.map((c, idx) => (

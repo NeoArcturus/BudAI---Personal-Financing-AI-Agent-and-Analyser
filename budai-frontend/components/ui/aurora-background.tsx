@@ -16,36 +16,64 @@ export const AuroraBackground = ({
   return (
     <div
       className={cn(
-        "relative flex flex-col h-full w-full bg-transparent transition-colors",
+        "relative flex flex-col h-full w-full bg-[#030303]",
         className,
       )}
       {...props}
     >
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Layer 1: Ultra-Spectral Mesh */}
         <div
-          style={
-            {
-              "--aurora":
-                "repeating-linear-gradient(100deg,#003366 10%,#004db3 15%,#007FFF 20%,#00e5ff 25%,#8b5cf6 30%)",
-              "--dark-gradient":
-                "repeating-linear-gradient(100deg,#000 0%,#000 7%,transparent 10%,transparent 12%,#000 16%)",
-              "--white-gradient":
-                "repeating-linear-gradient(100deg,rgba(255,255,255,0.05) 0%,rgba(255,255,255,0.05) 7%,transparent 10%,transparent 12%,rgba(255,255,255,0.05) 16%)",
-              "--black": "#000",
-              "--transparent": "transparent",
-              transform: "translateZ(0)",
-              willChange: "background-position",
-            } as React.CSSProperties
-          }
+          style={{
+            backgroundImage: `
+              /* High-Luminosity Ultra-Spectral Mesh */
+              radial-gradient(ellipse 80% 50% at 0% 0%, #00f2ff, transparent),
+              radial-gradient(ellipse 80% 50% at 25% 0%, #00a3ff, transparent),
+              radial-gradient(ellipse 80% 50% at 50% 0%, #0057ff, transparent),
+              radial-gradient(ellipse 80% 50% at 75% 0%, #4b00ff, transparent),
+              radial-gradient(ellipse 80% 50% at 100% 0%, #ad00ff, transparent),
+              radial-gradient(ellipse 80% 50% at 100% 50%, #ff00ff, transparent),
+              radial-gradient(ellipse 80% 50% at 100% 100%, #ff00c7, transparent),
+              radial-gradient(ellipse 80% 50% at 50% 100%, #001aff, transparent),
+              radial-gradient(ellipse 80% 50% at 25% 100%, #00ff85, transparent),
+              radial-gradient(ellipse 80% 50% at 0% 100%, #00ffa3, transparent),
+              radial-gradient(ellipse 80% 50% at 0% 50%, #007fff, transparent),
+              radial-gradient(ellipse 60% 40% at 50% 50%, #3d0055, transparent)
+            `,
+            backgroundSize: "100% 100%",
+            filter: "blur(120px) brightness(1.2) saturate(1.2)",
+          }}
           className={cn(
-            "pointer-events-none absolute -inset-[25%] [background-image:var(--white-gradient),var(--aurora)] [background-size:300%_200%] [background-position:50%_50%] opacity-50 blur-xl filter dark:[background-image:var(--dark-gradient),var(--aurora)] animate-aurora overflow-visible",
-
+            "pointer-events-none absolute inset-0 opacity-100 mix-blend-screen",
             showRadialGradient &&
-              `[mask-image:radial-gradient(ellipse_at_100%_0%,black_10%,transparent_70%)]`,
+              "[mask-image:radial-gradient(ellipse_at_center,black,transparent)]",
           )}
         ></div>
+
+        {/* Layer 2: Prismatic Refraction Beams (Enhanced Glint) */}
+        <div
+          className="absolute inset-0 opacity-60 z-10"
+          style={{
+            backgroundImage: `
+              linear-gradient(45deg, transparent 48%, rgba(255,255,255,0.15) 50%, transparent 52%),
+              linear-gradient(-45deg, transparent 48%, rgba(255,255,255,0.15) 50%, transparent 52%)
+            `,
+          }}
+        />
+
+        {/* Layer 3: Secondary Diagonal Abyssal Rift & Corner Patches (Dual-Aurora Split) */}
+        <div 
+          className="absolute inset-0 z-20"
+          style={{
+            backgroundImage: `
+              radial-gradient(circle at 100% 0%, #000000, transparent 45%),
+              radial-gradient(circle at 0% 100%, #000000, transparent 45%),
+              linear-gradient(225deg, transparent 10%, rgba(0,0,0,0.4) 30%, #000000 45%, #000000 55%, rgba(0,0,0,0.4) 70%, transparent 90%)
+            `
+          }}
+        />
       </div>
-      {children}
+      <div className="relative z-30">{children}</div>
     </div>
   );
 };

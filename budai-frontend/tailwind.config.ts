@@ -34,28 +34,6 @@ const config: Config = {
         sans: ["var(--font-jakarta)", "sans-serif"],
         geist: ["var(--font-jakarta)", "sans-serif"],
       },
-      animation: {
-        aurora: "aurora 60s cubic-bezier(0.4, 0.0, 0.2, 1) infinite",
-      },
-      keyframes: {
-        aurora: {
-          "0%, 100%": {
-            backgroundPosition: "50% 50%, 50% 50%",
-          },
-          "20%": {
-            backgroundPosition: "50% 50%, 120% 30%",
-          },
-          "40%": {
-            backgroundPosition: "50% 50%, 250% 70%",
-          },
-          "60%": {
-            backgroundPosition: "50% 50%, 80% 80%",
-          },
-          "80%": {
-            backgroundPosition: "50% 50%, 320% 20%",
-          },
-        },
-      },
     },
   },
   plugins: [addVariablesForColors],

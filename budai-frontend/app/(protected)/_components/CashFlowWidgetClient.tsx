@@ -8,19 +8,18 @@ import {
   Card,
   Dropdown,
   Label,
-  Description,
   Skeleton,
   DatePicker,
   DateField,
   Calendar,
   CloseButton,
-  Badge,
+  Button,
 } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
-import { Account, BankChartData, Transaction } from "@/types";
+import { Transaction, BankChartData } from "@/types";
 import { today, getLocalTimeZone, DateValue } from "@internationalized/date";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
-import { useTransactions, useAdvisorInsight } from "@/lib/hooks";
+import { useTransactions, useAdvisorInsight, usePersistedState } from "@/lib/hooks";
 import WidgetFlipCard from "./WidgetFlipCard";
 import { useRouter } from "next/navigation";
 import { WidgetContext } from "../home/DashboardClient";
@@ -29,8 +28,6 @@ interface CashFlowWidgetProps {
   initialData?: Transaction[];
 }
 
-const CONSOLIDATED_ID = "VIRTUAL_ALL_ACCOUNTS";
-
 export default function CashFlowWidgetClient({
   initialData,
 }: CashFlowWidgetProps) {
@@ -38,18 +35,10 @@ export default function CashFlowWidgetClient({
   const { onRemove } = React.useContext(WidgetContext);
   const { accounts, createNewSession } = useBudAI();
 
-  const allAccountIds = useMemo(
-    () => accounts.map((a) => a.account_id).join(","),
-    [accounts],
+  const [selectedAccountId, setSelectedAccountId] = usePersistedState<string>(
+    "cashflow_account",
+    accounts[0]?.account_id || "",
   );
-
-  const [selectedAccountId, setSelectedAccountId] =
-    useState<string>(CONSOLIDATED_ID);
-
-  const apiAccountId = useMemo(() => {
-    if (selectedAccountId === CONSOLIDATED_ID) return allAccountIds;
-    return selectedAccountId;
-  }, [selectedAccountId, allAccountIds]);
 
   const [startDate, setStartDate] = useState<DateValue | null>(
     today(getLocalTimeZone()).subtract({ years: 1 }),
@@ -66,14 +55,20 @@ export default function CashFlowWidgetClient({
     ? `${endDate.year}-${String(endDate.month).padStart(2, "0")}-${String(endDate.day).padStart(2, "0")}`
     : "";
 
-  const {
-    data: transactions = [],
-    isLoading: isInitialLoading,
-    isFetching,
-  } = useTransactions(apiAccountId, fromStr, toStr, initialData);
+  const { data: transactions = [], isLoading } = useTransactions(
+    selectedAccountId,
+    fromStr,
+    toStr,
+    initialData,
+  );
 
-  const config = useMemo(() => {
-    if (!startDate || !endDate) return null;
+  const { data: insight, isLoading: isAnalyzing } = useAdvisorInsight(
+    "cash_flow",
+    transactions,
+  );
+
+  const chartConfig = useMemo(() => {
+    if (!startDate || !endDate || transactions.length === 0) return null;
 
     const getMonthsInRange = (start: DateValue, end: DateValue) => {
       const months = [];
@@ -139,7 +134,7 @@ export default function CashFlowWidgetClient({
 
     const bankName =
       accounts.find((a) => a.account_id === selectedAccountId)?.bank_name ||
-      (selectedAccountId === CONSOLIDATED_ID ? "All Accounts" : "Account");
+      "Account";
 
     const payload: BankChartData[] = [
       {
@@ -152,56 +147,27 @@ export default function CashFlowWidgetClient({
       "cash_flow_mixed",
       payload,
       {
-        bank_name_or_id: apiAccountId,
+        bank_name_or_id: selectedAccountId,
         from_date: fromStr,
         to_date: toStr,
       },
-      "",
+      "Liquidity Intelligence",
     );
-  }, [
-    transactions,
-    startDate,
-    endDate,
-    selectedAccountId,
-    apiAccountId,
-    accounts,
-    fromStr,
-    toStr,
-  ]);
-
-  const { data: insight, isLoading: isAnalyzing } = useAdvisorInsight(
-    "cashFlow",
-    transactions,
-  );
+  }, [transactions, selectedAccountId, fromStr, toStr, startDate, endDate, accounts]);
 
   const handleDiscuss = () => {
     const sessionId = createNewSession("Cash Flow Analysis", {
       type: "cash_flow",
-      accountId: apiAccountId,
-      data: transactions.slice(0, 10),
+      accountId: selectedAccountId,
+      data: transactions,
     });
     router.push(`/advisor?session=${sessionId}`);
   };
 
-  const activeAccountName = useMemo(() => {
-    if (selectedAccountId === CONSOLIDATED_ID) return "All Accounts";
-    return (
-      accounts.find((a) => a.account_id === selectedAccountId)?.bank_name ||
-      "Select Account"
-    );
+  const selectedAccountName = useMemo(() => {
+    const acc = accounts.find((a) => a.account_id === selectedAccountId);
+    return acc ? acc.bank_name : "Select Account";
   }, [selectedAccountId, accounts]);
-
-  const dropdownItems = useMemo((): Account[] => {
-    const consolidated: Account = {
-      account_id: CONSOLIDATED_ID,
-      bank_name: "All Accounts",
-      account_number: "Consolidated View",
-      sort_code: "",
-      currency: "GBP",
-      balance: 0,
-    };
-    return [consolidated, ...accounts];
-  }, [accounts]);
 
   return (
     <WidgetFlipCard
@@ -215,12 +181,10 @@ export default function CashFlowWidgetClient({
             <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
               Cashflow Insights
             </h3>
-            {onRemove && (
-              <CloseButton
-                onPress={onRemove}
-                className="text-foreground/20 hover:text-foreground transition-all rounded-md"
-              />
-            )}
+            <CloseButton
+              onPress={onRemove}
+              className="text-foreground/20 hover:text-foreground transition-all rounded-md"
+            />
           </div>
 
           <div className="flex flex-wrap items-end gap-4 w-full pointer-events-auto">
@@ -247,44 +211,15 @@ export default function CashFlowWidgetClient({
                 </DateField.Input>
                 <DateField.Suffix className="ml-2 flex items-center">
                   <DatePicker.Trigger className="text-foreground/30 hover:text-primary cursor-pointer transition-colors">
-                    <DatePicker.TriggerIndicator />
+                    <ChevronDown size={14} />
                   </DatePicker.Trigger>
                 </DateField.Suffix>
               </DateField.Group>
-              <DatePicker.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-2xl p-6 shadow-2xl z-50">
-                <Calendar aria-label="From date" className="w-full min-w-65">
-                  <Calendar.Header className="flex items-center gap-3 mb-6">
-                    <Calendar.YearPickerTrigger className="flex items-center gap-2 mr-auto cursor-pointer hover:opacity-70 transition-opacity">
-                      <Calendar.YearPickerTriggerHeading className="text-sm font-black uppercase tracking-widest text-primary italic" />
-                      <Calendar.YearPickerTriggerIndicator className="text-foreground/30 w-4 h-4" />
-                    </Calendar.YearPickerTrigger>
-                    <Calendar.NavButton
-                      slot="previous"
-                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
-                    />
-                    <Calendar.NavButton
-                      slot="next"
-                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
-                    />
-                  </Calendar.Header>
-                  <Calendar.Grid className="w-full border-collapse">
-                    <Calendar.GridHeader>
-                      {(day) => (
-                        <Calendar.HeaderCell className="text-[9px] font-black text-foreground/20 pb-4 text-center uppercase tracking-widest">
-                          {day}
-                        </Calendar.HeaderCell>
-                      )}
-                    </Calendar.GridHeader>
-                    <Calendar.GridBody>
-                      {(date) => (
-                        <Calendar.Cell
-                          date={date}
-                          className="w-8 h-8 flex items-center justify-center mx-auto text-[11px] font-mono text-foreground rounded-lg hover:bg-white/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-all"
-                        />
-                      )}
-                    </Calendar.GridBody>
-                  </Calendar.Grid>
-                </Calendar>
+              <DatePicker.Popover
+                className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-2xl shadow-2xl p-4 z-50"
+                placement="bottom"
+              >
+                <Calendar />
               </DatePicker.Popover>
             </DatePicker>
 
@@ -311,98 +246,51 @@ export default function CashFlowWidgetClient({
                 </DateField.Input>
                 <DateField.Suffix className="ml-2 flex items-center">
                   <DatePicker.Trigger className="text-foreground/30 hover:text-primary cursor-pointer transition-colors">
-                    <DatePicker.TriggerIndicator />
+                    <ChevronDown size={14} />
                   </DatePicker.Trigger>
                 </DateField.Suffix>
               </DateField.Group>
-              <DatePicker.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-2xl p-6 shadow-2xl z-50">
-                <Calendar aria-label="To date" className="w-full min-w-65">
-                  <Calendar.Header className="flex items-center gap-3 mb-6">
-                    <Calendar.YearPickerTrigger className="flex items-center gap-2 mr-auto cursor-pointer hover:opacity-70 transition-opacity">
-                      <Calendar.YearPickerTriggerHeading className="text-sm font-black uppercase tracking-widest text-primary italic" />
-                      <Calendar.YearPickerTriggerIndicator className="text-foreground/30 w-4 h-4" />
-                    </Calendar.YearPickerTrigger>
-                    <Calendar.NavButton
-                      slot="previous"
-                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
-                    />
-                    <Calendar.NavButton
-                      slot="next"
-                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
-                    />
-                  </Calendar.Header>
-                  <Calendar.Grid className="w-full border-collapse">
-                    <Calendar.GridHeader>
-                      {(day) => (
-                        <Calendar.HeaderCell className="text-[9px] font-black text-foreground/20 pb-4 text-center uppercase tracking-widest">
-                          {day}
-                        </Calendar.HeaderCell>
-                      )}
-                    </Calendar.GridHeader>
-                    <Calendar.GridBody>
-                      {(date) => (
-                        <Calendar.Cell
-                          date={date}
-                          className="w-8 h-8 flex items-center justify-center mx-auto text-[11px] font-mono text-foreground rounded-lg hover:bg-white/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-all"
-                        />
-                      )}
-                    </Calendar.GridBody>
-                  </Calendar.Grid>
-                </Calendar>
+              <DatePicker.Popover
+                className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-2xl shadow-2xl p-4 z-50"
+                placement="bottom"
+              >
+                <Calendar />
               </DatePicker.Popover>
             </DatePicker>
 
-            <div className="ml-auto flex shrink-0">
+            <div className="flex-1 min-w-40 max-w-50">
+              <Label className="text-[9px] font-black uppercase tracking-[0.3em] text-foreground/40 mb-2 block pl-1">
+                Selected Account
+              </Label>
               <Dropdown>
-                <Dropdown.Trigger className="h-12 min-h-12 min-w-40 max-w-55 bg-white/5 hover:bg-white/10 border-[0.5px] border-white/10 text-[11px] text-foreground font-black uppercase tracking-widest rounded-xl px-5 flex items-center justify-between transition-all cursor-pointer outline-none focus:border-primary/50 shadow-inner">
-                  <span className="truncate pointer-events-none">
-                    {activeAccountName}
-                  </span>
-                  <ChevronDown
-                    size={14}
-                    className="text-foreground/30 shrink-0 pointer-events-none"
-                  />
-                </Dropdown.Trigger>
-                <Dropdown.Popover
-                  className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 shadow-2xl rounded-2xl min-w-50 z-50"
-                  placement="bottom left"
-                >
+                <Button className="w-full bg-white/5 border-[0.5px] border-white/10 hover:border-primary/50 transition-all h-12 rounded-xl px-4 flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-foreground shadow-inner">
+                  <span className="truncate">{selectedAccountName}</span>
+                  <ChevronDown size={14} className="text-foreground/30" />
+                </Button>
+                <Dropdown.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-xl shadow-2xl w-64 z-50 p-2">
                   <Dropdown.Menu
-                    items={dropdownItems}
-                    selectionMode="single"
+                    className="outline-none"
                     selectedKeys={new Set([selectedAccountId])}
                     onSelectionChange={(keys: Selection) => {
-                      if (keys !== "all") {
-                        const selectedValue = Array.from(keys)[0];
-                        if (selectedValue)
-                          setSelectedAccountId(String(selectedValue));
-                      }
+                      const val = Array.from(keys)[0] as string;
+                      setSelectedAccountId(val);
                     }}
-                    className="p-2"
+                    selectionMode="single"
                   >
-                    {(acc: Account) => (
+                    {accounts.map((acc) => (
                       <Dropdown.Item
-                        id={acc.account_id}
+                        key={acc.account_id}
                         textValue={acc.bank_name}
-                        className="rounded-xl transition-all data-[hover=true]:bg-white/10 py-3 px-4 outline-none cursor-pointer w-full block border-[0.5px] border-transparent data-[hover=true]:border-primary/30"
+                        className="flex flex-col px-4 py-3 rounded-lg hover:bg-white/10 cursor-pointer outline-none transition-all"
                       >
-                        <div className="flex flex-col w-full">
-                          <Badge.Anchor className="w-full relative flex items-center justify-between">
-                            <Label className="text-[11px] font-black text-foreground uppercase tracking-tight cursor-pointer pointer-events-none pr-4 italic">
-                              {acc.bank_name}
-                            </Label>
-                            {selectedAccountId === acc.account_id && (
-                              <Badge className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,127,255,0.6)]" />
-                            )}
-                          </Badge.Anchor>
-                          <Description className="text-[9px] text-foreground/30 font-mono tracking-[0.2em] pointer-events-none mt-1.5 uppercase">
-                            {acc.account_id === CONSOLIDATED_ID
-                              ? acc.account_number
-                              : `Account No: *${acc.account_number?.slice(-4) || "0000"}`}
-                          </Description>
-                        </div>
+                        <span className="text-foreground font-black text-[11px] uppercase tracking-tight italic">
+                          {acc.bank_name}
+                        </span>
+                        <span className="text-foreground/20 text-[9px] font-mono tracking-widest mt-1.5 uppercase">
+                          Account No: *{acc.account_number?.slice(-4)}
+                        </span>
                       </Dropdown.Item>
-                    )}
+                    ))}
                   </Dropdown.Menu>
                 </Dropdown.Popover>
               </Dropdown>
@@ -410,20 +298,21 @@ export default function CashFlowWidgetClient({
           </div>
         </Card.Header>
 
-        <Card.Content className="flex-1 w-full min-h-0 flex items-center justify-center p-0 z-0 bg-white/1 border-t-[0.5px] border-white/5 relative overflow-hidden">
+        <Card.Content className="flex-1 w-full flex items-center justify-center p-8 pt-0 relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.02)_0%,transparent_70%)] pointer-events-none" />
-          {isInitialLoading && transactions.length === 0 ? (
-            <Skeleton className="w-full h-full rounded-none bg-white/5" />
-          ) : config ? (
-            <div
-              className={`w-full h-full p-4 ${isFetching ? "opacity-70 transition-opacity" : ""}`}
-            >
-              <CoreChartEngine config={config} />
+          {isLoading ? (
+            <Skeleton
+              animationType="shimmer"
+              className="w-full h-full rounded-2xl bg-white/5"
+            />
+          ) : chartConfig ? (
+            <div className="w-full h-full relative z-10">
+              <CoreChartEngine config={chartConfig} />
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full w-full opacity-20">
-              <div className="w-12 h-12 rounded-full border-[0.5px] border-white/40 flex items-center justify-center mb-4">
-                <BarChart2 size={24} className="text-foreground" />
+            <div className="text-foreground/10 text-center flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-full border-[0.5px] border-white/5 flex items-center justify-center bg-white/1">
+                <BarChart2 size={32} />
               </div>
               <span className="text-[10px] font-black uppercase tracking-[0.4em]">
                 Awaiting Data Streams

@@ -1,5 +1,5 @@
 import { NativeChartConfig, ToolParameters, BankChartData } from "@/types";
-import { ChartDataset } from "chart.js";
+import { ChartDataset, TooltipItem } from "chart.js";
 
 interface ChartAnimationContext {
   type: string;
@@ -174,9 +174,21 @@ const getDelayedAnimation = () => {
   };
 };
 
+interface ForecastTimelineEvent {
+  day: number;
+  date: string;
+  merchant: string;
+  category: string;
+  amount: number;
+}
+
+type ChartPayload =
+  | BankChartData[]
+  | { series: BankChartData[]; timeline?: ForecastTimelineEvent[] };
+
 export const buildChartConfig = (
   type: string,
-  payloadData: BankChartData[],
+  rawPayload: ChartPayload,
   params: ToolParameters,
   customTitle?: string,
   options?: { disableAnimation?: boolean },
@@ -184,6 +196,21 @@ export const buildChartConfig = (
   const animationOverride = options?.disableAnimation
     ? { duration: 0, delay: 0 }
     : undefined;
+
+  let payloadData: BankChartData[] = [];
+  let timeline: ForecastTimelineEvent[] = [];
+
+  if (
+    rawPayload &&
+    typeof rawPayload === "object" &&
+    "series" in rawPayload &&
+    Array.isArray(rawPayload.series)
+  ) {
+    payloadData = rawPayload.series;
+    timeline = rawPayload.timeline || [];
+  } else if (Array.isArray(rawPayload)) {
+    payloadData = rawPayload;
+  }
 
   if (type === "categorized") {
     const allLabels = Array.from(
@@ -433,7 +460,7 @@ export const buildChartConfig = (
             ? colorPalette[i % colorPalette.length]
             : getColorForMetric("balance", i);
         datasets.push({
-          label: `${b.bank_name} Expected`,
+          label: `${b.bank_name} Balance`,
           data: allLabels.map((label) => {
             const pt = (b.data || []).find(
               (d) => String(d.Day || d.Month || d.Date || "") === label,
@@ -450,9 +477,26 @@ export const buildChartConfig = (
           backgroundColor: `${metricColor}1A`,
           fill: true,
           tension: 0.4,
-          pointRadius: 0,
+          pointRadius: (ctx) => {
+            const label = allLabels[ctx.dataIndex];
+            if (!label || typeof label !== "string") return 0;
+            const parts = label.split(" ");
+            if (parts.length < 2) return 0;
+            const dayNum = Number(parts[1]);
+            return timeline.some((e) => e.day === dayNum) ? 6 : 0;
+          },
+          pointStyle: (ctx) => {
+            const label = allLabels[ctx.dataIndex];
+            if (!label || typeof label !== "string") return false;
+            const parts = label.split(" ");
+            if (parts.length < 2) return false;
+            const dayNum = Number(parts[1]);
+            return timeline.some((e) => e.day === dayNum) ? "circle" : false;
+          },
+          pointBackgroundColor: "#FFD700",
+          pointBorderColor: "#FFFFFF",
           pointHitRadius: 10,
-          pointHoverRadius: 5,
+          pointHoverRadius: 8,
         });
       });
     } else {
@@ -462,7 +506,7 @@ export const buildChartConfig = (
             ? colorPalette[i % colorPalette.length]
             : getColorForMetric("spend", i);
         datasets.push({
-          label: `${b.bank_name} Spend`,
+          label: `${b.bank_name} Expenses`,
           data: allLabels.map((label) => {
             const pt = (b.data || []).find(
               (d) => String(d.Day || d.Month || d.Date || "") === label,
@@ -479,9 +523,18 @@ export const buildChartConfig = (
           backgroundColor: `${metricColor}1A`,
           fill: true,
           tension: 0.4,
-          pointRadius: 0,
+          pointRadius: (ctx) => {
+            const label = allLabels[ctx.dataIndex];
+            if (!label || typeof label !== "string") return 0;
+            const parts = label.split(" ");
+            if (parts.length < 2) return 0;
+            const dayNum = Number(parts[1]);
+            return timeline.some((e) => e.day === dayNum) ? 6 : 0;
+          },
+          pointBackgroundColor: "#EF4444",
+          pointBorderColor: "#FFFFFF",
           pointHitRadius: 10,
-          pointHoverRadius: 5,
+          pointHoverRadius: 8,
         });
       });
     }
@@ -498,6 +551,23 @@ export const buildChartConfig = (
         >,
         plugins: {
           ...baseOptions.plugins,
+          tooltip: {
+            ...baseOptions.plugins.tooltip,
+            callbacks: {
+              footer: (items: TooltipItem<"line">[]) => {
+                const label = items[0]?.label;
+                if (!label || typeof label !== "string") return "";
+                const parts = label.split(" ");
+                if (parts.length < 2) return "";
+                const dayNum = Number(parts[1]);
+                const events = timeline.filter((e) => e.day === dayNum);
+                if (events.length > 0) {
+                  return events.map((e) => `Event: ${e.merchant} (${e.category}) £${e.amount}`).join("\n");
+                }
+                return "";
+              }
+            }
+          }
         },
       },
     } as unknown as NativeChartConfig;

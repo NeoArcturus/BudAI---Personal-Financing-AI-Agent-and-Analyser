@@ -17,6 +17,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # iii Engine
+  iii-engine:
+    image: iiidev/iii:latest
+    container_name: iii-engine
+    command: ["--use-default-config"]
+    ports:
+      - "3111:3111"
+      - "3112:3112"
+      - "49134:49134"
+    environment:
+      - III_TELEMETRY_ENABLED=false
+    restart: always
+
   # Main API Orchestrator
   budai-api:
     build:
@@ -26,28 +39,29 @@ services:
     depends_on:
       budai-db:
         condition: service_healthy
+      iii-engine:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
-      - REDIS_URL=redis://budai-redis:6379/0
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_BASE_URL=http://host.docker.internal:8000/v1
+      - VLLM_SUMMARY_URL=http://host.docker.internal:8000/v1
       - NEWSDATA_API_KEY=${NEWSDATA_API_KEY}
       - CLIENT_ID=${CLIENT_ID}
       - CLIENT_SECRET=${CLIENT_SECRET}
       - REDIRECT_URI=${REDIRECT_URI}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - MCP_MACRO_URL=http://mcp-macro:8000/sse
-      - MCP_ANALYSER_URL=http://mcp-analyser:8000/sse
-      - MCP_FORECASTER_URL=http://mcp-forecaster:8000/sse
-      - MCP_CATEGORIZER_URL=http://mcp-categorizer:8000/sse
-      - MCP_MEMORY_URL=http://mcp-memory:8000/sse
-      - MCP_HEALTH_URL=http://mcp-health:8000/sse
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - III_ENGINE_URL=ws://iii-engine:49134
+      - III_URL=ws://iii-engine:49134
+      - III_TELEMETRY_ENABLED=false
     ports:
       - "8080:8080"
     restart: always
 
-  # MCP Service Fleet
+  # MCP Service Fleet (Now iii Workers)
   mcp-macro:
     build:
       context: .
@@ -55,14 +69,19 @@ services:
       args:
         - REQ_FILE=requirements-mcp-base.txt
     container_name: mcp-macro
-    command: ["python", "-m", "mcp_servers.macro_server", "--sse"]
+    command: ["python", "-m", "mcp_servers.macro_server"]
     environment:
-      - MCP_PORT=8000
       - NEWSDATA_API_KEY=${NEWSDATA_API_KEY}
-    ports:
-      - "8001:8000"
-    expose:
-      - "8000"
+      - III_ENGINE_URL=ws://iii-engine:49134
+      - III_URL=ws://iii-engine:49134
+      - III_TELEMETRY_ENABLED=false
+      - OTEL_SDK_DISABLED=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
+    depends_on:
+      budai-db:
+        condition: service_healthy
+      iii-engine:
+        condition: service_started
 
   mcp-analyser:
     build:
@@ -71,11 +90,18 @@ services:
       args:
         - REQ_FILE=requirements-mcp-base.txt
     container_name: mcp-analyser
-    command: ["python", "-m", "mcp_servers.analyser_server", "--sse"]
-    ports:
-      - "8002:8000"
-    expose:
-      - "8000"
+    command: ["python", "-m", "mcp_servers.analyser_server"]
+    environment:
+      - III_ENGINE_URL=ws://iii-engine:49134
+      - III_URL=ws://iii-engine:49134
+      - III_TELEMETRY_ENABLED=false
+      - OTEL_SDK_DISABLED=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
+    depends_on:
+      budai-db:
+        condition: service_healthy
+      iii-engine:
+        condition: service_started
 
   mcp-forecaster:
     build:
@@ -84,11 +110,18 @@ services:
       args:
         - REQ_FILE=requirements-forecaster.txt
     container_name: mcp-forecaster
-    command: ["python", "-m", "mcp_servers.forecaster_server", "--sse"]
-    ports:
-      - "8003:8000"
-    expose:
-      - "8000"
+    command: ["python", "-m", "mcp_servers.forecaster_server"]
+    environment:
+      - III_ENGINE_URL=ws://iii-engine:49134
+      - III_URL=ws://iii-engine:49134
+      - III_TELEMETRY_ENABLED=false
+      - OTEL_SDK_DISABLED=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
+    depends_on:
+      budai-db:
+        condition: service_healthy
+      iii-engine:
+        condition: service_started
 
   mcp-categorizer:
     build:
@@ -97,11 +130,18 @@ services:
       args:
         - REQ_FILE=requirements-categorizer.txt
     container_name: mcp-categorizer
-    command: ["python", "-m", "mcp_servers.categorizer_server", "--sse"]
-    ports:
-      - "8004:8000"
-    expose:
-      - "8000"
+    command: ["python", "-m", "mcp_servers.categorizer_server"]
+    environment:
+      - III_ENGINE_URL=ws://iii-engine:49134
+      - III_URL=ws://iii-engine:49134
+      - III_TELEMETRY_ENABLED=false
+      - OTEL_SDK_DISABLED=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
+    depends_on:
+      budai-db:
+        condition: service_healthy
+      iii-engine:
+        condition: service_started
 
   mcp-memory:
     build:
@@ -110,13 +150,20 @@ services:
       args:
         - REQ_FILE=requirements-memory.txt
     container_name: mcp-memory
-    command: ["python", "-m", "mcp_servers.memory_server", "--sse"]
-    ports:
-      - "8005:8000"
-    expose:
-      - "8000"
+    command: ["python", "-m", "mcp_servers.memory_server"]
+    environment:
+      - III_ENGINE_URL=ws://iii-engine:49134
+      - III_URL=ws://iii-engine:49134
+      - III_TELEMETRY_ENABLED=false
+      - OTEL_SDK_DISABLED=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
     volumes:
       - ./memory_store:/app/memory_store
+    depends_on:
+      budai-db:
+        condition: service_healthy
+      iii-engine:
+        condition: service_started
 
   mcp-health:
     build:
@@ -125,52 +172,18 @@ services:
       args:
         - REQ_FILE=requirements-mcp-base.txt
     container_name: mcp-health
-    command: ["python", "-m", "mcp_servers.health_server", "--sse"]
-    ports:
-      - "8006:8000"
-    expose:
-      - "8000"
-
-  # Redis for Task Queue and Caching
-  budai-redis:
-    image: redis:7-alpine
-    container_name: budai-redis
-    ports:
-      - "6379:6379"
-    restart: always
-
-  # Celery Worker for LangGraph execution
-  budai-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-    container_name: budai-worker
-    command: ["celery", "-A", "services.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+    command: ["python", "-m", "mcp_servers.health_server"]
+    environment:
+      - III_ENGINE_URL=ws://iii-engine:49134
+      - III_URL=ws://iii-engine:49134
+      - III_TELEMETRY_ENABLED=false
+      - OTEL_SDK_DISABLED=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
     depends_on:
       budai-db:
         condition: service_healthy
-      budai-redis:
+      iii-engine:
         condition: service_started
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
-      - REDIS_URL=redis://budai-redis:6379/0
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - NEWSDATA_API_KEY=${NEWSDATA_API_KEY}
-      - CLIENT_ID=${CLIENT_ID}
-      - CLIENT_SECRET=${CLIENT_SECRET}
-      - REDIRECT_URI=${REDIRECT_URI}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - MCP_MACRO_URL=http://mcp-macro:8000/sse
-      - MCP_ANALYSER_URL=http://mcp-analyser:8000/sse
-      - MCP_FORECASTER_URL=http://mcp-forecaster:8000/sse
-      - MCP_CATEGORIZER_URL=http://mcp-categorizer:8000/sse
-      - MCP_MEMORY_URL=http://mcp-memory:8000/sse
-      - MCP_HEALTH_URL=http://mcp-health:8000/sse
-    volumes:
-      - ./memory_store:/app/memory_store
-    restart: always
 
 volumes:
   postgres_data:

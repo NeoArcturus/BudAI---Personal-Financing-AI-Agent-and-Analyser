@@ -76,7 +76,7 @@ export default function TransactionsClient({
       <div className="flex items-center justify-between mb-10 shrink-0">
         <div>
           <h2 className="text-foreground text-3xl font-black tracking-tighter uppercase italic">
-            Ledger <span className="font-normal not-italic">Transactions</span>
+            Transaction <span className="font-normal not-italic">Ledger</span>
           </h2>
           <p className="text-[9px] font-black text-foreground/30 uppercase tracking-[0.4em] mt-1.5">
             Your transaction history
@@ -87,7 +87,7 @@ export default function TransactionsClient({
             <SearchField.Group className="flex flex-row border-[0.5px] rounded-xl py-2 px-4 justify-center items-center bg-white/5 border-white/10 hover:border-primary/50 transition-all shadow-inner">
               <SearchField.SearchIcon className="text-foreground/30" />
               <SearchField.Input
-                placeholder="Search intelligence..."
+                placeholder="Search transactions..."
                 className="w-75 border-none outline-none ring-0 focus:outline-none focus:ring-0 px-3 text-[11px] font-medium tracking-wide placeholder:text-foreground/20"
               />
             </SearchField.Group>
@@ -97,7 +97,7 @@ export default function TransactionsClient({
               placement="top"
               className="bg-black border border-white/10 text-xs"
             >
-              Retrain AI Model
+              Update Categorization
             </Tooltip.Content>
             <Button
               isIconOnly

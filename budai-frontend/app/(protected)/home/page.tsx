@@ -19,10 +19,5 @@ export default async function HomePage() {
     financialNews: <FinancialNewsWidget />,
   };
 
-  return (
-    <DashboardClient
-      widgetsMap={widgetsMap}
-      ticker={<MarketTicker />}
-    />
-  );
+  return <DashboardClient widgetsMap={widgetsMap} ticker={<MarketTicker />} />;
 }

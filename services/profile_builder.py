@@ -49,12 +49,11 @@ class ProfileBuilder:
             outflow = df_90[df_90['amount'] < 0]['amount'].sum()
             net_cash_flow = inflow + outflow
 
-            # 3. Detect upcoming expenses using the pre-fetched data
             logger.debug("Detecting upcoming expenses (Zero DB hit)")
             forecaster = ForecasterAgent()
-            upcoming_bills = forecaster.detect_upcoming_expenses(self.user_uuid, df_input=df)
+            _, timeline = forecaster.detect_upcoming_expenses(self.user_uuid, df_input=df)
             upcoming_str = ", ".join(
-                [f"{b['merchant']}: £{abs(b['amount']):.2f} ({b['days_until']} days)" for b in upcoming_bills])
+                [f"{b['merchant']}: £{abs(b['amount']):.2f} (in {b['day']} days)" for b in timeline])
 
             # 4. Top metrics analysis
             df_out = df[df['amount'] < 0].copy()
@@ -66,20 +65,17 @@ class ProfileBuilder:
             vol_str = ", ".join([f"{k}: £{v:.2f}" for k, v in top_merchants_vol.items()])
             cat_str = ", ".join([f"{k}: £{v:.2f}" for k, v in top_categories.items()])
 
-            # 5. Network-based Semantic Memory (Offload from API process)
             logger.debug("Offloading semantic memory lookup to microservice")
             bridge = MCPBridge()
-            memory_url = os.getenv("MCP_MEMORY_URL", "http://mcp-memory:8000/sse")
             try:
-                rag_str = await bridge.call_sse_tool(
-                    memory_url, 
-                    "get_seasonal_behavior_context", 
+                rag_str = await bridge.call_iii_tool(
+                    "memory",
+                    "get_seasonal_behavior_context",
                     {"user_uuid": self.user_uuid}
                 )
             except Exception as e:
                 logger.warning(f"Microservice Memory access failed: {e}")
                 rag_str = "Behavioral context temporarily unavailable."
-
             profile = f"""
             [Tier 1 - Liquidity]
             Live Total Balance: £{total_balance:.2f}

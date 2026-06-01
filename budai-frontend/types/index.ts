@@ -62,7 +62,8 @@ export interface ChartConfig {
 }
 
 export interface ToolParameters {
-  bank_name_or_id: string;
+  bank_name_or_id?: string;
+  account_ids?: string[];
   from_date?: string;
   to_date?: string;
   days?: number;

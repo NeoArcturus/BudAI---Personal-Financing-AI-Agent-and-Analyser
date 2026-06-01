@@ -9,7 +9,7 @@ from services.mcp_tools.analyser_tools import (
 )
 from services.mcp_tools.health_tools import (
     analyze_critical_survival_metrics, analyze_wealth_acceleration_metrics,
-    plot_health_radar
+    plot_health_radar, get_financial_health_metrics
 )
 from fastapi import APIRouter, Depends, HTTPException
 import time
@@ -45,7 +45,8 @@ TOOL_MAPPING = {
     "analyze_critical_survival_metrics": analyze_critical_survival_metrics,
     "analyze_wealth_acceleration_metrics": analyze_wealth_acceleration_metrics,
     "plot_cash_flow_mixed": plot_cash_flow_mixed,
-    "plot_health_radar": plot_health_radar
+    "plot_health_radar": plot_health_radar,
+    "get_financial_health_metrics": get_financial_health_metrics
 }
 
 
@@ -55,7 +56,9 @@ async def execute_tool(request: MediaExecuteRequest, current_user=Depends(get_cu
     tool_name = request.tool_name
     params = request.parameters
     user_uuid = current_user.user_uuid
-    bank_name_or_id = params.get("bank_name_or_id", "")
+    
+    bank_name_or_id = params.get("bank_name_or_id")
+    
     if isinstance(bank_name_or_id, str) and bank_name_or_id.startswith("CACHE_"):
         with SessionLocal() as session:
             row = session.execute(
@@ -75,18 +78,28 @@ async def execute_tool(request: MediaExecuteRequest, current_user=Depends(get_cu
                     },
                     "data": chart_data
                 }
+    
     if tool_name not in TOOL_MAPPING:
         raise HTTPException(status_code=404, detail="Tool not found.")
+        
     try:
         params["user_uuid"] = user_uuid
+        
+        if "account_ids" not in params:
+            if bank_name_or_id:
+                params["account_ids"] = [bank_name_or_id]
+            else:
+                params["account_ids"] = ["ALL"]
+        
         tool_obj = TOOL_MAPPING[tool_name]
-        if hasattr(tool_obj, "args"):
-            if "from_date" in tool_obj.args and "from_date" not in params:
-                params["from_date"] = (
-                    datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
-            if "to_date" in tool_obj.args and "to_date" not in params:
-                params["to_date"] = datetime.now().strftime("%Y-%m-%d")
+        
+        if "from_date" not in params:
+            params["from_date"] = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+        if "to_date" not in params:
+            params["to_date"] = datetime.now().strftime("%Y-%m-%d")
+            
         result_str = tool_obj.invoke(params)
+        
         match = re.search(r'\[TRIGGER_[A-Z_]+:([^:\]]+)', str(result_str))
         if match:
             cache_id = match.group(1)
@@ -97,28 +110,27 @@ async def execute_tool(request: MediaExecuteRequest, current_user=Depends(get_cu
                 ).fetchone()
                 if row:
                     chart_data = json.loads(row[0])
-                    execution_time = int((time.time() - start_time) * 1000)
                     return {
                         "status": "success",
                         "metadata": {
-                            "execution_time_ms": execution_time,
+                            "execution_time_ms": int((time.time() - start_time) * 1000),
                             "tool_executed": tool_name,
                             "query_type": "DYNAMIC_GENERATION",
-                            "resolved_accounts": [{"bank_name": bank_name_or_id}]
+                            "resolved_accounts": [{"bank_name": bank_name_or_id or "Multiple"}]
                         },
                         "data": chart_data
                     }
+        
         return {
             "status": "success",
             "metadata": {
                 "execution_time_ms": int((time.time() - start_time) * 1000),
                 "tool_executed": tool_name,
                 "query_type": "TEXT_FALLBACK",
-                "resolved_accounts": [{"bank_name": bank_name_or_id}]
+                "resolved_accounts": [{"bank_name": bank_name_or_id or "Multiple"}]
             },
             "data": result_str
         }
     except Exception as e:
-        logger.error(
-            f"Error executing tool {tool_name} for user {user_uuid}: {e}")
+        logger.error(f"Error executing tool {tool_name} for user {user_uuid}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

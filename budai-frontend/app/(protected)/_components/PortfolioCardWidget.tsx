@@ -4,10 +4,14 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight, CreditCard, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBudAI } from "@/app/context/AppContext";
-import { Card, Button, Avatar, Skeleton } from "@heroui/react";
+import { Card, Button, Avatar, Skeleton, CloseButton } from "@heroui/react";
 import { apiFetch } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { WidgetContext } from "../home/DashboardClient";
 
 export default function PortfolioCardWidget() {
+  const router = useRouter();
+  const { onRemove } = React.useContext(WidgetContext);
   const { accounts } = useBudAI();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -64,7 +68,7 @@ export default function PortfolioCardWidget() {
       if (res.ok) {
         const data = await res.json();
         if (data.auth_url) {
-          window.location.href = data.auth_url;
+          router.push(data.auth_url);
         }
       }
     } catch (error) {
@@ -142,15 +146,21 @@ export default function PortfolioCardWidget() {
           <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
             Your Bank Accounts
           </h3>
-          <Button
-            isIconOnly
-            variant="ghost"
-            onPress={handleConnectAccount}
-            isPending={isConnecting}
-            className="flex items-center justify-center p-0 text-foreground/30 hover:text-primary transition-colors border-none bg-transparent"
-          >
-            <Plus size={16} />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              isIconOnly
+              variant="ghost"
+              onPress={handleConnectAccount}
+              isPending={isConnecting}
+              className="flex items-center justify-center p-0 text-foreground/30 hover:text-primary transition-colors border-none bg-transparent"
+            >
+              <Plus size={16} />
+            </Button>
+            <CloseButton
+              onPress={onRemove}
+              className="text-foreground/20 hover:text-foreground transition-all rounded-md"
+            />
+          </div>
         </Card.Header>
 
         <Card.Content className="relative flex-1 w-full p-8 pt-0 flex flex-col h-full overflow-hidden">
@@ -203,7 +213,7 @@ export default function PortfolioCardWidget() {
     <Card className="w-full h-full liquid-glass rounded-xl flex flex-col overflow-hidden">
       <Card.Header className="flex justify-between items-center p-8 pb-4 shrink-0 z-20">
         <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
-          Neural Assets
+          Your Assets
         </h3>
         <div className="flex items-center gap-4">
           <Button
@@ -228,6 +238,10 @@ export default function PortfolioCardWidget() {
           >
             <Plus size={16} />
           </Button>
+          <CloseButton
+            onPress={onRemove}
+            className="text-foreground/20 hover:text-foreground transition-all rounded-md"
+          />
         </div>
       </Card.Header>
 
@@ -284,7 +298,7 @@ export default function PortfolioCardWidget() {
                   </div>
 
                   <span className="text-[9px] font-black text-foreground/40 uppercase tracking-[0.3em] mb-1 z-10">
-                    Capital Reserve
+                    Current Balance
                   </span>
                   <h2 className="text-3xl font-normal text-foreground tracking-tighter z-10 font-mono">
                     £

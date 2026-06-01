@@ -1,4 +1,3 @@
-# Core API & Orchestration
 fastapi
 uvicorn[standard]
 jinja2
@@ -12,31 +11,26 @@ python-dotenv
 pydantic
 apscheduler
 
-# Database
 sqlalchemy
 psycopg2-binary
 alembic
 
-# Task Queuing
-celery
-redis
+iii-sdk
 
-# AI/LLM Orchestration
 mcp
 langchain
 langchain-core
 langchain-classic
 langgraph
 langchain-ollama
+langchain-openai
 langchain-mcp-adapters
 
-# Shared Processing & Utilities
 pandas
 numpy
 diskcache
 joblib
 
-# Domain Specific (Included in API/Worker for safety)
 yfinance
 newsdataapi
 scikit-learn

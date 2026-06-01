@@ -16,14 +16,14 @@ import {
   Calendar,
   Modal,
   Badge,
-  CloseButton,
   Skeleton,
+  CloseButton,
 } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { parseDate, CalendarDate } from "@internationalized/date";
-import { useTransactions, useAdvisorInsight } from "@/lib/hooks";
+import { useTransactions, useAdvisorInsight, usePersistedState } from "@/lib/hooks";
 import WidgetFlipCard from "./WidgetFlipCard";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,8 +47,6 @@ const STANDARD_CATEGORIES = [
   "Income",
 ];
 
-const CONSOLIDATED_ID = "VIRTUAL_ALL_ACCOUNTS";
-
 export default function LedgerTableWidgetClient({
   initialData,
 }: LedgerTableWidgetProps) {
@@ -57,18 +55,10 @@ export default function LedgerTableWidgetClient({
   const queryClient = useQueryClient();
   const { accounts, createNewSession } = useBudAI();
 
-  const allAccountIds = useMemo(
-    () => accounts.map((a) => a.account_id).join(","),
-    [accounts],
+  const [selectedAccountId, setSelectedAccountId] = usePersistedState<string>(
+    "ledger_account",
+    accounts[0]?.account_id || "",
   );
-
-  const [selectedAccountId, setSelectedAccountId] =
-    useState<string>(CONSOLIDATED_ID);
-
-  const apiAccountId = useMemo(() => {
-    if (selectedAccountId === CONSOLIDATED_ID) return allAccountIds;
-    return selectedAccountId;
-  }, [selectedAccountId, allAccountIds]);
 
   const [fromDate, setFromDate] = useState<CalendarDate | null>(
     parseDate(
@@ -86,7 +76,7 @@ export default function LedgerTableWidgetClient({
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
 
   const { data: transactions = [], isLoading } = useTransactions(
-    apiAccountId,
+    selectedAccountId,
     fromDate?.toString(),
     toDate?.toString(),
     initialData,
@@ -165,7 +155,7 @@ export default function LedgerTableWidgetClient({
   const handleDiscuss = () => {
     const sessionId = createNewSession("Transaction Audit Session", {
       type: "ledger_audit",
-      accountId: apiAccountId,
+      accountId: selectedAccountId,
       data: transactions.slice(0, 15),
     });
     router.push(`/advisor?session=${sessionId}`);
@@ -230,12 +220,10 @@ export default function LedgerTableWidgetClient({
             <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
               Transaction history
             </h3>
-            {onRemove && (
-              <CloseButton
-                onPress={onRemove}
-                className="text-foreground/20 hover:text-foreground transition-all rounded-md"
-              />
-            )}
+            <CloseButton
+              onPress={onRemove}
+              className="text-foreground/20 hover:text-foreground transition-all rounded-md"
+            />
           </div>
 
           <div className="flex flex-wrap sm:flex-nowrap items-center justify-start gap-2 w-full pointer-events-auto">
@@ -407,9 +395,7 @@ export default function LedgerTableWidgetClient({
                             )}
                           </Badge.Anchor>
                           <Description className="text-[9px] text-foreground/30 font-mono tracking-[0.2em] pointer-events-none mt-1.5 uppercase">
-                            {acc.account_id === CONSOLIDATED_ID
-                              ? acc.account_number
-                              : `Account No: *${acc.account_number?.slice(-4) || "0000"}`}
+                            Account No: *{acc.account_number?.slice(-4) || "0000"}
                           </Description>
                         </div>
                       </Dropdown.Item>
@@ -425,10 +411,22 @@ export default function LedgerTableWidgetClient({
           {isLoading ? (
             <div className="w-full h-full px-6 py-4 space-y-4 overflow-hidden">
               <div className="flex items-center justify-between border-b border-border pb-4">
-                <Skeleton className="h-3 w-1/4 rounded bg-secondary" />
-                <Skeleton className="h-3 w-1/6 rounded bg-secondary" />
-                <Skeleton className="h-3 w-1/6 rounded bg-secondary" />
-                <Skeleton className="h-3 w-1/6 rounded bg-secondary" />
+                <Skeleton
+                  animationType="shimmer"
+                  className="h-3 w-1/4 rounded bg-secondary"
+                />
+                <Skeleton
+                  animationType="shimmer"
+                  className="h-3 w-1/6 rounded bg-secondary"
+                />
+                <Skeleton
+                  animationType="shimmer"
+                  className="h-3 w-1/6 rounded bg-secondary"
+                />
+                <Skeleton
+                  animationType="shimmer"
+                  className="h-3 w-1/6 rounded bg-secondary"
+                />
               </div>
               {Array.from({ length: 8 }).map((_, i) => (
                 <div
@@ -436,12 +434,27 @@ export default function LedgerTableWidgetClient({
                   className="flex items-center justify-between gap-4 py-2"
                 >
                   <div className="flex items-center gap-4 w-1/4 sm:w-[40%]">
-                    <Skeleton className="w-9 h-9 rounded-full shrink-0 bg-secondary" />
-                    <Skeleton className="h-4 w-full rounded bg-secondary hidden sm:block" />
+                    <Skeleton
+                      animationType="shimmer"
+                      className="w-9 h-9 rounded-full shrink-0 bg-secondary"
+                    />
+                    <Skeleton
+                      animationType="shimmer"
+                      className="h-4 w-full rounded bg-secondary hidden sm:block"
+                    />
                   </div>
-                  <Skeleton className="h-4 w-[30%] sm:w-[15%] rounded bg-secondary" />
-                  <Skeleton className="h-4 w-[25%] sm:w-[15%] rounded bg-secondary" />
-                  <Skeleton className="h-6 w-[25%] sm:w-[20%] rounded-md bg-secondary" />
+                  <Skeleton
+                    animationType="shimmer"
+                    className="h-4 w-[30%] sm:w-[15%] rounded bg-secondary"
+                  />
+                  <Skeleton
+                    animationType="shimmer"
+                    className="h-4 w-[25%] sm:w-[15%] rounded bg-secondary"
+                  />
+                  <Skeleton
+                    animationType="shimmer"
+                    className="h-6 w-[25%] sm:w-[20%] rounded-md bg-secondary"
+                  />
                 </div>
               ))}
             </div>

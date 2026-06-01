@@ -1,5 +1,5 @@
-# Categorizer specialized dependencies
-mcp
+iii-sdk
+cryptography
 sqlalchemy
 psycopg2-binary
 pandas

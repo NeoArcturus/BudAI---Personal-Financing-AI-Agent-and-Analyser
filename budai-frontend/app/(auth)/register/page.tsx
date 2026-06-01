@@ -73,7 +73,7 @@ export default function RegisterPage() {
           >
             <TextField className="w-full" name="Email">
               <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">
-                Security Identity
+                Email Address
               </Label>
               <InputGroup
                 className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary/50 transition-all w-full border border-white/10 h-14"
@@ -95,7 +95,7 @@ export default function RegisterPage() {
 
             <TextField className="w-full" name="Password">
               <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">
-                Encryption Key
+                Password
               </Label>
               <InputGroup
                 className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary/50 transition-all w-full border border-white/10 h-14"
@@ -133,7 +133,7 @@ export default function RegisterPage() {
               className="w-full mt-4 bg-primary text-primary-foreground font-black uppercase tracking-widest rounded-2xl h-14 hover:bg-primary/80 cursor-pointer transition-all flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(0,127,255,0.3)] border-none"
             >
               {isLoading && <Loader2 className="animate-spin" size={18} />}
-              Initialize Node
+              Get Started
             </Button>
           </Form>
 
@@ -143,7 +143,7 @@ export default function RegisterPage() {
               href="/login"
               className="text-primary hover:text-primary/80 transition-colors border-none font-black"
             >
-              Authorize Access
+              Log In
             </Link>
           </Card.Footer>
         </Card.Content>

@@ -139,8 +139,8 @@ class MemoryService:
 
     def get_seasonal_context(self, user_uuid, limit=5):
         logger.info(f"Getting seasonal context for user {user_uuid}")
-        import pandas as pd
-        now = pd.Timestamp.utcnow()
+        from datetime import datetime
+        now = datetime.now()
         month_name = now.strftime('%B')
         
         query = f"Spending patterns in {month_name}"

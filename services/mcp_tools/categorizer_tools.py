@@ -11,22 +11,19 @@ from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
 @tool(args_schema=ClassifyFinancialDataInput)
-def classify_financial_data(user_uuid: str, from_date: str, to_date: str, bank_name_or_id: str) -> str:
+def classify_financial_data(user_uuid: str, from_date: str, to_date: str, account_ids: list[str]) -> str:
     """Categorize and classify the user's raw bank transactions into distinct spending categories."""
-    logger.info(f"Classifying financial data for user: {user_uuid} from {from_date} to {to_date}")
     try:
-        accounts, suffix = _parse_accounts(bank_name_or_id, user_uuid)
+        accounts, suffix = _parse_accounts(account_ids, user_uuid)
         from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
         combined_df = pd.DataFrame()
         for acc in accounts:
-            logger.debug(f"Categorizing transactions for account: {acc}")
             df = agent.execute_cycle(acc, user_uuid, from_date, to_date)
             if df is not None and not df.empty:
                 df['bank_name'] = acc
                 combined_df = pd.concat([combined_df, df], ignore_index=True)
         if combined_df.empty:
-            logger.warning("No transactions found for classification.")
             return "No transactions found."
         payload = []
         for acc in accounts:
@@ -44,21 +41,18 @@ def classify_financial_data(user_uuid: str, from_date: str, to_date: str, bank_n
             bank_data.sort(key=lambda x: x["Total_Amount"], reverse=True)
             payload.append({"bank_name": acc, "data": bank_data})
         cache_id = _cache_chart_data(payload)
-        logger.info(f"Classification completed for {len(combined_df)} transactions.")
-        return f"Classified {len(combined_df)} transactions. [TRIGGER_CATEGORIZED_CHART:{cache_id}:{from_date}|{to_date}]"
+        return f"Classified {len(combined_df)} transactions. [TRIGGER_CATEGORIZED_CHART:{cache_id}]"
     except Exception as e:
-        logger.error(f"Classification failed: {e}", exc_info=True)
+        logger.error(f"Error: {e}")
         return f"Error: {str(e)}"
 
 @tool(args_schema=CreateBargraphChartInput)
-def create_bargraph_chart_and_save(user_uuid: str, bank_name_or_id: str) -> str:
+def create_bargraph_chart_and_save(user_uuid: str, account_ids: list[str]) -> str:
     """Generate a visual distribution chart of the user's categorized spending."""
-    logger.info(f"Generating bar graph chart for user: {user_uuid}")
     try:
-        accounts, suffix = _parse_accounts(bank_name_or_id, user_uuid)
+        accounts, suffix = _parse_accounts(account_ids, user_uuid)
         df = _get_combined_categorized_data(accounts, suffix, user_uuid)
         if df.empty:
-            logger.warning("No data found to generate bar graph.")
             return "No data to chart."
         payload = []
         cat_key = 'category' if 'category' in df.columns else 'Category'
@@ -76,21 +70,18 @@ def create_bargraph_chart_and_save(user_uuid: str, bank_name_or_id: str) -> str:
             bank_data.sort(key=lambda x: x["Total_Amount"], reverse=True)
             payload.append({"bank_name": acc, "data": bank_data})
         cache_id = _cache_chart_data(payload)
-        logger.info(f"Bar graph chart generated with cache ID: {cache_id}")
         return f"Chart generated. [TRIGGER_CATEGORIZED_CHART:{cache_id}]"
     except Exception as e:
-        logger.error(f"Failed to generate bar graph: {e}", exc_info=True)
+        logger.error(f"Error: {e}")
         return f"Error: {str(e)}"
 
 @tool(args_schema=CreatePieChartInput)
-def create_pie_chart_and_save(user_uuid: str, bank_name_or_id: str) -> str:
+def create_pie_chart_and_save(user_uuid: str, account_ids: list[str]) -> str:
     """Generate a visual pie/doughnut chart representing the proportional distribution of the user's categorized spending."""
-    logger.info(f"Generating pie chart for user: {user_uuid}")
     try:
-        accounts, suffix = _parse_accounts(bank_name_or_id, user_uuid)
+        accounts, suffix = _parse_accounts(account_ids, user_uuid)
         df = _get_combined_categorized_data(accounts, suffix, user_uuid)
         if df.empty:
-            logger.warning("No data found to generate pie chart.")
             return "No data to chart."
         payload = []
         cat_key = 'category' if 'category' in df.columns else 'Category'
@@ -108,29 +99,26 @@ def create_pie_chart_and_save(user_uuid: str, bank_name_or_id: str) -> str:
             bank_data.sort(key=lambda x: x["Total_Amount"], reverse=True)
             payload.append({"bank_name": acc, "data": bank_data})
         cache_id = _cache_chart_data(payload)
-        logger.info(f"Pie chart generated with cache ID: {cache_id}")
         return f"Chart generated. [TRIGGER_CATEGORIZED_DOUGHNUT_CHART:{cache_id}]"
     except Exception as e:
-        logger.error(f"Failed to generate pie chart: {e}", exc_info=True)
+        logger.error(f"Error: {e}")
         return f"Error: {str(e)}"
 
 @tool(args_schema=UpdateTransactionCategoryInput)
-def update_transaction_category(user_uuid: str, transaction_uuid: str, corrected_label: str) -> str:
+def update_transaction_category(user_uuid: str, transaction_uuid: str, corrected_category: str) -> str:
     """Manually update the category of a specific transaction and trigger feedback learning."""
-    logger.info(f"Updating transaction {transaction_uuid} to {corrected_label} for user: {user_uuid}")
     try:
         from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
-        agent.save_manual_label(user_uuid, transaction_uuid, corrected_label)
-        return f"Successfully updated transaction {transaction_uuid} to {corrected_label}."
+        agent.save_manual_label(user_uuid, transaction_uuid, corrected_category)
+        return f"Successfully updated transaction {transaction_uuid} to {corrected_category}."
     except Exception as e:
-        logger.error(f"Failed to update transaction category: {e}", exc_info=True)
-        return f"Error updating transaction: {str(e)}"
+        logger.error(f"Error: {e}")
+        return f"Error updating: {str(e)}"
 
 @tool(args_schema=RetrainCategorizerInput)
 def retrain_categorization_model(user_uuid: str) -> str:
     """Trigger the machine learning model to retrain based on all corrected manual feedback provided so far."""
-    logger.info(f"Retraining categorization model for user: {user_uuid}")
     try:
         from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
@@ -138,7 +126,7 @@ def retrain_categorization_model(user_uuid: str) -> str:
         if result.get("trained"):
             return f"Model successfully retrained using {result.get('samples')} samples."
         else:
-            return f"Model retraining failed or was unnecessary: {result.get('reason')}"
+            return f"Model retraining failed: {result.get('reason')}"
     except Exception as e:
-        logger.error(f"Failed to retrain categorization model: {e}", exc_info=True)
-        return f"Error retraining model: {str(e)}"
+        logger.error(f"Error: {e}")
+        return f"Error: {str(e)}"

@@ -1,16 +1,14 @@
 import re
 import asyncio
 import logging
+import os
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
-from langchain_ollama import ChatOllama
-from mcp.client.stdio import stdio_client, StdioServerParameters
-from mcp.client.sse import sse_client
-from mcp.client.session import ClientSession
-from langchain_mcp_adapters.tools import load_mcp_tools
+from langchain_openai import ChatOpenAI
 from langchain_core.callbacks import BaseCallbackHandler
-from contextlib import asynccontextmanager
+from langchain_core.tools import tool
 from services.logger_setup import get_core_logger
+from services.mcp_bridge import MCPBridge
 
 logger = get_core_logger(__name__)
 
@@ -19,110 +17,47 @@ class WorkerReasoningCallback(BaseCallbackHandler):
         try:
             content = response.generations[0][0].message.content
             if content:
-                match = re.search(r"<think>(.*?)</think>",
-                                  content, flags=re.DOTALL)
-                if match:
-                    logger.info(
-                        f"Worker Reasoning:\n{match.group(1).strip()}")
-                elif content.strip():
-                    logger.info(f"Worker Thoughts:\n{content.strip()}")
-        except Exception:
-            logger.error("An error occurred in this block", exc_info=True)
-            pass
-
-@asynccontextmanager
-async def get_mcp_client(server_url: str = None):
-    import os
-    if server_url:
-        logger.info(f"Connecting to MCP server via SSE: {server_url}")
-        async with sse_client(server_url) as (read, write):
-            async with ClientSession(read, write) as session:
-                yield session
-    else:
-        logger.info("Spawning local MCP server via stdio")
-        env = os.environ.copy()
-        env["PYTHONWARNINGS"] = "ignore"
-        server_params = StdioServerParameters(
-            command="python",
-            args=["-m", "mcp_servers.health_server"],
-            env=env
-        )
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                yield session
+                match = re.search(r"<think>(.*?)</think>", content, flags=re.DOTALL)
+                if match: logger.info(f"Worker Reasoning: {match.group(1).strip()}")
+                elif content.strip(): logger.info(f"Worker Thoughts: {content.strip()}")
+        except Exception: pass
 
 async def run_health_worker(state):
-    logger.info(f"Received task: {state['user_input']}")
-    import os
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    llm = ChatOllama(
-        model="qwen3:4b",
-        base_url=base_url,
-        temperature=0,
-        keep_alive=300,
-        callbacks=[WorkerReasoningCallback()]
-    )
-    
-    import os
-    server_url = os.getenv("MCP_HEALTH_URL")
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
+    if not base_url.endswith("/v1"): base_url = f"{base_url}/v1"
+    llm = ChatOpenAI(model="mlx-community/Qwen2.5-7B-Instruct-4bit", base_url=base_url, api_key="budai-local", temperature=0, callbacks=[WorkerReasoningCallback()])
+    bridge = MCPBridge()
 
-    async with get_mcp_client(server_url) as session:
-        await session.initialize()
-        tools = await load_mcp_tools(session)
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a robotic data routing node.
-             AVAILABLE TOOLS: analyze_wealth_acceleration_metrics, analyze_critical_survival_metrics, plot_health_radar
-             - Wealth/Health: Use `analyze_wealth_acceleration_metrics` or `plot_health_radar` for general financial health.
-             - Survival/Debt: Use `analyze_critical_survival_metrics` for emergency funds, runway, or debt repayment questions.
-             RULES:
-             0. You MUST think step-by-step. Wrap your internal reasoning inside <think>...</think> tags before taking any action.
-             1. You MUST use a tool to answer the user's query.
-             2. Output ONLY the tool call. Do not explain.
-             3. Once the tool returns data, return that exact data verbatim as your final answer. Do not add conversational filler.
-             4. DEFAULT TO ALL: If the user does not type a specific bank name in their message, you MUST pass "ALL" as the bank_name_or_id parameter.
-             5. SINGLE BANK: 'Plot my Wise expenses' -> You MUST pass "Wise".
-             6. MULTIPLE BANKS: 'Chart my past expenses for Wise and Barclays' -> You MUST pass "Wise, Barclays".
-             7. ACTIVE ACCOUNT OVERRIDE: ONLY use the "Active Account ID in UI" if the user explicitly types "this account" or "current account".
-             """),
-            ("human",
-             "User Query: {input}\nUser ID: {user_uuid}\nActive Account ID in UI: {active_account_id}"),
-            ("placeholder", "{agent_scratchpad}")
-        ])
-        agent = create_tool_calling_agent(llm, tools, prompt)
-        agent_executor = AgentExecutor(
-            agent=agent,
-            tools=tools,
-            verbose=False,
-            handle_parsing_errors=True,
-            return_intermediate_steps=True
-        )
-        result = await agent_executor.ainvoke({
-            "input": state['user_input'],
-            "user_uuid": state['user_uuid'],
-            "active_account_id": state['active_account_id']
-        })
-        output = ""
-        if "intermediate_steps" in result and len(result["intermediate_steps"]) > 0:
-            action, observation = result["intermediate_steps"][-1]
-            output = str(observation)
-        else:
-            output = result.get("output", "")
-        cache_id = None
-        chart_type = None
-        if output:
-            match = re.search(r'\[TRIGGER_([A-Z_]+):([^\]]+)\]', output)
-            if match:
-                chart_type = match.group(1)
-                cache_id = match.group(2)
-                output = re.sub(
-                    r'\[TRIGGER_[A-Z_]+:[^\]]+\]', '', output).strip()
-                logger.info(
-                    f"Successfully extracted Cache ID: {cache_id}")
-            else:
-                logger.info(
-                    f"No cache triggers found in tool output.")
-        return {
-            "worker_summary": output,
-            "cache_id": cache_id,
-            "chart_type": chart_type
-        }
+    @tool
+    async def analyze_wealth_acceleration_metrics_wrapper() -> str:
+        """Analyze wealth and growth."""
+        return await bridge.call_iii_tool("health", "analyze_wealth_acceleration_metrics", {"user_uuid": state['user_uuid']})
+
+    @tool
+    async def analyze_critical_survival_metrics_wrapper() -> str:
+        """Analyze emergency funds and runway."""
+        return await bridge.call_iii_tool("health", "analyze_critical_survival_metrics", {"user_uuid": state['user_uuid']})
+
+    @tool
+    async def plot_health_radar_wrapper() -> str:
+        """Generate a visual financial health radar."""
+        return await bridge.call_iii_tool("health", "plot_health_radar", {"user_uuid": state['user_uuid']})
+
+    tools = [analyze_wealth_acceleration_metrics_wrapper, analyze_critical_survival_metrics_wrapper, plot_health_radar_wrapper]
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are a robotic data routing node for health. Think step-by-step."),
+        ("human", "User Query: {input}\nUser ID: {user_uuid}"),
+        ("placeholder", "{agent_scratchpad}")
+    ])
+    agent = create_tool_calling_agent(llm, tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=False, handle_parsing_errors=True, return_intermediate_steps=True)
+    result = await agent_executor.ainvoke({"input": state['user_input'], "user_uuid": state['user_uuid']})
+    output = str(result["intermediate_steps"][-1][1]) if "intermediate_steps" in result and result["intermediate_steps"] else result.get("output", "")
+    cache_id, chart_type = None, None
+    if output:
+        match = re.search(r'\[TRIGGER_([A-Z_]+):([^\]]+)\]', output)
+        if match:
+            chart_type = match.group(1)
+            cache_id = match.group(2).split(':')[0]
+            output = re.sub(r'\[TRIGGER_[A-Z_]+:[^\]]+\]', '', output).strip()
+    return {"worker_summary": output, "cache_id": cache_id, "chart_type": chart_type}
