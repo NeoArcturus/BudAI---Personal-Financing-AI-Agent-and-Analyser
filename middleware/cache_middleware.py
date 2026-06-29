@@ -12,7 +12,7 @@ class StripCacheControlMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         logger.debug(f"Intercepting request: {request.url.path}")
         
-        # Modify the ASGI scope directly to remove cache-bypassing headers
+
         headers = request.scope.get("headers", [])
         new_headers = [
             (k, v) for k, v in headers 

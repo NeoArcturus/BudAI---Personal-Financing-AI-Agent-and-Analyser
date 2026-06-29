@@ -15,7 +15,6 @@ sqlalchemy
 psycopg2-binary
 alembic
 
-iii-sdk
 
 mcp
 langchain
@@ -40,3 +39,6 @@ sentence-transformers
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch
 torchvision
+redis
+arize-phoenix
+openinference-instrumentation-langchain

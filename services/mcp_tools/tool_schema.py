@@ -38,7 +38,7 @@ class ClassifyFinancialDataInput(BaseToolInput):
     user_uuid: str = Field(..., description="The exact user_uuid string.")
 
 class FindTotalSpentInput(BaseToolInput):
-    category_name: str = Field(..., description="Category name or 'all'.")
+    category: str = Field(..., description="Category name or 'all'.")
     account_ids: List[str] = Field(..., description="List of account UUIDs or names.")
     user_uuid: str = Field(..., description="The exact user_uuid string.")
 

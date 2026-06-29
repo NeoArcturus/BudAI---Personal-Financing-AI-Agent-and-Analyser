@@ -20,7 +20,7 @@ import { useBudAI } from "@/app/context/AppContext";
 import { Account, BankChartData, Transaction } from "@/types";
 import { today, getLocalTimeZone, DateValue } from "@internationalized/date";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
-import { useTransactions, useAdvisorInsight, usePersistedState } from "@/lib/hooks";
+import { useTransactions, usePersistedState } from "@/lib/hooks";
 import WidgetFlipCard from "./WidgetFlipCard";
 import { useRouter } from "next/navigation";
 import { WidgetContext } from "../home/DashboardClient";
@@ -137,11 +137,6 @@ export default function ExpenseDistributionWidgetClient({
     toStr,
   ]);
 
-  const { data: insight, isLoading: isAnalyzing } = useAdvisorInsight(
-    "expenseDistribution",
-    aggregatedData,
-  );
-
   const handleDiscuss = () => {
     const sessionId = createNewSession("Expense Distribution Analysis", {
       type: "expense_distribution",
@@ -160,8 +155,8 @@ export default function ExpenseDistributionWidgetClient({
 
   return (
     <WidgetFlipCard
-      insight={insight}
-      isLoading={isAnalyzing}
+      insight={undefined}
+      isLoading={false}
       onDiscuss={handleDiscuss}
     >
       <Card className="liquid-glass border-none h-full rounded-xl flex flex-col relative overflow-hidden">

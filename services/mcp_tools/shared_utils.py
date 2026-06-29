@@ -29,7 +29,7 @@ class ClassifyFinancialDataInput(BaseModel):
 
 class FindTotalSpentInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
-    category_name: str = Field(...)
+    category: str = Field(...)
     account_ids: List[str] = Field(...)
     from_date: str | None = Field(default=None)
     to_date: str | None = Field(default=None)
@@ -59,6 +59,18 @@ class GenerateExpenseForecastInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
     account_ids: List[str] = Field(...)
     days: int = Field(default=30)
+
+class ScenarioInjection(BaseModel):
+    day: int = Field(..., description="The day (from today) the event occurs.")
+    amount: float = Field(..., description="The financial impact (positive for income, negative for expense).")
+    type: str = Field(default="one-off", description="Type of injection: 'one-off' or 'recurring_monthly'.")
+    description: str = Field(default="Scenario Event", description="A short description of the event.")
+
+class GenerateHypotheticalScenarioInput(BaseModel):
+    user_uuid: str = Field(..., description="The user UUID.")
+    account_ids: List[str] = Field(..., description="List of account IDs or bank names.")
+    days: int = Field(default=30, description="Forecast horizon in days.")
+    injections: List[ScenarioInjection] = Field(..., description="List of hypothetical financial events to inject into the forecast.")
 
 class AnalyzeCriticalSurvivalMetricsInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
@@ -164,4 +176,3 @@ def _get_combined_categorized_data(accounts, suffix, user_uuid, from_date=None, 
     except Exception as e:
         logger.error(f"DB query failed: {e}")
     return combined_df
-

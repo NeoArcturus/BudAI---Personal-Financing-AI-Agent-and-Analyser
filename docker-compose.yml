@@ -17,18 +17,17 @@ services:
       timeout: 5s
       retries: 5
 
-  # iii Engine
-  iii-engine:
-    image: iiidev/iii:latest
-    container_name: iii-engine
-    command: ["--use-default-config"]
+  # Redis for Background Tasks
+  budai-redis:
+    image: redis:7-alpine
+    container_name: budai-redis
     ports:
-      - "3111:3111"
-      - "3112:3112"
-      - "49134:49134"
-    environment:
-      - III_TELEMETRY_ENABLED=false
-    restart: always
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # Main API Orchestrator
   budai-api:
@@ -39,12 +38,13 @@ services:
     depends_on:
       budai-db:
         condition: service_healthy
-      iii-engine:
-        condition: service_started
+      budai-redis:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
+      - REDIS_URL=redis://budai-redis:6379/0
       - OLLAMA_BASE_URL=http://host.docker.internal:8000/v1
       - VLLM_SUMMARY_URL=http://host.docker.internal:8000/v1
       - NEWSDATA_API_KEY=${NEWSDATA_API_KEY}
@@ -54,137 +54,10 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
-      - III_ENGINE_URL=ws://iii-engine:49134
-      - III_URL=ws://iii-engine:49134
-      - III_TELEMETRY_ENABLED=false
+      - HF_TOKEN=${HF_TOKEN}
     ports:
       - "8080:8080"
     restart: always
 
-  # MCP Service Fleet (Now iii Workers)
-  mcp-macro:
-    build:
-      context: .
-      dockerfile: Dockerfile.mcp
-      args:
-        - REQ_FILE=requirements-mcp-base.txt
-    container_name: mcp-macro
-    command: ["python", "-m", "mcp_servers.macro_server"]
-    environment:
-      - NEWSDATA_API_KEY=${NEWSDATA_API_KEY}
-      - III_ENGINE_URL=ws://iii-engine:49134
-      - III_URL=ws://iii-engine:49134
-      - III_TELEMETRY_ENABLED=false
-      - OTEL_SDK_DISABLED=true
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
-    depends_on:
-      budai-db:
-        condition: service_healthy
-      iii-engine:
-        condition: service_started
-
-  mcp-analyser:
-    build:
-      context: .
-      dockerfile: Dockerfile.mcp
-      args:
-        - REQ_FILE=requirements-mcp-base.txt
-    container_name: mcp-analyser
-    command: ["python", "-m", "mcp_servers.analyser_server"]
-    environment:
-      - III_ENGINE_URL=ws://iii-engine:49134
-      - III_URL=ws://iii-engine:49134
-      - III_TELEMETRY_ENABLED=false
-      - OTEL_SDK_DISABLED=true
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
-    depends_on:
-      budai-db:
-        condition: service_healthy
-      iii-engine:
-        condition: service_started
-
-  mcp-forecaster:
-    build:
-      context: .
-      dockerfile: Dockerfile.mcp
-      args:
-        - REQ_FILE=requirements-forecaster.txt
-    container_name: mcp-forecaster
-    command: ["python", "-m", "mcp_servers.forecaster_server"]
-    environment:
-      - III_ENGINE_URL=ws://iii-engine:49134
-      - III_URL=ws://iii-engine:49134
-      - III_TELEMETRY_ENABLED=false
-      - OTEL_SDK_DISABLED=true
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
-    depends_on:
-      budai-db:
-        condition: service_healthy
-      iii-engine:
-        condition: service_started
-
-  mcp-categorizer:
-    build:
-      context: .
-      dockerfile: Dockerfile.mcp
-      args:
-        - REQ_FILE=requirements-categorizer.txt
-    container_name: mcp-categorizer
-    command: ["python", "-m", "mcp_servers.categorizer_server"]
-    environment:
-      - III_ENGINE_URL=ws://iii-engine:49134
-      - III_URL=ws://iii-engine:49134
-      - III_TELEMETRY_ENABLED=false
-      - OTEL_SDK_DISABLED=true
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
-    depends_on:
-      budai-db:
-        condition: service_healthy
-      iii-engine:
-        condition: service_started
-
-  mcp-memory:
-    build:
-      context: .
-      dockerfile: Dockerfile.mcp
-      args:
-        - REQ_FILE=requirements-memory.txt
-    container_name: mcp-memory
-    command: ["python", "-m", "mcp_servers.memory_server"]
-    environment:
-      - III_ENGINE_URL=ws://iii-engine:49134
-      - III_URL=ws://iii-engine:49134
-      - III_TELEMETRY_ENABLED=false
-      - OTEL_SDK_DISABLED=true
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
-    volumes:
-      - ./memory_store:/app/memory_store
-    depends_on:
-      budai-db:
-        condition: service_healthy
-      iii-engine:
-        condition: service_started
-
-  mcp-health:
-    build:
-      context: .
-      dockerfile: Dockerfile.mcp
-      args:
-        - REQ_FILE=requirements-mcp-base.txt
-    container_name: mcp-health
-    command: ["python", "-m", "mcp_servers.health_server"]
-    environment:
-      - III_ENGINE_URL=ws://iii-engine:49134
-      - III_URL=ws://iii-engine:49134
-      - III_TELEMETRY_ENABLED=false
-      - OTEL_SDK_DISABLED=true
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
-    depends_on:
-      budai-db:
-        condition: service_healthy
-      iii-engine:
-        condition: service_started
-
 volumes:
   postgres_data:
-  memory_store:

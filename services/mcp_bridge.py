@@ -3,18 +3,16 @@ import json
 import asyncio
 from datetime import datetime
 from services.logger_setup import get_core_logger
-import iii
+import importlib
+import inspect
 
 logger = get_core_logger("mcp_bridge")
-
-III_URL = os.getenv("III_URL", "ws://iii-engine:49134")
 
 class MCPBridge:
     def __init__(self):
         self.workspace_dir = os.path.join(
             os.path.expanduser("~"), "BudAI_Workspace")
         self._ensure_directories()
-        self.iii_client = iii.register_worker(III_URL)
 
     def _ensure_directories(self):
         dirs = ["ingestion", "rules", "backups", "advisory_state", "exports"]
@@ -28,33 +26,42 @@ class MCPBridge:
             with open(rules_path, "w") as f:
                 json.dump({"custom_rules": {}}, f)
 
-    async def call_iii_tool(self, worker_name: str, function_name: str, tool_args: dict):
-        logger.info(f"--- III REQUEST: [{worker_name}::{function_name}] ---")
+    async def call_tool(self, worker_name: str, function_name: str, tool_args: dict):
+        logger.info(f"--- NATIVE TOOL REQUEST: [{worker_name}::{function_name}] ---")
         try:
-            result = await asyncio.to_thread(
-                self.iii_client.trigger,
-                {
-                    "function_id": f"{worker_name}::{function_name}",
-                    "payload": tool_args
-                }
-            )
+            module_name = f"services.mcp_tools.{worker_name}_tools"
+            module = importlib.import_module(module_name)
+            func = getattr(module, function_name)
+            
+            # Langchain @tool decorator wraps the actual function in .func
+            if hasattr(func, "func"):
+                func = func.func
+            
+            clean_args = {k: v for k, v in tool_args.items() if not k.startswith("_")}
+            
+            if asyncio.iscoroutinefunction(func):
+                result = await func(**clean_args)
+            else:
+                result = await asyncio.to_thread(func, **clean_args)
+                
             result_text = str(result)
             log_text = result_text if len(result_text) < 1000 else result_text[:1000] + "... [TRUNCATED]"
-            logger.info(f"--- III RESPONSE: [{worker_name}::{function_name}] ---")
+            logger.info(f"--- NATIVE TOOL RESPONSE: [{worker_name}::{function_name}] ---")
             logger.info(f"RESULT: {log_text}")
             return result_text
         except Exception as e:
-            logger.error(f"--- III ERROR: [{worker_name}::{function_name}] ---")
+            logger.error(f"--- NATIVE TOOL ERROR: [{worker_name}::{function_name}] ---")
             logger.error(f"EXCEPTION: {str(e)}", exc_info=True)
             raise
 
-    def call_iii_tool_sync(self, worker_name: str, function_name: str, tool_args: dict):
-        return self.iii_client.trigger(
-            {
-                "function_id": f"{worker_name}::{function_name}",
-                "payload": tool_args
-            }
-        )
+    def call_tool_sync(self, worker_name: str, function_name: str, tool_args: dict):
+        module_name = f"services.mcp_tools.{worker_name}_tools"
+        module = importlib.import_module(module_name)
+        func = getattr(module, function_name)
+        if hasattr(func, "func"):
+            func = func.func
+        clean_args = {k: v for k, v in tool_args.items() if not k.startswith("_")}
+        return func(**clean_args)
 
     def write_advisory_file(self, user_uuid: str, chart_type: str, raw_data: dict, ai_analysis: str) -> str:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

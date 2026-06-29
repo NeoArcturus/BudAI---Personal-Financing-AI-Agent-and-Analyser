@@ -6,7 +6,6 @@ import { apiFetch } from "@/lib/api";
 import { Newspaper, ExternalLink, Image as ImageIcon } from "lucide-react";
 import { Card, Skeleton, ScrollShadow, Text, Link } from "@heroui/react";
 import WidgetFlipCard from "./WidgetFlipCard";
-import { useAdvisorInsight } from "@/lib/hooks";
 import { useRouter } from "next/navigation";
 import { useBudAI } from "@/app/context/AppContext";
 import Image from "next/image";
@@ -36,18 +35,11 @@ export default function FinancialNewsWidgetClient({
     queryKey: ["market-news"],
     queryFn: async () => {
       const res = await apiFetch("/api/market/news", {}, true);
-      return res.json();
+      return (await res.json()) as { geopolitical: NewsItem[]; market: NewsItem[] };
     },
     initialData: initialNews,
     staleTime: 7200000,
   });
-
-  const { data: insight, isLoading: isAnalyzing } = useAdvisorInsight(
-    "marketNews",
-    {
-      news: JSON.stringify(newsData || {}),
-    },
-  );
 
   const handleDiscuss = () => {
     const sessionId = createNewSession(
@@ -129,8 +121,8 @@ export default function FinancialNewsWidgetClient({
 
   return (
     <WidgetFlipCard
-      insight={insight}
-      isLoading={isAnalyzing}
+      insight={undefined}
+      isLoading={false}
       isDataLoading={isNewsLoading}
       onDiscuss={handleDiscuss}
     >

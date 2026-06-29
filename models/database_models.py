@@ -5,6 +5,7 @@ from config import Base
 from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
+
 class User(Base):
     __tablename__ = "users"
     user_uuid = Column(String, primary_key=True, index=True)
@@ -15,6 +16,8 @@ class User(Base):
     accounts = relationship("Account", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
     liabilities = relationship("Liability", back_populates="user")
+
+
 class Bank(Base):
     __tablename__ = "banks"
     bank_uuid = Column(String, primary_key=True, index=True)
@@ -30,6 +33,8 @@ class Bank(Base):
     consent_expires_at = Column(DateTime)
     user = relationship("User", back_populates="banks")
     accounts = relationship("Account", back_populates="bank")
+
+
 class Account(Base):
     __tablename__ = "accounts"
     account_id = Column(String, primary_key=True, index=True)
@@ -41,6 +46,8 @@ class Account(Base):
     user = relationship("User", back_populates="accounts")
     bank = relationship("Bank", back_populates="accounts")
     transactions = relationship("Transaction", back_populates="account")
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
     transaction_uuid = Column(String, primary_key=True, index=True)
@@ -53,26 +60,40 @@ class Transaction(Base):
     description = Column(String)
     user = relationship("User", back_populates="transactions")
     account = relationship("Account", back_populates="transactions")
+
+
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
     session_id = Column(String, primary_key=True, index=True)
     user_uuid = Column(String, ForeignKey("users.user_uuid"), index=True)
     title = Column(String)
-    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_updated = Column(DateTime, default=datetime.utcnow,
+                          onupdate=datetime.utcnow)
     context_data = Column(JSON, nullable=True)
-    messages = relationship("ChatHistory", back_populates="session", cascade="all, delete-orphan")
+    messages = relationship(
+        "ChatHistory", back_populates="session", cascade="all, delete-orphan")
+
+
 class ChatHistory(Base):
     __tablename__ = "chat_history"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_uuid = Column(String, index=True)
-    session_id = Column(String, ForeignKey("chat_sessions.session_id"), index=True, nullable=True)
+    session_id = Column(String, ForeignKey(
+        "chat_sessions.session_id"), index=True, nullable=True)
     role = Column(String)
     content = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
+    ttft_ms = Column(Integer, nullable=True)
+    compute_time_ms = Column(Integer, nullable=True)
+    tokens = Column(Integer, nullable=True)
+    reasoning_content = Column(String, nullable=True)
     session = relationship("ChatSession", back_populates="messages")
+
+
 class ForecastParameters(Base):
     __tablename__ = "forecast_parameters"
-    user_uuid = Column(String, ForeignKey("users.user_uuid"), primary_key=True, index=True)
+    user_uuid = Column(String, ForeignKey("users.user_uuid"),
+                       primary_key=True, index=True)
     kappa = Column(Float, default=2.0)
     theta = Column(Float, default=0.04)
     xi = Column(Float, default=0.1)
@@ -80,7 +101,10 @@ class ForecastParameters(Base):
     lambda_val = Column(Float, default=0.1)
     mu_j = Column(Float, default=-0.05)
     sigma_j = Column(Float, default=0.1)
-    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_updated = Column(DateTime, default=datetime.utcnow,
+                          onupdate=datetime.utcnow)
+
+
 class BackgroundTask(Base):
     __tablename__ = "background_tasks"
     task_id = Column(String, primary_key=True, index=True)
@@ -88,7 +112,9 @@ class BackgroundTask(Base):
     type = Column(String)
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow,
+                        onupdate=datetime.utcnow)
+
 
 class Liability(Base):
     __tablename__ = "liabilities"
@@ -97,8 +123,10 @@ class Liability(Base):
     name = Column(String)
     balance = Column(Float, default=0.0)
     interest_rate = Column(Float, default=0.0)
-    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_updated = Column(DateTime, default=datetime.utcnow,
+                          onupdate=datetime.utcnow)
     user = relationship("User", back_populates="liabilities")
+
 
 class AdvisorSummary(Base):
     __tablename__ = "advisor_summaries"
@@ -107,5 +135,5 @@ class AdvisorSummary(Base):
     widget_id = Column(String, index=True)
     data_hash = Column(String, index=True)
     summary_text = Column(String)
-    timestamp = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
+    timestamp = Column(DateTime, default=datetime.utcnow,
+                       onupdate=datetime.utcnow)

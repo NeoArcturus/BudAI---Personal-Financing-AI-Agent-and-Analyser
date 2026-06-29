@@ -13,6 +13,7 @@ import pandas as pd
 import os
 from datetime import datetime
 import uuid
+import asyncio
 
 logger = get_core_logger(__name__)
 
@@ -107,33 +108,38 @@ async def save_manual_label(payload: TransactionLabelCorrectionRequest, backgrou
         if not normalized_label:
             raise HTTPException(
                 status_code=400, detail="corrected_label cannot be empty.")
-        with SessionLocal() as session:
-            exists = session.execute(text("""
-                SELECT 1 FROM transactions
-                WHERE user_uuid = :user_uuid AND transaction_uuid = :transaction_uuid
-            """), {
-                "user_uuid": current_user.user_uuid,
-                "transaction_uuid": payload.transaction_uuid
-            }).fetchone()
-            if not exists:
-                raise HTTPException(
-                    status_code=404, detail="Transaction not found.")
-            agent = CategorizerAgent()
-            agent.save_manual_label(
-                user_uuid=current_user.user_uuid,
-                transaction_uuid=payload.transaction_uuid,
-                corrected_label=normalized_label
-            )
-            task_id = str(uuid.uuid4())
-            if payload.retrain_model:
-                new_task = BackgroundTask(
-                    task_id=task_id,
+        def _save_label_sync():
+            with SessionLocal() as session:
+                exists = session.execute(text("""
+                    SELECT 1 FROM transactions
+                    WHERE user_uuid = :user_uuid AND transaction_uuid = :transaction_uuid
+                """), {
+                    "user_uuid": current_user.user_uuid,
+                    "transaction_uuid": payload.transaction_uuid
+                }).fetchone()
+                if not exists:
+                    raise HTTPException(
+                        status_code=404, detail="Transaction not found.")
+                agent = CategorizerAgent()
+                agent.save_manual_label(
                     user_uuid=current_user.user_uuid,
-                    type="retrain_recategorize"
+                    transaction_uuid=payload.transaction_uuid,
+                    corrected_label=normalized_label
                 )
-                session.add(new_task)
-                session.commit()
-                background_tasks.add_task(background_retrain_and_recategorize, current_user.user_uuid, task_id)
+                task_id = str(uuid.uuid4())
+                if payload.retrain_model:
+                    new_task = BackgroundTask(
+                        task_id=task_id,
+                        user_uuid=current_user.user_uuid,
+                        type="retrain_recategorize"
+                    )
+                    session.add(new_task)
+                    session.commit()
+                return task_id
+                
+        task_id = await asyncio.to_thread(_save_label_sync)
+        if payload.retrain_model:
+            background_tasks.add_task(background_retrain_and_recategorize, current_user.user_uuid, task_id)
         await FastAPICache.clear(namespace="transactions", key=str(current_user.user_uuid))
         await FastAPICache.clear(namespace="categorizer", key=str(current_user.user_uuid))
         return {
@@ -153,14 +159,16 @@ async def retrain_categorizer(payload: RetrainCategorizerRequest, background_tas
         return {"status": "skipped", "message": "Retraining skipped by request."}
     try:
         task_id = str(uuid.uuid4())
-        with SessionLocal() as session:
-            new_task = BackgroundTask(
-                task_id=task_id,
-                user_uuid=current_user.user_uuid,
-                type="full_retrain"
-            )
-            session.add(new_task)
-            session.commit()
+        def _queue_retrain():
+            with SessionLocal() as session:
+                new_task = BackgroundTask(
+                    task_id=task_id,
+                    user_uuid=current_user.user_uuid,
+                    type="full_retrain"
+                )
+                session.add(new_task)
+                session.commit()
+        await asyncio.to_thread(_queue_retrain)
         background_tasks.add_task(background_retrain_and_recategorize, current_user.user_uuid, task_id)
         await FastAPICache.clear(namespace="transactions", key=str(current_user.user_uuid))
         await FastAPICache.clear(namespace="categorizer", key=str(current_user.user_uuid))
@@ -181,28 +189,32 @@ async def get_review_candidates(
     current_user: User = Depends(get_current_user)
 ):
     try:
-        with SessionLocal() as session:
-            base_query = """
-                SELECT transaction_uuid, account_id, date, amount, description, category
-                FROM transactions
-                WHERE user_uuid = :user_uuid AND lower(category) = 'needs review'
-            """
-            params = {"user_uuid": current_user.user_uuid, "limit": limit}
-            if account_id:
-                base_query += " AND account_id = :account_id"
-                params["account_id"] = account_id
-            base_query += " ORDER BY date DESC LIMIT :limit"
-            rows = session.execute(text(base_query), params).fetchall()
-        data = []
-        for row in rows:
-            data.append({
-                "transaction_uuid": row[0],
-                "account_id": row[1],
-                "date": row[2].isoformat() if hasattr(row[2], "isoformat") else str(row[2]),
-                "amount": float(row[3] or 0),
-                "description": row[4] or "",
-                "predicted_category": row[5] or "Needs Review"
-            })
+        def _fetch_candidates():
+            with SessionLocal() as session:
+                base_query = """
+                    SELECT transaction_uuid, account_id, date, amount, description, category
+                    FROM transactions
+                    WHERE user_uuid = :user_uuid AND lower(category) = 'needs review'
+                """
+                params = {"user_uuid": current_user.user_uuid, "limit": limit}
+                if account_id:
+                    base_query += " AND account_id = :account_id"
+                    params["account_id"] = account_id
+                base_query += " ORDER BY date DESC LIMIT :limit"
+                rows = session.execute(text(base_query), params).fetchall()
+            data = []
+            for row in rows:
+                data.append({
+                    "transaction_uuid": row[0],
+                    "account_id": row[1],
+                    "date": row[2].isoformat() if hasattr(row[2], "isoformat") else str(row[2]),
+                    "amount": float(row[3] or 0),
+                    "description": row[4] or "",
+                    "predicted_category": row[5] or "Needs Review"
+                })
+            return data
+            
+        data = await asyncio.to_thread(_fetch_candidates)
         return {"status": "success", "count": len(data), "items": data}
     except Exception as e:
         logger.error(f"Error in get_review_candidates: {e}")

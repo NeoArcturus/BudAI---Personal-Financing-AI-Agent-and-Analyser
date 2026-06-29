@@ -20,7 +20,7 @@ class ExpenseAnalysis:
     def fetch_data(self, from_date, to_date):
         try:
             df = self.user_account.get_bank_transactions(
-                self.identifier, self.user_uuid, from_date, to_date)
+                self.identifier, self.user_uuid, from_date, to_date, expense_only=True)
             if df.empty:
                 return False
             time_col = 'date' if 'date' in df.columns else 'timestamp'
@@ -34,8 +34,7 @@ class ExpenseAnalysis:
                 df['Date'], errors='coerce', utc=True)
             mask = (df['Date'] >= pd.to_datetime(from_date, utc=True)) & (
                 df['Date'] <= pd.to_datetime(to_date, format='ISO8601', utc=True))
-            df = df.loc[mask]
-            df = df[df['Amount'] < 0].copy()
+            df = df.loc[mask].copy()
             df['Amount'] = df['Amount'].abs()
             if not df.empty:
                 cols_to_keep = ['Date', 'Amount']
@@ -59,4 +58,3 @@ class ExpenseAnalysis:
         return self._get_pivoted_data('W-MON')
     def get_monthly_spend_data(self):
         return self._get_pivoted_data('ME')
-

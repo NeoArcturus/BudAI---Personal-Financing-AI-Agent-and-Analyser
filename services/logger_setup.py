@@ -43,7 +43,6 @@ def log_mcp_tool(logger: logging.Logger):
             try:
                 result = func(*args, **kwargs)
                 
-                # Truncate large output for cleaner logs
                 result_str = str(result)
                 if len(result_str) > 1000:
                     result_str = result_str[:1000] + "... [TRUNCATED]"

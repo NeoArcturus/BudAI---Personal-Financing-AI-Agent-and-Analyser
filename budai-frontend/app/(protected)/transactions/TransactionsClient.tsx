@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Bell, BrainCircuit } from "lucide-react";
+import { Bell } from "lucide-react";
 import { Button, SearchField, Tooltip } from "@heroui/react";
 import { apiFetch } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
@@ -30,7 +30,7 @@ export default function TransactionsClient({
       );
 
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as any;
         const taskId = data.task_id;
 
         if (taskId) {
@@ -42,7 +42,7 @@ export default function TransactionsClient({
                 true,
               );
               if (statusRes.ok) {
-                const statusData = await statusRes.json();
+                const statusData = await statusRes.json() as any;
                 if (
                   statusData.status === "completed" ||
                   statusData.status === "failed"
@@ -106,7 +106,7 @@ export default function TransactionsClient({
               onPress={handleRetrainAll}
               className="w-11 h-11 min-w-11 rounded-full bg-white/5 backdrop-blur-xl border border-white/10 text-primary shadow-md relative cursor-pointer flex justify-center items-center hover:bg-white/10"
             >
-              <BrainCircuit size={18} />
+
             </Button>
           </Tooltip>
 

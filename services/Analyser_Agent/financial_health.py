@@ -10,6 +10,7 @@ logger = get_core_logger(__name__)
 class FinancialHealthAnalyzer:
     def __init__(self, user_uuid, db_path=None):
         self.user_uuid = user_uuid
+        self.df = self._fetch_transactions()
     def _fetch_transactions(self):
         with SessionLocal() as session:
             try:
@@ -47,7 +48,7 @@ class FinancialHealthAnalyzer:
             logger.error("An error occurred in this block", exc_info=True)
             return 0.0
     def calculate_subsistence_floor(self):
-        df = self._fetch_transactions()
+        df = self.df.copy()
         if df.empty or 'category' not in df.columns:
             return 0.0
         df['date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True)
@@ -90,7 +91,7 @@ class FinancialHealthAnalyzer:
             })
         return plan
     def calculate_net_worth_velocity(self):
-        df = self._fetch_transactions()
+        df = self.df.copy()
         if df.empty:
             return 0.0
         df['date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True)
@@ -101,7 +102,7 @@ class FinancialHealthAnalyzer:
             return float(monthly_net.sum())
         return float(monthly_net.diff().mean())
     def calculate_mpc(self):
-        df = self._fetch_transactions()
+        df = self.df.copy()
         if df.empty:
             return 0.0
         df['date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True)
@@ -123,7 +124,7 @@ class FinancialHealthAnalyzer:
                valid_months['delta_income']).mean()
         return float(max(0.0, min(mpc, 1.0)))
     def calculate_shock_absorption(self):
-        df = self._fetch_transactions()
+        df = self.df.copy()
         if df.empty:
             return 0.0
         liquidity = self._fetch_total_liquidity()
@@ -143,7 +144,7 @@ class FinancialHealthAnalyzer:
         except Exception:
             logger.error("An error occurred in this block", exc_info=True)
             monthly_interest = 0.0
-        df = self._fetch_transactions()
+        df = self.df.copy()
         if df.empty:
             return 0.0
         df['date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True)
@@ -155,4 +156,3 @@ class FinancialHealthAnalyzer:
         if avg_monthly_income == 0:
             return 0.0
         return float((monthly_interest / avg_monthly_income) * 100)
-

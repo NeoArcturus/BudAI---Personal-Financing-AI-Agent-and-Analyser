@@ -19,13 +19,11 @@ class ProfileBuilder:
         try:
             user_acc = UserAccounts(user_id=self.user_uuid)
             
-            # 1. Fetch data ONCE (Limit to 180 days for profile performance)
             logger.debug("Fetching recent transactions (180d window)")
             now_dt = datetime.now()
             from_date = (now_dt - timedelta(days=180)).strftime("%Y-%m-%d")
             to_date = now_dt.strftime("%Y-%m-%d")
             
-            # We use a wrapper to run the sync DB call in a thread to keep build_profile async
             df = await asyncio.to_thread(user_acc.get_transactions, "ALL", self.user_uuid, from_date, to_date)
             
             logger.debug("Fetching all accounts for balance")
@@ -37,7 +35,6 @@ class ProfileBuilder:
                 logger.info("No transaction data found for user")
                 return f"[Live Balance: £{total_balance:.2f} | No historical data]"
 
-            # 2. Process data in-memory
             logger.debug("Processing transaction data")
             df['Date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True).dt.date
             df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0)
@@ -55,7 +52,6 @@ class ProfileBuilder:
             upcoming_str = ", ".join(
                 [f"{b['merchant']}: £{abs(b['amount']):.2f} (in {b['day']} days)" for b in timeline])
 
-            # 4. Top metrics analysis
             df_out = df[df['amount'] < 0].copy()
             df_out['abs_amount'] = df_out['amount'].abs()
 
@@ -68,7 +64,7 @@ class ProfileBuilder:
             logger.debug("Offloading semantic memory lookup to microservice")
             bridge = MCPBridge()
             try:
-                rag_str = await bridge.call_iii_tool(
+                rag_str = await bridge.call_tool(
                     "memory",
                     "get_seasonal_behavior_context",
                     {"user_uuid": self.user_uuid}

@@ -6,7 +6,7 @@ import {
   Sparkles,
   ArrowRight,
   RotateCcw,
-  BrainCircuit,
+  MessageSquare,
 } from "lucide-react";
 import { Button, Card, Skeleton, ScrollShadow, Surface } from "@heroui/react";
 import { cn } from "@/lib/utils";
@@ -71,7 +71,7 @@ export default function WidgetFlipCard({
           <Card className="w-full h-full liquid-glass rounded-xl p-0 flex flex-col border-none shadow-inner overflow-hidden">
             <Card.Header className="flex items-center gap-5 p-10 pb-6 shrink-0 border-b-[0.5px] border-white/5">
               <div className="w-12 h-12 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,127,255,0.05)] shrink-0">
-                <BrainCircuit size={24} />
+                <MessageSquare size={24} />
               </div>
               <div className="flex flex-col justify-center">
                 <h3 className="text-foreground font-black text-xl tracking-tighter uppercase italic m-0">

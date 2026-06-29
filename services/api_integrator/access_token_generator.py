@@ -230,4 +230,3 @@ class AccessTokenGenerator:
                 logger.error("An error occurred in this block", exc_info=True)
                 results.append({"status": "error", "message": str(e)})
         return results
-

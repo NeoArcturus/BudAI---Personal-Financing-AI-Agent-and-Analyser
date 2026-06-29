@@ -25,6 +25,7 @@ from tqdm import tqdm
 from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
+
 class CategorizerTrainer:
 
     def __init__(self, df, embeddings, model_dir, enc_dir):
@@ -35,9 +36,7 @@ class CategorizerTrainer:
 
         self.model = HistGradientBoostingClassifier(
 
-            max_iter=500, random_state=42, min_samples_leaf=1,
-
-            device="mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else None)
+            max_iter=500, random_state=42, min_samples_leaf=1)
 
         self.model_dir = model_dir
 
@@ -170,4 +169,3 @@ class CategorizerTrainer:
             pbar.update(1)
 
             return True
-

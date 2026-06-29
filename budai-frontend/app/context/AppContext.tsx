@@ -147,7 +147,13 @@ export const BudAIProvider = ({
   useEffect(() => {
     const stored = localStorage.getItem("budai_user_name");
     if (stored) setUserName(stored);
-  }, []);
+
+    const handleUnauthorized = () => {
+      router.push("/login");
+    };
+    window.addEventListener("budai-unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("budai-unauthorized", handleUnauthorized);
+  }, [router]);
 
   const { data: fetchedAccounts = [] } = useAccounts();
   const { data: serverSessions = [] } = useChatSessions();
@@ -236,7 +242,7 @@ export const BudAIProvider = ({
 
   const chat = useChat({
     id: "budai-primary-chat",
-    experimental_throttle: 50,
+    experimental_throttle: 16,
     transport: new DefaultChatTransport({
       api: getApiUrl("/api/chat/stream"),
       headers: () => ({
@@ -328,7 +334,7 @@ export const BudAIProvider = ({
     if (currentSession.messages.length === 0) {
       apiFetch(`/api/chat/sessions/${currentSessionId}`, {}, true)
         .then((res) => res.json())
-        .then((data: SessionResponse) => {
+        .then((data: unknown) => {
           if (
             data &&
             typeof data === "object" &&
@@ -378,22 +384,26 @@ export const BudAIProvider = ({
   useEffect(() => {
     if (!currentSessionId || messages.length === 0) return;
 
-    setLocalSessions((prev) => {
-      const session = prev.find((s) => s.id === currentSessionId);
-      if (!session) return prev;
+    const timeout = setTimeout(() => {
+      setLocalSessions((prev) => {
+        const session = prev.find((s) => s.id === currentSessionId);
+        if (!session) return prev;
 
-      const isSame =
-        session.messages.length === messages.length &&
-        session.messages.every((m, i) => m.id === messages[i]?.id);
+        const isSame =
+          session.messages.length === messages.length &&
+          session.messages.every((m, i) => m.id === messages[i]?.id);
 
-      if (isSame) return prev;
+        if (isSame) return prev;
 
-      return prev.map((s) =>
-        s.id === currentSessionId
-          ? { ...s, messages, lastUpdated: new Date() }
-          : s,
-      );
-    });
+        return prev.map((s) =>
+          s.id === currentSessionId
+            ? { ...s, messages, lastUpdated: new Date() }
+            : s,
+        );
+      });
+    }, 500);
+
+    return () => clearTimeout(timeout);
   }, [messages, currentSessionId]);
 
   const createNewSession = (title: string, contextData?: AdvisorContext) => {

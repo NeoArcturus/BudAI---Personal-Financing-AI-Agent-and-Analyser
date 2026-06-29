@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from services.logger_setup import get_core_logger
+import redis
+
 logger = get_core_logger(__name__)
 
 load_dotenv()
@@ -48,3 +50,6 @@ def get_db():
         yield db
     finally:
         db.close()
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)

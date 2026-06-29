@@ -22,4 +22,3 @@ class ParameterLSTM(nn.Module):
         out = self.fc(hn[-1])
 
         return torch.sigmoid(out)
-

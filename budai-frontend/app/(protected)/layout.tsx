@@ -1,6 +1,6 @@
 import { BudAIProvider, ChatSession } from "@/app/context/AppContext";
 import GlobalChatButton from "@/app/(protected)/_components/GlobalChatButton";
-import { Sidebar } from "@/app/(protected)/_components/Sidebar";
+import { TopNavbar } from "@/app/(protected)/_components/TopNavbar";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Account } from "@/types";
@@ -24,29 +24,26 @@ export default async function ProtectedLayout({
   let initialSessions: ChatSession[] = [];
 
   try {
-    const accountsRes = await fetch(`${baseUrl}/api/accounts`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const [accountsRes, sessionsRes] = await Promise.all([
+      fetch(`${baseUrl}/api/accounts`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      fetch(`${baseUrl}/api/chat/sessions`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    ]);
 
-    if (accountsRes.status === 401) {
+    if (accountsRes.status === 401 || sessionsRes.status === 401) {
       redirect("/login");
     }
 
     if (accountsRes.ok) {
-      const accountsData = await accountsRes.json();
+      const accountsData = await accountsRes.json() as any;
       initialAccounts = accountsData.accounts || [];
     }
 
-    const sessionsRes = await fetch(`${baseUrl}/api/chat/sessions`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (sessionsRes.status === 401) {
-      redirect("/login");
-    }
-
     if (sessionsRes.ok) {
-      const sessionsData = await sessionsRes.json();
+      const sessionsData = await sessionsRes.json() as any;
       if (Array.isArray(sessionsData)) {
         initialSessions = sessionsData.map((s) => ({
           id: s.session_id,
@@ -66,10 +63,10 @@ export default async function ProtectedLayout({
       initialAccounts={initialAccounts}
       initialSessions={initialSessions}
     >
-      <div className="flex h-screen w-full bg-transparent font-sans overflow-hidden">
-        <Sidebar />
-        <div className="relative z-10 flex-1 flex flex-col h-full overflow-hidden">
-          <div className="flex-1 flex flex-col overflow-hidden">{children}</div>
+      <div className="flex flex-col h-screen w-full bg-background font-sans overflow-hidden">
+        <TopNavbar />
+        <div className="relative z-10 flex-1 flex w-full h-full overflow-hidden">
+          {children}
         </div>
       </div>
       <GlobalChatButton />

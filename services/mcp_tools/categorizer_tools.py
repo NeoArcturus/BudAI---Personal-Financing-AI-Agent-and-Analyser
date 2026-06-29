@@ -26,22 +26,33 @@ def classify_financial_data(user_uuid: str, from_date: str, to_date: str, accoun
         if combined_df.empty:
             return "No transactions found."
         payload = []
+        data_summary = []
         for acc in accounts:
             acc_df = combined_df[combined_df['bank_name'] == acc]
+            if acc_df.empty: continue
+            
             bank_data = []
             cat_key = 'category' if 'category' in acc_df.columns else 'Category'
             amt_key = 'amount' if 'amount' in acc_df.columns else 'Amount'
+            
+            acc_summary = [f"Account: {acc}"]
             for cat in acc_df[cat_key].unique():
                 cat_df = acc_df[acc_df[cat_key] == cat]
+                total = round(float(cat_df[amt_key].abs().sum()), 2)
                 bank_data.append({
                     "Category": str(cat),
-                    "Total_Amount": round(float(cat_df[amt_key].abs().sum()), 2),
+                    "Total_Amount": total,
                     "count": len(cat_df)
                 })
+                acc_summary.append(f"- {cat}: £{total} ({len(cat_df)} transactions)")
+            
+            data_summary.append("\n".join(acc_summary))
             bank_data.sort(key=lambda x: x["Total_Amount"], reverse=True)
             payload.append({"bank_name": acc, "data": bank_data})
+            
         cache_id = _cache_chart_data(payload)
-        return f"Classified {len(combined_df)} transactions. [TRIGGER_CATEGORIZED_CHART:{cache_id}]"
+        summary_text = "\n\n".join(data_summary)
+        return f"Classified {len(combined_df)} transactions. [TRIGGER_CATEGORIZED_CHART:{cache_id}]\n\nDATA SUMMARY:\n{summary_text}"
     except Exception as e:
         logger.error(f"Error: {e}")
         return f"Error: {str(e)}"
@@ -55,22 +66,32 @@ def create_bargraph_chart_and_save(user_uuid: str, account_ids: list[str]) -> st
         if df.empty:
             return "No data to chart."
         payload = []
+        data_summary = []
         cat_key = 'category' if 'category' in df.columns else 'Category'
         amt_key = 'amount' if 'amount' in df.columns else 'Amount'
         for acc in accounts:
             acc_df = df[df['bank_name'] == acc]
+            if acc_df.empty: continue
+            
             bank_data = []
+            acc_summary = [f"Account: {acc}"]
             for cat in acc_df[cat_key].unique():
                 cat_df = acc_df[acc_df[cat_key] == cat]
+                total = round(float(cat_df[amt_key].abs().sum()), 2)
                 bank_data.append({
                     "Category": str(cat),
-                    "Total_Amount": round(float(cat_df[amt_key].abs().sum()), 2),
+                    "Total_Amount": total,
                     "count": len(cat_df)
                 })
+                acc_summary.append(f"- {cat}: £{total}")
+            
+            data_summary.append("\n".join(acc_summary))
             bank_data.sort(key=lambda x: x["Total_Amount"], reverse=True)
             payload.append({"bank_name": acc, "data": bank_data})
+            
         cache_id = _cache_chart_data(payload)
-        return f"Chart generated. [TRIGGER_CATEGORIZED_CHART:{cache_id}]"
+        summary_text = "\n\n".join(data_summary)
+        return f"Chart generated. [TRIGGER_CATEGORIZED_CHART:{cache_id}]\n\nDATA SUMMARY:\n{summary_text}"
     except Exception as e:
         logger.error(f"Error: {e}")
         return f"Error: {str(e)}"
@@ -84,22 +105,32 @@ def create_pie_chart_and_save(user_uuid: str, account_ids: list[str]) -> str:
         if df.empty:
             return "No data to chart."
         payload = []
+        data_summary = []
         cat_key = 'category' if 'category' in df.columns else 'Category'
         amt_key = 'amount' if 'amount' in df.columns else 'Amount'
         for acc in accounts:
             acc_df = df[df['bank_name'] == acc]
+            if acc_df.empty: continue
+            
             bank_data = []
+            acc_summary = [f"Account: {acc}"]
             for cat in acc_df[cat_key].unique():
                 cat_df = acc_df[acc_df[cat_key] == cat]
+                total = round(float(cat_df[amt_key].abs().sum()), 2)
                 bank_data.append({
                     "Category": str(cat),
-                    "Total_Amount": round(float(cat_df[amt_key].abs().sum()), 2),
+                    "Total_Amount": total,
                     "count": len(cat_df)
                 })
+                acc_summary.append(f"- {cat}: £{total}")
+            
+            data_summary.append("\n".join(acc_summary))
             bank_data.sort(key=lambda x: x["Total_Amount"], reverse=True)
             payload.append({"bank_name": acc, "data": bank_data})
+            
         cache_id = _cache_chart_data(payload)
-        return f"Chart generated. [TRIGGER_CATEGORIZED_DOUGHNUT_CHART:{cache_id}]"
+        summary_text = "\n\n".join(data_summary)
+        return f"Chart generated. [TRIGGER_CATEGORIZED_DOUGHNUT_CHART:{cache_id}]\n\nDATA SUMMARY:\n{summary_text}"
     except Exception as e:
         logger.error(f"Error: {e}")
         return f"Error: {str(e)}"

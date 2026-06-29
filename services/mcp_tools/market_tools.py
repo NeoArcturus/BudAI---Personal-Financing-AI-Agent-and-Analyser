@@ -39,7 +39,6 @@ def compare_spending_to_market(user_uuid: str, category: str, ticker: str, days:
     Useful for explaining how inflation or commodity prices affect personal finances.
     """
     try:
-        # 1. Fetch User Spending
         from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         to_date = datetime.now().strftime("%Y-%m-%d")
         
@@ -47,16 +46,13 @@ def compare_spending_to_market(user_uuid: str, category: str, ticker: str, days:
         if df_spending.empty:
             return "No spending data found for comparison."
         
-        # Filter by category
         df_cat = df_spending[df_spending['Category'].str.lower() == category.lower()]
         if df_cat.empty:
             return f"No spending found in category '{category}' over the last {days} days."
         
-        # Resample to weekly to see trend
         df_cat['date'] = pd.to_datetime(df_cat['date'])
         user_trend = df_cat.set_index('date')['amount'].abs().resample('W').sum()
         
-        # 2. Fetch Market Data
         t = yf.Ticker(ticker)
         hist = t.history(start=from_date, end=to_date)
         if hist.empty:
@@ -64,8 +60,6 @@ def compare_spending_to_market(user_uuid: str, category: str, ticker: str, days:
         
         market_trend = hist['Close'].resample('W').mean()
         
-        # 3. Correlate and Summarize
-        # Align dates
         combined = pd.concat([user_trend, market_trend], axis=1).dropna()
         combined.columns = ['User Spending', 'Market Price']
         

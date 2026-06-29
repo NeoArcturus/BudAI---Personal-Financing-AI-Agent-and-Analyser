@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+import asyncio
 from fastapi_cache.decorator import cache
 from fastapi_cache import FastAPICache
 from models.database_models import User
@@ -18,7 +19,7 @@ account_router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 async def get_accounts(current_user: User = Depends(get_current_user)):
     try:
         user_acc = UserAccounts(user_id=current_user.user_uuid)
-        all_accounts = user_acc.get_all_accounts()
+        all_accounts = await asyncio.to_thread(user_acc.get_all_accounts)
         return {"accounts": all_accounts}
     except Exception as e:
         logger.error(
@@ -32,8 +33,10 @@ async def get_accounts(current_user: User = Depends(get_current_user)):
 async def get_transactions(account_id: str, from_date: str = Query(None, alias="from"), to_date: str = Query(None, alias="to"), current_user: User = Depends(get_current_user)):
     try:
         user_acc = UserAccounts(user_id=current_user.user_uuid)
-        df = user_acc.get_bank_transactions(
-            account_id, current_user.user_uuid, from_date, to_date)
+        df = await asyncio.to_thread(
+            user_acc.get_bank_transactions,
+            account_id, current_user.user_uuid, from_date, to_date
+        )
         if df is None or df.empty:
             return {"transactions": []}
         if 'date' in df.columns:
@@ -60,7 +63,7 @@ async def get_transactions(account_id: str, from_date: str = Query(None, alias="
 async def revoke_connection(provider_id: str, current_user: User = Depends(get_current_user)):
     try:
         user_acc = UserAccounts(user_id=current_user.user_uuid)
-        success = user_acc.revoke_provider_connection(provider_id)
+        success = await asyncio.to_thread(user_acc.revoke_provider_connection, provider_id)
         if success:
             await FastAPICache.clear(namespace="accounts", key=str(current_user.user_uuid))
             await FastAPICache.clear(namespace="transactions", key=str(current_user.user_uuid))

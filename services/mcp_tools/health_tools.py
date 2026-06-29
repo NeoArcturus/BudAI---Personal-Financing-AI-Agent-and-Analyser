@@ -66,10 +66,16 @@ def analyze_wealth_acceleration_metrics(user_uuid: str) -> str:
 def plot_health_radar(user_uuid: str) -> str:
     """Generate a multi-dimensional health radar chart comparing different financial metrics."""
     try:
-        _, metrics, _ = _calculate_health_data(user_uuid)
+        overall, metrics, recommendations = _calculate_health_data(user_uuid)
         payload = [{"bank_name": "Overall Health", "data": metrics}]
         cache_id = _cache_chart_data(payload)
-        return f"Financial health radar generated. [TRIGGER_HEALTH_RADAR_CHART:{cache_id}]"
+        
+        summary_lines = [f"Overall Health Score: {overall:.1f}/100"]
+        for m in metrics:
+            summary_lines.append(f"- {m['Metric']}: {m['Score']}")
+        
+        summary_text = "\n".join(summary_lines)
+        return f"Financial health radar generated. [TRIGGER_HEALTH_RADAR_CHART:{cache_id}]\n\nDATA SUMMARY:\n{summary_text}"
     except Exception as e:
         logger.error(f"Health Radar Error: {e}")
         return f"Health radar failed. [TRIGGER_HEALTH_RADAR_CHART:CACHE_HEALTH_1]"

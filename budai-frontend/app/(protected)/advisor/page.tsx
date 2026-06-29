@@ -1,578 +1,391 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import {
-  Sparkles,
-  History,
-  Plus,
-  Send,
-  Trash2,
-  ArrowLeft,
-  MessageSquare,
-  Clock,
-  BrainCircuit,
-  ArrowRight,
-  Wallet,
-} from "lucide-react";
-import {
-  Button,
-  ScrollShadow,
-  Surface,
-  Input,
-  Text,
-  Form,
-  Skeleton,
-  Card,
-  ListBox,
-} from "@heroui/react";
-import { UIMessage } from "@ai-sdk/react";
-import { useBudAI } from "@/app/context/AppContext";
-import { cn } from "@/lib/utils";
-import CoreChartEngine from "@/app/(protected)/_components/CoreChartEngine";
-import { NativeChartConfig } from "@/types";
+import React, { useState, useEffect } from "react";
 
-interface ToolInvocation {
-  toolName: string;
-  toolCallId: string;
-  state: string;
-  args: Record<string, unknown>;
-  result?: { config?: unknown } | unknown;
+import { Button, Text } from "@heroui/react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useChat } from "@ai-sdk/react";
+import { BudAIMessage } from "./BudAIMessage";
+import { useChatSessions } from "@/lib/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { apiFetch, getAuthToken, getApiUrl } from "@/lib/api";
+import { DefaultChatTransport } from "ai";
+
+import { AdvisorSidebar, BudAIChatSession } from "./components/AdvisorSidebar";
+import { MemoizedChatMessage } from "./components/MemoizedChatMessage";
+import { ChatInputArea } from "./components/ChatInputArea";
+
+interface BudAIChatMessage {
+  role: "user" | "assistant" | "system" | "data";
+  content: string;
+  reasoning_content?: string | null;
+  timestamp: string;
+}
+
+export interface BudAIAdvisorContext {
+  type:
+    | "cash_flow"
+    | "spending_trend"
+    | "expense_distribution"
+    | "ledger_audit"
+    | "market_audit"
+    | "general";
+  accountId?: string;
+  data?: [];
 }
 
 export default function AdvisorPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const sessionIdParam = searchParams.get("session");
+  const sessionParam = searchParams.get("session");
 
-  const {
-    userName,
-    sessions,
-    currentSessionId,
-    setCurrentSessionId,
-    createNewSession,
-    deleteSession,
-    sendChatMessage,
-    isChatLoading,
-    chatMessages = [],
-    accounts,
-  } = useBudAI();
+  const { data: sessions = [], isLoading: sessionsLoading } = useChatSessions();
 
-  const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [activeSessionId, setActiveSessionId] = useState(sessionParam || "");
+
+  const lastFetchedId = React.useRef("");
+
+  const [resumeStream, setResumeStream] = useState(false);
+  const [showReasoning, setShowReasoning] = useState(false);
 
   useEffect(() => {
-    if (sessionIdParam && sessionIdParam !== currentSessionId) {
-      const sessionExists = sessions.some(
-        (s) => String(s.id) === sessionIdParam,
-      );
-      if (sessionExists || !currentSessionId) {
-        setCurrentSessionId(String(sessionIdParam));
+    const saved = localStorage.getItem("budai_show_reasoning");
+    if (saved === "true") {
+      setTimeout(() => setShowReasoning(true), 0);
+    }
+  }, []);
+
+  const handleToggleReasoning = () => {
+    setShowReasoning((prev) => {
+      const next = !prev;
+      localStorage.setItem("budai_show_reasoning", String(next));
+      return next;
+    });
+  };
+
+  const transport = React.useMemo(() => {
+    return new DefaultChatTransport({
+      api: getApiUrl("/api/chat/stream"),
+      headers: {
+        Authorization: `Bearer ${getAuthToken()}`,
+      },
+    });
+  }, []);
+
+  const { messages, setMessages, status, sendMessage, stop, error } =
+    useChat<BudAIMessage>({
+      id: activeSessionId || "new-session",
+      transport,
+      onError: (err) => {
+        if (err.message.includes("401")) {
+          window.dispatchEvent(new Event("budai-unauthorized"));
+        }
+      },
+      resume: resumeStream,
+    });
+
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    if (sessionParam && sessionParam !== lastFetchedId.current) {
+      lastFetchedId.current = sessionParam;
+
+      const fetchSessionMessages = async () => {
+        try {
+          const res = await apiFetch(
+            `/api/chat/sessions/${sessionParam}`,
+            {},
+            true,
+          );
+          const data = (await res.json()) as { messages?: unknown[] };
+          if (
+            data &&
+            typeof data === "object" &&
+            Array.isArray(data.messages)
+          ) {
+            setActiveSessionId(sessionParam);
+            const formattedMessages: BudAIMessage[] = data.messages.map(
+              (m: unknown) => {
+                const msg = m as BudAIChatMessage;
+                const parts: Array<{ type: "text" | "reasoning"; text: string }> = [];
+
+                // History Sync: Map reasoning_content to a custom reasoning part
+                if (msg.reasoning_content) {
+                  parts.push({
+                    type: "reasoning",
+                    text: msg.reasoning_content,
+                  });
+                }
+
+                // Extract <think> from history just in case it's stored that way
+                const text = msg.content || "";
+                const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g;
+                let hasThinkTags = false;
+                let match;
+                let lastIndex = 0;
+
+                while ((match = thinkRegex.exec(text)) !== null) {
+                  hasThinkTags = true;
+                  if (match.index > lastIndex) {
+                    parts.push({
+                      type: "text",
+                      text: text.substring(lastIndex, match.index),
+                    });
+                  }
+                  parts.push({ type: "reasoning", text: match[1] });
+                  lastIndex = thinkRegex.lastIndex;
+                }
+
+                if (hasThinkTags) {
+                  if (lastIndex < text.length) {
+                    parts.push({
+                      type: "text",
+                      text: text.substring(lastIndex),
+                    });
+                  }
+                } else {
+                  parts.push({ type: "text", text: text });
+                }
+
+                return {
+                  id: Math.random().toString(36).substring(7),
+                  role: msg.role as "user" | "assistant" | "system" | "data",
+                  content: text,
+                  parts: parts,
+                  createdAt: new Date(msg.timestamp),
+                } as BudAIMessage;
+              },
+            );
+            setTimeout(() => {
+              setMessages(formattedMessages);
+            }, 50);
+          }
+        } catch (error) {
+          console.error("Failed to fetch session messages:", error);
+        }
+      };
+
+      fetchSessionMessages();
+    }
+  }, [sessionParam, setMessages]);
+
+  const handleSend = async (text: string) => {
+    try {
+      if (typeof sendMessage === "function") {
+        sendMessage(
+          { text: text },
+          {
+            body: {
+              session_id:
+                activeSessionId === "new-session" ? null : activeSessionId,
+            },
+          },
+        );
+      } else {
+        console.error("sendMessage is not a function!");
       }
+    } catch (error) {
+      console.error("Failed to send message:", error);
     }
-  }, [sessionIdParam, currentSessionId, setCurrentSessionId, sessions]);
-
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [chatMessages, isChatLoading]);
-
-  const activeSession = sessions.find((s) => s.id === currentSessionId);
-
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!input.trim() || isChatLoading) return;
-
-    const msg = input;
-    setInput("");
-
-    await sendChatMessage(msg);
   };
 
-  const handleNewChat = () => {
-    const id = createNewSession("New Advisory Session");
-    router.push(`/advisor?session=${id}`);
+  const handleNewChat = async () => {
+    try {
+      const res = await apiFetch(
+        "/api/chat/sessions",
+        { method: "POST" },
+        true,
+      );
+      const data = (await res.json()) as { session_id?: string };
+      if (data && data.session_id) {
+        lastFetchedId.current = "";
+        setActiveSessionId(data.session_id);
+        setMessages([]);
+        queryClient.invalidateQueries({ queryKey: ["chat-sessions"] });
+        router.push(`/advisor?session=${data.session_id}`);
+      }
+    } catch (error) {
+      console.error("Failed to create new session:", error);
+    }
   };
+
+  const handleDeleteSession = async (id: string) => {
+    try {
+      await apiFetch(`/api/chat/sessions/${id}`, { method: "DELETE" }, true);
+      queryClient.invalidateQueries({ queryKey: ["chat-sessions"] });
+      if (activeSessionId === id) {
+        setActiveSessionId("");
+        setMessages([]);
+        router.push("/advisor");
+      }
+    } catch (error) {
+      console.error("Failed to delete session:", error);
+    }
+  };
+
+  const handleRenameSession = async (id: string, newTitle: string) => {
+    try {
+      await apiFetch(
+        `/api/chat/sessions/${id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ title: newTitle }),
+        },
+        true,
+      );
+      queryClient.invalidateQueries({ queryKey: ["chat-sessions"] });
+    } catch (error) {
+      console.error("Failed to rename session:", error);
+    }
+  };
+
+  const lastMessage = messages[messages.length - 1];
+  const isLocked = Boolean(
+    lastMessage?.annotations?.some((ann) => ann.type === "htil_interrupt"),
+  );
 
   return (
-    <Surface
-      className="flex h-screen w-full bg-transparent font-sans overflow-hidden text-white relative"
-      variant="transparent"
-    >
-      <Surface
-        className="relative z-10 w-64 h-full bg-black/40 backdrop-blur-3xl border-r-[0.5px] border-white/10 flex flex-col shrink-0 shadow-inner obsidian-glass"
-        variant="transparent"
-      >
-        <div className="p-8">
-          <div className="flex items-center justify-between mb-12">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center shadow-[0_0_15px_rgba(0,127,255,0.1)]">
-                <BrainCircuit size={18} className="text-primary" />
-              </div>
-              <h1 className="text-foreground font-bold tracking-tighter text-xl uppercase italic m-0">
-                BudAI
-              </h1>
-            </div>
-            <Button
-              isIconOnly
-              onPress={() => router.push("/home")}
-              className="text-foreground/20 hover:text-foreground hover:bg-white/5 border-none cursor-pointer rounded-lg w-8 h-8 min-w-8 transition-all flex justify-center items-center"
-            >
-              <ArrowLeft size={16} />
-            </Button>
-          </div>
+    <div className="flex h-screen w-full bg-background text-foreground font-sans overflow-hidden">
+      <AdvisorSidebar
+        sessions={sessions as BudAIChatSession[]}
+        sessionsLoading={sessionsLoading}
+        activeSessionId={activeSessionId}
+        router={router}
+        handleNewChat={handleNewChat}
+        handleDeleteSession={handleDeleteSession}
+        handleRenameSession={handleRenameSession}
+      />
 
-          <Button
-            onPress={handleNewChat}
-            className="w-full bg-primary/5 border border-primary/20 text-primary hover:bg-primary/10 rounded-xl flex items-center justify-center gap-3 font-black text-[10px] uppercase tracking-widest h-12 mb-10 cursor-pointer transition-all shadow-[0_0_15px_rgba(0,127,255,0.1)] hover:shadow-[0_0_25px_rgba(0,127,255,0.3)]"
-          >
-            <Plus size={16} /> New Analysis
-          </Button>
+      <main className="flex-1 flex flex-col h-full bg-transparent relative overflow-hidden">
+        <header className="h-16 flex items-center justify-between py-4 px-6 border-b border-white/10 shrink-0 bg-black/20 backdrop-blur-xl z-20">
+          <div className="flex flex-col">
+            <div className="flex items-center gap-3 mt-1">
 
-          <div className="flex items-center gap-3 text-foreground/30 px-2 mb-6">
-            <History size={14} />
-            <Text className="text-[9px] font-black uppercase tracking-[0.4em]">
-              Recent Sessions
-            </Text>
-          </div>
-        </div>
-
-        <ScrollShadow hideScrollBar className="flex-1 px-4 pb-8 space-y-2">
-          {sessions.length === 0 ? (
-            <div className="text-center py-10 opacity-10">
-              <MessageSquare size={32} className="mx-auto mb-4" />
-              <Text className="text-[9px] font-black uppercase tracking-widest">
-                No Logs Detected
+              <Text className="text-foreground font-black text-[13px] uppercase tracking-tight">
+                {activeSessionId ? "Advisory Session" : "New Session"}
               </Text>
+              {status === "streaming" || status === "submitted" ? (
+                <span className="text-[9px] font-black text-primary uppercase tracking-widest opacity-50">
+                  Processing...
+                </span>
+              ) : (
+                messages.length > 0 && (
+                  <Button
+                    size="sm"
+                    onPress={() => {
+                      setResumeStream(true);
+                      setTimeout(() => setResumeStream(false), 500);
+                    }}
+                    className="bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 h-6 px-3 ml-2 rounded-md text-[9px] uppercase tracking-widest font-bold cursor-pointer transition-all"
+                  >
+                    Resume Stream
+                  </Button>
+                )
+              )}
+            </div>
+            {activeSessionId && (
+              <span className="text-foreground/30 text-[10px] font-medium tracking-widest uppercase ml-8">
+                ID: {activeSessionId.split("-")[0]}
+              </span>
+            )}
+          </div>
+          <div
+            className="flex items-center gap-3 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full shadow-[0_0_15px_rgba(0,127,255,0.05)] cursor-pointer hover:bg-white/10 transition-colors"
+            onClick={handleToggleReasoning}
+          >
+            <div
+              className={`flex items-center h-4 w-7 rounded-full p-0.5 transition-colors ${showReasoning ? "bg-white" : "bg-white/20"}`}
+            >
+              <div
+                className={`h-3 w-3 rounded-full shadow-sm transition-transform ${showReasoning ? "translate-x-3 bg-black" : "translate-x-0 bg-white"}`}
+              />
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-widest text-foreground/50 select-none">
+              Show thinking
+            </span>
+          </div>
+        </header>
+
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto px-4 sm:px-10 py-10 scroll-smooth relative z-10 custom-scrollbar"
+        >
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-foreground/30">
+
+              <Text className="text-lg font-bold tracking-tighter uppercase mb-2">
+                New Session
+              </Text>
+              <Text className="text-xs tracking-widest font-medium uppercase opacity-50 text-center max-w-sm leading-relaxed">
+                How can I assist with your finances today?
+              </Text>
+              <div className="grid grid-cols-2 gap-4 w-full max-w-2xl mt-12">
+                {[
+                  "Analyze my latest spending trends",
+                  "What's my cash flow looking like?",
+                  "Review my high-value transactions",
+                  "Perform a ledger audit",
+                ].map((hint, idx) => (
+                  <Button
+                    key={idx}
+                    onPress={() => handleSend(hint)}
+                    className="h-16 bg-white/2 border border-white/5 hover:bg-white/5 hover:border-primary/30 flex items-center justify-start px-6 rounded-xl transition-all group cursor-pointer"
+                  >
+                    <span className="text-[10px] font-black text-foreground/50 group-hover:text-primary uppercase tracking-widest text-left whitespace-normal leading-tight">
+                      {hint}
+                    </span>
+                  </Button>
+                ))}
+              </div>
             </div>
           ) : (
-            sessions.map((s) => (
-              <div
-                key={String(s.id)}
-                onClick={() => {
-                  setCurrentSessionId(String(s.id));
-                  router.push(`/advisor?session=${s.id}`);
-                }}
-                className={cn(
-                  "group relative p-4 rounded-xl cursor-pointer transition-all flex flex-col gap-2 border-[0.5px] card-hover",
-                  currentSessionId === s.id
-                    ? "bg-white/5 border-primary/30 shadow-[0_0_15px_rgba(0,127,255,0.1)]"
-                    : "bg-transparent border-transparent hover:border-white/10 hover:bg-white/2",
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <Text
-                    className={cn(
-                      "text-[11px] font-black uppercase tracking-tight truncate pr-8",
-                      currentSessionId === s.id
-                        ? "text-primary italic"
-                        : "text-foreground/40 group-hover:text-foreground",
-                    )}
-                  >
-                    {String(s.title || "UNDEFINED_SESSION")}
-                  </Text>
-                </div>
-                <div className="flex items-center gap-2 text-[8px] text-foreground/20 font-black uppercase tracking-[0.2em] font-mono">
-                  <Clock size={10} />
-                  <span>
-                    {s.lastUpdated
-                      ? new Date(String(s.lastUpdated)).toLocaleDateString(
-                          "en-GB",
-                          { day: "2-digit", month: "2-digit" },
-                        )
-                      : "NOW"}
-                  </span>
-                </div>
+            <div className="flex flex-col gap-8 max-w-4xl mx-auto w-full">
+              {messages.map((message, i) => (
+                <MemoizedChatMessage
+                  key={message.id || i}
+                  message={message}
+                  status={status}
+                  isLastMessage={i === messages.length - 1}
+                  sendMessage={sendMessage}
+                  activeSessionId={activeSessionId}
+                  showReasoning={showReasoning}
+                />
+              ))}
 
-                <Button
-                  isIconOnly
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteSession(String(s.id));
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-foreground/20 hover:text-destructive transition-all border-none z-10 w-6 h-6 min-w-6 bg-transparent"
-                >
-                  <Trash2 size={12} />
-                </Button>
-              </div>
-            ))
-          )}
-        </ScrollShadow>
-
-        <div className="p-6 border-t-[0.5px] border-white/5 bg-white/1">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <div className="w-8 h-8 rounded-lg bg-primary/20 border-[0.5px] border-primary/40 flex items-center justify-center text-primary font-black text-[10px]">
-                {String(userName || "U")
-                  .charAt(0)
-                  .toUpperCase()}
-              </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-black shadow-sm" />
-            </div>
-            <div className="overflow-hidden">
-              <Text className="text-[10px] font-black truncate text-foreground uppercase tracking-tight">
-                {String(userName || "VERIFIED_USER")}
-              </Text>
-            </div>
-          </div>
-        </div>
-      </Surface>
-
-      <Surface
-        className="relative z-10 flex-1 flex flex-col h-full bg-transparent overflow-hidden"
-        variant="transparent"
-      >
-        <Surface
-          className="h-16 flex items-center justify-between px-10 border-b-[0.5px] border-white/5 shrink-0 bg-black/20 backdrop-blur-xl z-20"
-          variant="transparent"
-        >
-          <div className="flex flex-col">
-            <Text className="text-foreground/30 font-black text-[9px] uppercase tracking-[0.4em] italic">
-              Current Analysis
-            </Text>
-            <div className="flex items-center gap-3 mt-1">
-              <Text className="text-foreground font-black text-[13px] uppercase tracking-tight truncate max-w-64">
-                {activeSession?.title
-                  ? (activeSession.title as string)
-                  : "BudAI Strategic Advisor"}
-              </Text>
-              <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[8px] font-black uppercase tracking-[0.2em] shadow-[0_0_10px_rgba(0,127,255,0.1)]">
-                <span className="w-1 h-1 rounded-full bg-primary animate-pulse" />
-                Encrypted Session
-              </div>
-              {activeSession?.contextData && (
-                <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 shadow-sm">
-                  <span className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
-                  <Text className="text-[8px] text-green-500 font-black uppercase tracking-[0.2em]">
-                    Live Data
-                  </Text>
+              {error && (
+                <div className="flex justify-center my-4">
+                  <div className="bg-danger/20 text-danger text-xs font-black uppercase tracking-widest px-4 py-2 rounded-full border border-danger/30">
+                    Connection Error. Retrying...
+                  </div>
                 </div>
               )}
             </div>
-          </div>
-        </Surface>
-
-        <ScrollShadow
-          ref={scrollRef}
-          className="flex-1 w-full relative pt-10 pb-36 overflow-y-auto min-h-0"
-        >
-          <div className="max-w-4xl mx-auto w-full px-10">
-            {!activeSession ? (
-              <div className="flex flex-col items-center justify-center h-[70vh] text-center">
-                <div className="w-20 h-20 rounded-2xl bg-white/2 border-[0.5px] border-primary/20 flex items-center justify-center text-primary shadow-[0_0_40px_rgba(0,127,255,0.1)] mb-12 transform rotate-3">
-                  <Sparkles size={32} />
-                </div>
-                <h2 className="text-5xl font-normal text-foreground mb-4 tracking-tighter uppercase italic">
-                  Advisor <span className="font-black not-italic">Ready</span>
-                </h2>
-                <Text className="text-foreground/30 max-w-md mx-auto leading-relaxed mb-16 font-medium tracking-tight text-sm uppercase">
-                  Connected to your financial data. How can I help you today?
-                </Text>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full max-w-2xl">
-                  {[
-                    "Simulate MacBook arbitrage (Dubai)",
-                    "Audit variable utility spikes",
-                    "Project October liquidity floor",
-                    "Analyze freelance volatility",
-                  ].map((p, i) => (
-                    <Button
-                      key={i}
-                      onPress={() => setInput(p)}
-                      className="bg-white/3 border-[0.5px] border-white/5 hover:border-primary/40 text-foreground/40 hover:text-primary rounded-xl p-6 text-[11px] font-black uppercase tracking-widest transition-all text-left cursor-pointer group flex items-center justify-between h-auto shadow-sm"
-                    >
-                      <span>{p}</span>
-                      <ArrowRight
-                        size={14}
-                        className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all"
-                      />
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-12">
-                <AnimatePresence initial={false}>
-                  {chatMessages.map((m) => (
-                    <motion.div
-                      key={m.id}
-                      className={cn(
-                        "flex gap-5 w-full animate-fade-in-up",
-                        m.role === "user" ? "justify-end" : "justify-start",
-                      )}
-                    >
-                      {m.role === "assistant" && (
-                        <div className="w-9 h-9 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(0,127,255,0.1)] transform -translate-y-1">
-                          <BrainCircuit size={18} className="text-primary" />
-                        </div>
-                      )}
-
-                      <div
-                        className={cn(
-                          "flex flex-col gap-3 max-w-[85%] relative",
-                          m.role === "user" ? "items-end" : "items-start",
-                        )}
-                      >
-                        {m.parts && m.parts.length > 0 ? (
-                          m.parts.map((part, index) => {
-                            if (part.type === "text") {
-                              return (
-                                <div
-                                  key={`${m.id}-part-${index}`}
-                                  className={cn(
-                                    "px-8 py-6 rounded-2xl text-[15px] leading-relaxed shadow-inner border-[0.5px] transition-all relative overflow-hidden",
-                                    m.role === "user"
-                                      ? "bg-primary border-primary/30 text-primary-foreground rounded-tr-sm font-bold tracking-tight"
-                                      : "bg-white/3 backdrop-blur-3xl border-white/10 text-foreground/90 rounded-tl-sm shadow-2xl hover:border-primary/40 hover:bg-white/5",
-                                  )}
-                                >
-                                  {m.role === "assistant" && (
-                                    <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-primary/40 to-transparent pointer-events-none" />
-                                  )}
-                                  {m.role === "user" ? (
-                                    <p className="whitespace-pre-wrap text-primary-foreground font-bold">
-                                      {part.text}
-                                    </p>
-                                  ) : (
-                                    <div className="prose prose-invert prose-p:leading-relaxed prose-pre:bg-black/60 prose-pre:border-[0.5px] prose-pre:border-white/10 prose-headings:text-primary prose-a:text-primary max-w-none prose-strong:text-primary/80 prose-code:text-primary/70 text-[14px]">
-                                      <ReactMarkdown
-                                        remarkPlugins={[remarkGfm]}
-                                      >
-                                        {part.text}
-                                      </ReactMarkdown>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            }
-
-                            if (
-                              part.type === "tool-invocation" &&
-                              "toolInvocation" in part
-                            ) {
-                              const ti = part.toolInvocation as ToolInvocation;
-                              const { toolName, state, result } = ti;
-
-                              if (toolName === "render_ui_chart") {
-                                return (
-                                  <motion.div
-                                    key={`${m.id}-part-${index}`}
-                                    initial={{ opacity: 0, scale: 0.95 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    className="w-full min-w-150 mt-4"
-                                  >
-                                    {state !== "output-available" ? (
-                                      <Skeleton className="w-full h-80 rounded-3xl bg-white/5" />
-                                    ) : (
-                                      <div className="p-4 bg-white/2 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden">
-                                        <CoreChartEngine
-                                          config={
-                                            (
-                                              result as {
-                                                config: NativeChartConfig;
-                                              }
-                                            )?.config || null
-                                          }
-                                        />
-                                      </div>
-                                    )}
-                                  </motion.div>
-                                );
-                              }
-
-                              if (toolName === "render_account_selector") {
-                                return (
-                                  <motion.div
-                                    key={`${m.id}-part-${index}`}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    className="mt-4 w-full max-w-sm"
-                                  >
-                                    <Card className="bg-white/2 backdrop-blur-3xl border border-white/10 rounded-3xl p-6 shadow-2xl">
-                                      <div className="flex items-center gap-3 mb-6">
-                                        <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
-                                          <Wallet size={16} />
-                                        </div>
-                                        <p className="text-xs font-black uppercase tracking-widest text-foreground">
-                                          Select Target Accounts
-                                        </p>
-                                      </div>
-                                      <ListBox
-                                        selectionMode="multiple"
-                                        className="space-y-2"
-                                        onSelectionChange={(keys) => {
-                                          const selectedIds = Array.from(keys);
-                                          if (selectedIds.length > 0) {
-                                            const names = selectedIds
-                                              .map((id) => {
-                                                const acc = accounts.find(
-                                                  (a) => a.account_id === id,
-                                                );
-                                                return (
-                                                  acc?.bank_name ||
-                                                  acc?.provider_name ||
-                                                  id
-                                                );
-                                              })
-                                              .join(", ");
-                                            sendChatMessage(
-                                              `Analyze these accounts: ${names} (IDs: ${selectedIds.join(", ")})`,
-                                            );
-                                          }
-                                        }}
-                                      >
-                                        {accounts.map((acc) => (
-                                          <ListBox.Item
-                                            key={acc.account_id}
-                                            id={acc.account_id}
-                                            textValue={
-                                              acc.bank_name || acc.provider_name
-                                            }
-                                            className="p-3 rounded-xl hover:bg-white/5 transition-all cursor-pointer border border-transparent hover:border-white/5"
-                                          >
-                                            <div className="flex flex-col">
-                                              <span className="text-[11px] font-bold text-foreground">
-                                                {acc.bank_name ||
-                                                  acc.provider_name}
-                                              </span>
-                                              <span className="text-[9px] text-foreground/30 font-mono italic">
-                                                {acc.account_number}
-                                              </span>
-                                            </div>
-                                          </ListBox.Item>
-                                        ))}
-                                      </ListBox>
-                                    </Card>
-                                  </motion.div>
-                                );
-                              }
-                            }
-                            return null;
-                          })
-                        ) : (
-                          <div
-                            className={cn(
-                              "px-8 py-6 rounded-2xl text-[15px] leading-relaxed shadow-inner border-[0.5px] transition-all relative overflow-hidden",
-                              m.role === "user"
-                                ? "bg-primary border-primary/30 text-primary-foreground rounded-tr-sm font-bold tracking-tight"
-                                : "bg-white/3 backdrop-blur-3xl border-white/10 text-foreground/90 rounded-tl-sm shadow-2xl hover:border-primary/40 hover:bg-white/5",
-                            )}
-                          >
-                            {m.role === "assistant" && (
-                              <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-primary/40 to-transparent pointer-events-none" />
-                            )}
-                            {m.role === "user" ? (
-                              <p className="whitespace-pre-wrap text-primary-foreground font-bold">
-                                {(m as UIMessage & { content: string })
-                                  .content || ""}
-                              </p>
-                            ) : (
-                              <div className="prose prose-invert prose-p:leading-relaxed prose-pre:bg-black/60 prose-pre:border-[0.5px] prose-pre:border-white/10 prose-headings:text-primary prose-a:text-primary max-w-none prose-strong:text-primary/80 prose-code:text-primary/70 text-[14px]">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                  {(m as UIMessage & { content: string })
-                                    .content || ""}
-                                </ReactMarkdown>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-4 px-2">
-                          <Text className="text-[9px] text-foreground/20 font-black uppercase tracking-[0.3em] font-mono">
-                            {(m as { createdAt?: string | Date }).createdAt
-                              ? new Date(
-                                  (m as { createdAt?: string | Date })
-                                    .createdAt!,
-                                ).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                  hour12: false,
-                                })
-                              : ""}
-                          </Text>
-                        </div>
-                      </div>
-
-                      {m.role === "user" && (
-                        <div className="w-9 h-9 bg-white/5 border-[0.5px] border-white/10 flex items-center justify-center text-foreground font-black text-[10px] shrink-0 rounded-lg transform -translate-y-1">
-                          {String(userName || "U")
-                            .charAt(0)
-                            .toUpperCase()}
-                        </div>
-                      )}
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-
-                {isChatLoading && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex gap-5 items-start justify-start w-full animate-fade-in-up"
-                  >
-                    <div className="w-9 h-9 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(0,127,255,0.1)] transform -translate-y-1">
-                      <Sparkles size={18} className="text-primary" />
-                    </div>
-                    <div className="px-8 py-6 rounded-2xl bg-white/3 backdrop-blur-3xl border border-white/10 text-foreground/40 rounded-tl-sm flex items-center gap-3">
-                      <div className="flex gap-1.5">
-                        <span className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse shadow-[0_0_8px_rgba(0,127,255,0.6)]" />
-                        <span className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse shadow-[0_0_8px_rgba(0,127,255,0.6)] [animation-delay:0.2s]" />
-                        <span className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse shadow-[0_0_8px_rgba(0,127,255,0.6)] [animation-delay:0.4s]" />
-                      </div>
-                      <Text className="text-[11px] font-black uppercase tracking-[0.2em] italic ml-2">
-                        Advisor Analysis in Progress...
-                      </Text>
-                    </div>
-                  </motion.div>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-            )}
-          </div>
-        </ScrollShadow>
-
-        <Surface
-          className="absolute bottom-0 left-0 w-full bg-transparent pt-12 pb-10 px-8 z-20"
-          variant="transparent"
-        >
-          {isChatLoading && (
-            <div className="absolute top-0 left-0 w-full h-0.5 overflow-hidden opacity-80 z-30">
-              <div className="h-full bg-linear-to-r from-transparent via-primary to-transparent w-1/3 animate-flow-line shadow-[0_0_10px_rgba(0,127,255,0.8)] blur-[1px]"></div>
-            </div>
           )}
-          <div className="max-w-3xl mx-auto relative">
-            <Form
-              onSubmit={handleSendMessage}
-              className="bg-black/60 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-2xl p-2.5 pl-6 flex items-center gap-4 shadow-2xl focus-within:border-primary/40 transition-all"
-            >
-              <Input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask a question..."
-                className="flex-1 bg-transparent text-foreground placeholder:text-foreground/20 text-[13px] font-black uppercase tracking-widest border-none shadow-none outline-none ring-0 focus:outline-none focus:ring-0"
-                variant="secondary"
-              />
-              <Button
-                isIconOnly
-                type="submit"
-                isDisabled={!input.trim() || isChatLoading}
-                className={cn(
-                  "w-10 h-10 min-w-10 rounded-xl transition-all duration-300 flex justify-center items-center",
-                  input.trim() && !isChatLoading
-                    ? "bg-primary text-primary-foreground shadow-lg cursor-pointer hover:scale-105 active:scale-95"
-                    : "bg-white/5 text-foreground/20 cursor-not-allowed border-[0.5px] border-white/5",
-                )}
-              >
-                <Send size={16} />
-              </Button>
-            </Form>
+        </div>
+
+        <div className="p-4 pb-12 sm:p-10 sm:pb-24 shrink-0 relative z-20">
+          <div className="max-w-4xl mx-auto w-full relative">
+            <ChatInputArea
+              status={status}
+              stop={stop}
+              onSend={handleSend}
+              isLocked={isLocked}
+            />
+            <div className="text-center mt-4">
+              <p className="text-[8px] text-foreground/30 uppercase tracking-[0.3em] font-black">
+                AI can make mistakes. Please verify important information.
+              </p>
+            </div>
           </div>
-        </Surface>
-      </Surface>
-    </Surface>
+        </div>
+      </main>
+    </div>
   );
 }

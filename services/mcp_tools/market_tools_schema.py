@@ -15,3 +15,9 @@ class HistoricalMarketDataInput(BaseModel):
     period: str = Field(
         default="6mo", description="The period (1mo, 6mo, 1y).")
     interval: str = Field(default="1d", description="The interval (1d, 1wk).")
+
+
+class CurrencyConversionInput(BaseModel):
+    amount: float = Field(..., description="The amount to convert.")
+    from_currency: str = Field(..., description="The source currency code (e.g., 'USD', 'EUR').")
+    to_currency: str = Field(..., description="The target currency code (e.g., 'GBP', 'INR').")

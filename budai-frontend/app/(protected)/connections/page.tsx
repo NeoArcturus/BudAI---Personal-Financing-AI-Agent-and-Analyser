@@ -28,7 +28,7 @@ export default function ConnectionsPage() {
     }, 1000);
 
     apiFetch("/api/auth/truelayer/status", {}, true)
-      .then((res) => res.json())
+      .then((res) => res.json() as any)
       .then((data) => {
         setConnectionStatus(data);
         if (accounts.length > 0) {
@@ -49,7 +49,7 @@ export default function ConnectionsPage() {
     try {
       const res = await apiFetch("/api/auth/truelayer/status", {}, true);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as any;
         if (data.auth_url) {
           router.push(data.auth_url);
         }

@@ -82,13 +82,13 @@ export default function ForecastingPage() {
       ]);
 
       if (wealthRes.ok) {
-        const result = await wealthRes.json();
+        const result = await wealthRes.json() as any;
         const raw = result.data;
         const unwrapped = (raw && typeof raw === 'object' && 'series' in raw) ? raw.series : (Array.isArray(raw) ? raw : [raw]);
         setWealthForecast(unwrapped);
       }
       if (expenseRes.ok) {
-        const result = await expenseRes.json();
+        const result = await expenseRes.json() as any;
         const raw = result.data;
         const unwrapped = (raw && typeof raw === 'object' && 'series' in raw) ? raw.series : (Array.isArray(raw) ? raw : [raw]);
         setExpenseForecast(unwrapped);

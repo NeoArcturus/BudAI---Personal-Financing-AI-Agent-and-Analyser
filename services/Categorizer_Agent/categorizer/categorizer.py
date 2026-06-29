@@ -13,6 +13,9 @@ import pandas as pd
 from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
+_global_gbm_model = None
+_global_label_encoder = None
+
 class Categorizer:
 
     def __init__(self):
@@ -30,10 +33,27 @@ class Categorizer:
         self.scam_fraud_keywords = self.rules.get("High-Risk / Anomaly", "")
 
     def predict(self, df, embeddings, gbm_model_path, enc_path):
+        global _global_gbm_model, _global_label_encoder
 
-        model = joblib.load(gbm_model_path)
+        import sys
+        try:
+            import sklearn._loss
+            sys.modules['_loss'] = sklearn._loss
+        except ImportError:
+            pass
+        try:
+            import sklearn.ensemble._hist_gradient_boosting._loss
+            sys.modules['_loss'] = sklearn.ensemble._hist_gradient_boosting._loss
+        except ImportError:
+            pass
+        
+        if _global_gbm_model is None:
+            _global_gbm_model = joblib.load(gbm_model_path)
+        if _global_label_encoder is None:
+            _global_label_encoder = joblib.load(enc_path)
 
-        le = joblib.load(enc_path)
+        model = _global_gbm_model
+        le = _global_label_encoder
 
         df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
 
@@ -154,4 +174,3 @@ class Categorizer:
         df.loc[:, 'Confidence'] = final_confidences
 
         return df
-

@@ -33,7 +33,7 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await res.json() as any;
 
       if (res.ok && data.token) {
         localStorage.setItem("budai_token", data.token);
@@ -42,11 +42,11 @@ export default function LoginPage() {
         router.push("/home");
       } else {
         setError(data.detail || "Invalid credentials.");
+        setIsLoading(false);
       }
     } catch (err) {
       console.log(err);
       setError("Unable to connect. Please try again.");
-    } finally {
       setIsLoading(false);
     }
   };

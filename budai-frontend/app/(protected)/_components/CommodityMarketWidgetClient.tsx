@@ -17,7 +17,6 @@ import {
 import { cn } from "@/lib/utils";
 import CoreChartEngine from "./CoreChartEngine";
 import WidgetFlipCard from "./WidgetFlipCard";
-import { useAdvisorInsight } from "@/lib/hooks";
 import { useRouter } from "next/navigation";
 import { useBudAI } from "@/app/context/AppContext";
 
@@ -50,7 +49,7 @@ export default function CommodityMarketWidgetClient({
         {},
         true,
       );
-      return res.json();
+      return (await res.json()) as { history: CommodityHistory[] };
     },
     initialData: selectedRange === "1M" ? initialHistory : undefined,
     staleTime: 600000,
@@ -119,15 +118,6 @@ export default function CommodityMarketWidgetClient({
     };
   }, [activeHistory, selectedSymbol, trendColor, trendBg]);
 
-  const { data: insight, isLoading: isAnalyzing } = useAdvisorInsight(
-    "commodityMarket",
-    {
-      symbol: selectedSymbol,
-      range: selectedRange,
-      history: JSON.stringify(activeHistory?.history.slice(-10) || []),
-    },
-  );
-
   const handleDiscuss = () => {
     const sessionId = createNewSession(
       `Market Analysis: ${selectedSymbol} (${selectedRange})`,
@@ -150,8 +140,8 @@ export default function CommodityMarketWidgetClient({
 
   return (
     <WidgetFlipCard
-      insight={insight}
-      isLoading={isAnalyzing}
+      insight={undefined}
+      isLoading={false}
       isDataLoading={isHistoryLoading}
       onDiscuss={handleDiscuss}
     >

@@ -13,20 +13,21 @@ def _ensure_compiled():
     algo_cpp = os.path.join(algorithm_dir, "algorithm.cpp")
     hybrid_cpp = os.path.join(algorithm_dir, "hybrid_algorithm.cpp")
     output_so = os.path.join(base_dir, "hybrid_forecaster.so")
-    should_compile = not os.path.exists(output_so)
-    if not should_compile:
+    
+    if os.path.exists(output_so):
         try:
             ctypes.CDLL(output_so)
+            return output_so
         except Exception:
+            logger.warning(f"Existing C++ engine at {output_so} is corrupt. Recompiling...")
             try: os.remove(output_so)
             except: pass
-            should_compile = True
-    if should_compile:
-        logger.info(f"Compiling C++ forecaster engine to {output_so}...")
-        subprocess.run([
-            "g++", "-O3", "-shared", "-fPIC", "-std=c++17",
-            f"-I{algorithm_dir}", "-o", output_so, algo_cpp, hybrid_cpp
-        ], check=True)
+
+    logger.info(f"Compiling C++ forecaster engine to {output_so}...")
+    subprocess.run([
+        "g++", "-O3", "-shared", "-fPIC", "-std=c++17",
+        f"-I{algorithm_dir}", "-o", output_so, algo_cpp, hybrid_cpp
+    ], check=True)
     return output_so
 
 def run_hybrid_engine(S0, mu, params, days, paths, account_id, deterministic_calendar):

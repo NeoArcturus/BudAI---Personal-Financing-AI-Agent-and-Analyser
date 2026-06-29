@@ -58,7 +58,7 @@ def search_user_memory(query: str) -> str:
     from services.mcp_bridge import MCPBridge
     bridge = MCPBridge()
     try:
-        result = bridge.call_iii_tool_sync("memory", "search_financial_history_semantic", {"query": query})
+        result = bridge.call_tool_sync("memory", "search_financial_history_semantic", {"query": query})
         return result
     except Exception as e:
         logger.error(f"Memory Search Failed: {e}")

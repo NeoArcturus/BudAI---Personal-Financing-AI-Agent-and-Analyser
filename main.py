@@ -1,6 +1,21 @@
 import logging
 import asyncio
 import os
+
+# --- PATCH LANGCHAIN OPENAI FOR REASONING CONTENT ---
+import langchain_openai.chat_models.base as base
+
+original_convert_delta = base._convert_delta_to_message_chunk
+
+def patched_convert_delta(_dict, default_class):
+    chunk = original_convert_delta(_dict, default_class)
+    if "reasoning_content" in _dict and _dict["reasoning_content"] is not None:
+        chunk.additional_kwargs["reasoning_content"] = _dict["reasoning_content"]
+    return chunk
+
+base._convert_delta_to_message_chunk = patched_convert_delta
+# ----------------------------------------------------
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -56,6 +71,21 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(func=refresh_all_tokens, trigger="interval", minutes=45)
     scheduler.start()
     logger.info("Background scheduler started for token refresh (45m interval)")
+    # Initialize categorizer globally in the background
+    def _run_global_training():
+        try:
+            from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+            agent = CategorizerAgent()
+            res = agent.train_global()
+            if res.get("trained"):
+                logger.info(f"Global categorization model trained on {res.get('samples', 0)} samples.")
+            else:
+                logger.info(f"Global categorization model initialization: {res.get('reason')}")
+        except Exception as e:
+            logger.error(f"Failed to initialize global categorizer: {e}")
+            
+    asyncio.create_task(asyncio.to_thread(_run_global_training))
+    
     yield
     scheduler.shutdown()
     logger.info("Shutting down background scheduler")
@@ -70,6 +100,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Vercel-AI-Data-Stream"],
 )
 
 app.include_router(auth_router)

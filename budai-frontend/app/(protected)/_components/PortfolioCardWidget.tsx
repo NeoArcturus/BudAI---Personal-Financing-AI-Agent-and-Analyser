@@ -66,7 +66,7 @@ export default function PortfolioCardWidget() {
     try {
       const res = await apiFetch("/api/auth/truelayer/status", {}, true);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as any;
         if (data.auth_url) {
           router.push(data.auth_url);
         }

@@ -23,7 +23,7 @@ import { useBudAI } from "@/app/context/AppContext";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { parseDate, CalendarDate } from "@internationalized/date";
-import { useTransactions, useAdvisorInsight, usePersistedState } from "@/lib/hooks";
+import { useTransactions, usePersistedState } from "@/lib/hooks";
 import WidgetFlipCard from "./WidgetFlipCard";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -106,7 +106,7 @@ export default function LedgerTableWidgetClient({
       );
 
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as any;
         const taskId = data.task_id;
 
         if (taskId) {
@@ -118,7 +118,7 @@ export default function LedgerTableWidgetClient({
                 true,
               );
               if (statusRes.ok) {
-                const statusData = await statusRes.json();
+                const statusData = await statusRes.json() as any;
                 if (
                   statusData.status === "completed" ||
                   statusData.status === "failed"
@@ -146,11 +146,6 @@ export default function LedgerTableWidgetClient({
       setIsUpdating(false);
     }
   };
-
-  const { data: insight, isLoading: isAnalyzing } = useAdvisorInsight(
-    "ledgerTable",
-    transactions.slice(0, 15),
-  );
 
   const handleDiscuss = () => {
     const sessionId = createNewSession("Transaction Audit Session", {
@@ -209,8 +204,8 @@ export default function LedgerTableWidgetClient({
 
   return (
     <WidgetFlipCard
-      insight={insight}
-      isLoading={isAnalyzing}
+      insight={undefined}
+      isLoading={false}
       isDataLoading={isLoading}
       onDiscuss={handleDiscuss}
     >

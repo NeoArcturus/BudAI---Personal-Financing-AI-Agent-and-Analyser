@@ -54,12 +54,12 @@ export default function HealthPage() {
       ]);
 
       if (radarRes.ok) {
-        const result = await radarRes.json();
+        const result = await radarRes.json() as any;
         setHealthData(result.data);
       }
 
       if (metricsRes.ok) {
-        const result = await metricsRes.json();
+        const result = await metricsRes.json() as any;
         setHealthMetrics(
           typeof result.data === "string"
             ? JSON.parse(result.data)

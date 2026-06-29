@@ -13,4 +13,3 @@ class CategoryDistribution:
         grouped.columns = ['Category', 'Total_Amount']
         grouped = grouped.sort_values(by='Total_Amount', ascending=False)
         return grouped
-

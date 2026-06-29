@@ -1,17 +1,11 @@
 import time
-import asyncio
 import os
-import warnings
-import sys
-from iii import register_worker
 from newsdataapi import NewsDataApiClient
 import yfinance as yf
 from dotenv import load_dotenv
 
-warnings.filterwarnings("ignore")
 load_dotenv()
 NEWSDATA_API_KEY = os.getenv("NEWSDATA_API_KEY")
-III_ENGINE_URL = os.getenv("III_ENGINE_URL", "ws://iii-engine:49134")
 
 from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
@@ -80,33 +74,21 @@ def get_financial_news(query: str = "") -> str:
         logger.error(f"News Error: {e}")
         return "Financial news service is currently unavailable."
 
-def tool_wrapper(func, args):
-    # Filter out internal iii arguments
-    clean_args = {k: v for k, v in args.items() if not k.startswith("_")}
+def perform_currency_conversion(amount: float, from_currency: str, to_currency: str) -> str:
+    ticker_symbol = f"{from_currency}{to_currency}=X"
     try:
-        if asyncio.iscoroutinefunction(func):
-            try:
-                return asyncio.run(func(**clean_args))
-            except RuntimeError:
-                # Fallback if loop is already running
-                loop = asyncio.get_event_loop()
-                return loop.run_until_complete(func(**clean_args))
+        ticker = yf.Ticker(ticker_symbol)
+        info = ticker.fast_info
+        rate = info.get('last_price')
+        
+        if rate is None:
+            rate = ticker.info.get('currentPrice') or ticker.info.get('regularMarketPrice')
+            
+        if rate:
+            converted_amount = amount * rate
+            return f"CONVERSION_RESULT: {amount} {from_currency} = {converted_amount:.2f} {to_currency} (Rate: {rate:.4f}). [RESULT_VALUE: {converted_amount:.2f}]"
         else:
-            return func(**clean_args)
+            return f"Could not find exchange rate for {ticker_symbol}. Ensure currency codes are valid."
     except Exception as e:
-        logger.error(f"Error executing {func.__name__}: {e}", exc_info=True)
-        return f"Error: {str(e)}"
-
-async def main():
-    logger.info("Initializing Macro Worker with iii")
-    worker = register_worker(III_ENGINE_URL)
-    
-    worker.register_function("macro::get_live_market_data", lambda args: tool_wrapper(get_live_market_data, args))
-    worker.register_function("macro::get_financial_news", lambda args: tool_wrapper(get_financial_news, args))
-    
-    logger.info("Macro Worker registered. Entering heartbeat loop.")
-    while True:
-        await asyncio.sleep(3600)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+        logger.error(f"Currency Conversion Error: {e}")
+        return f"Error performing currency conversion: {str(e)}"

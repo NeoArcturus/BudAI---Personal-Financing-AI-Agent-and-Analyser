@@ -18,8 +18,9 @@ logger = get_core_logger(__name__)
 
 advisor_router = APIRouter(prefix="/api/advisor", tags=["advisor"])
 
-job_store: Dict[str, Dict[str, Any]] = {}
-mrfp_cache: Dict[str, Dict[str, Any]] = {}
+from config import SessionLocal, redis_client
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
 
 class SummarizeRequest(BaseModel):
     widget_id: str
@@ -39,21 +40,22 @@ async def run_advisor_task(job_id: str, user_uuid: str, widget_id: str, context_
                 data_hash=data_hash
             ).first()
             if existing:
-                job_store[job_id] = {"status": "completed", "insight": existing.summary_text}
+                redis_client.set(f"job:{job_id}", json.dumps({"status": "completed", "insight": existing.summary_text}), ex=3600)
                 return
 
         now = time.time()
-        cached_mrfp = mrfp_cache.get(user_uuid)
-        if cached_mrfp and (now - cached_mrfp["timestamp"] < 3600):
+        cached_mrfp_raw = redis_client.get(f"mrfp:{user_uuid}")
+        if cached_mrfp_raw:
+            cached_mrfp = json.loads(cached_mrfp_raw)
             mrfp = cached_mrfp["data"]
         else:
             profile_builder = ProfileBuilder(user_uuid)
             mrfp = await profile_builder.build_profile()
-            mrfp_cache[user_uuid] = {"data": mrfp, "timestamp": now}
+            redis_client.set(f"mrfp:{user_uuid}", json.dumps({"data": mrfp, "timestamp": now}), ex=3600)
 
         base_url = os.getenv("VLLM_SUMMARY_URL", "http://host.docker.internal:8000/v1")
         llm = ChatOpenAI(
-            model="mlx-community/Qwen2.5-7B-Instruct-4bit",
+            model="mlx-community/Qwen3.5-4B-4bit",
             base_url=base_url,
             api_key="budai-local",
             temperature=0
@@ -91,10 +93,10 @@ async def run_advisor_task(job_id: str, user_uuid: str, widget_id: str, context_
             session.add(new_summary)
             session.commit()
 
-        job_store[job_id] = {"status": "completed", "insight": insight}
+        redis_client.set(f"job:{job_id}", json.dumps({"status": "completed", "insight": insight}), ex=3600)
     except Exception as e:
         logger.error(f"Async advisor task failed for job {job_id}: {e}")
-        job_store[job_id] = {"status": "failed", "error": str(e)}
+        redis_client.set(f"job:{job_id}", json.dumps({"status": "failed", "error": str(e)}), ex=3600)
 
 @advisor_router.post("/summarize")
 async def summarize_data(request: SummarizeRequest, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user)):
@@ -108,18 +110,18 @@ async def summarize_data(request: SummarizeRequest, background_tasks: Background
         ).first()
         if existing:
             job_id = str(uuid.uuid4())
-            job_store[job_id] = {"status": "completed", "insight": existing.summary_text}
+            redis_client.set(f"job:{job_id}", json.dumps({"status": "completed", "insight": existing.summary_text}), ex=3600)
             return {"job_id": job_id}
 
     job_id = str(uuid.uuid4())
-    job_store[job_id] = {"status": "pending"}
+    redis_client.set(f"job:{job_id}", json.dumps({"status": "pending"}), ex=3600)
     background_tasks.add_task(
         run_advisor_task, job_id, current_user.user_uuid, request.widget_id, request.context_data)
     return {"job_id": job_id}
 
 @advisor_router.get("/status/{job_id}")
 async def get_summarize_status(job_id: str):
-    job = job_store.get(job_id)
-    if not job:
+    job_raw = redis_client.get(f"job:{job_id}")
+    if not job_raw:
         raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    return json.loads(job_raw)

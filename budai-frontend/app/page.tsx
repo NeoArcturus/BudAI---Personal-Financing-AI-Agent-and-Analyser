@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useRouter } from "next/navigation";
 import { Button, Link, Accordion } from "@heroui/react";
 import {
@@ -13,25 +13,13 @@ import {
   Database,
   Menu,
   ChevronDown,
-  BrainCircuit,
+  MessageSquare,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function LandingPage() {
   const router = useRouter();
-  const [isLoaded, setIsLoaded] = useState(false);
 
-  useEffect(() => {
-    const token = localStorage.getItem("budai_token");
-    if (token) {
-      router.push("/home");
-    } else {
-      const timer = setTimeout(() => setIsLoaded(true), 0);
-      return () => clearTimeout(timer);
-    }
-  }, [router]);
-
-  if (!isLoaded) return null;
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -337,7 +325,7 @@ export default function LandingPage() {
                 {
                   step: "02",
                   title: "Intelligent Analysis",
-                  icon: BrainCircuit,
+                  icon: MessageSquare,
                   desc: "Automated categorization mapping every transaction with precision.",
                 },
                 {

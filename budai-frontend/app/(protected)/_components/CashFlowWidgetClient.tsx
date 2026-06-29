@@ -19,7 +19,7 @@ import { useBudAI } from "@/app/context/AppContext";
 import { Transaction, BankChartData } from "@/types";
 import { today, getLocalTimeZone, DateValue } from "@internationalized/date";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
-import { useTransactions, useAdvisorInsight, usePersistedState } from "@/lib/hooks";
+import { useTransactions, usePersistedState } from "@/lib/hooks";
 import WidgetFlipCard from "./WidgetFlipCard";
 import { useRouter } from "next/navigation";
 import { WidgetContext } from "../home/DashboardClient";
@@ -60,11 +60,6 @@ export default function CashFlowWidgetClient({
     fromStr,
     toStr,
     initialData,
-  );
-
-  const { data: insight, isLoading: isAnalyzing } = useAdvisorInsight(
-    "cash_flow",
-    transactions,
   );
 
   const chartConfig = useMemo(() => {
@@ -171,8 +166,8 @@ export default function CashFlowWidgetClient({
 
   return (
     <WidgetFlipCard
-      insight={insight}
-      isLoading={isAnalyzing}
+      insight={undefined}
+      isLoading={false}
       onDiscuss={handleDiscuss}
     >
       <Card className="w-full h-full liquid-glass rounded-xl flex flex-col relative overflow-hidden">

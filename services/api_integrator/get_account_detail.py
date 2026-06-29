@@ -233,6 +233,23 @@ class UserAccounts:
         else:
             logger.warning(
                 f"Categorization models not found at {xgb_model_path}. Storing as 'Uncategorized'.")
+        
+        # Fallback regex categorization for any Uncategorized transactions
+        rules_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Categorizer_Agent", "budai_category_rules.json")
+        try:
+            import json
+            import re
+            with open(rules_path, "r") as f:
+                rules = json.load(f).get("rules", {})
+            for tx in new_txs:
+                if tx.get("category", "Uncategorized") == "Uncategorized":
+                    desc_lower = str(tx.get("description", "")).lower()
+                    for cat_name, pattern in rules.items():
+                        if re.search(pattern, desc_lower):
+                            tx["category"] = cat_name
+                            break
+        except Exception as e:
+            logger.error(f"Fallback categorization failed: {e}")
         new_txs.sort(key=lambda x: x["date"])
         logger.info(f"Committing {len(new_txs)} transactions to database...")
         for tx_dict in new_txs:
@@ -324,15 +341,13 @@ class UserAccounts:
             return float(acc.account_balance)
         return 0.0
 
-    def get_transactions(self, identifier, user_uuid, start_date=None, end_date=None):
+    def get_transactions(self, identifier, user_uuid, start_date=None, end_date=None, expense_only=False):
         try:
             with SessionLocal() as session:
                 query = session.query(Transaction)
                 
-                # Handle single identifier or list of identifiers
                 identifiers = [identifier] if isinstance(identifier, str) else identifier
                 
-                # If identifiers are provided and not empty, filter by them
                 if identifiers and "ALL" not in [str(i).upper() for i in identifiers]:
                     query = query.join(Account).join(Bank).filter(
                         (Bank.bank_name.in_(identifiers)) | (Account.account_id.in_(identifiers))
@@ -344,6 +359,8 @@ class UserAccounts:
                     query = query.filter(Transaction.date >= start_date)
                 if end_date:
                     query = query.filter(Transaction.date <= end_date)
+                if expense_only:
+                    query = query.filter(Transaction.amount < 0)
                 
                 txs = query.order_by(Transaction.date.desc()).all()
                 if not txs:
@@ -366,13 +383,11 @@ class UserAccounts:
             logger.error("Error in get_transactions", exc_info=True)
             return pd.DataFrame()
 
-    def get_bank_transactions(self, identifier: Any, user_uuid: str, from_date: str = None, to_date: str = None):
+    def get_bank_transactions(self, identifier: Any, user_uuid: str, from_date: str = None, to_date: str = None, expense_only: bool = False):
         try:
-            # 1. Try to fetch from DB first
             transactions = self.get_transactions(
-                identifier, user_uuid, start_date=from_date, end_date=to_date)
+                identifier, user_uuid, start_date=from_date, end_date=to_date, expense_only=expense_only)
             
-            # Check if we need to hit the API (if data is sparse or missing)
             needs_api_fetch = True
             if not transactions.empty:
                 temp_dates = pd.to_datetime(transactions['date'], format='ISO8601', errors='coerce', utc=True)
@@ -386,7 +401,6 @@ class UserAccounts:
             if not needs_api_fetch:
                 return transactions
 
-            # 2. Fetch from TrueLayer API
             with SessionLocal() as session:
                 identifiers = [identifier] if isinstance(identifier, str) else identifier
                 query_base = session.query(Account.account_id, Bank.access_token, Bank.bank_uuid, Bank.truelayer_provider_id).join(Bank)
@@ -414,8 +428,7 @@ class UserAccounts:
                 except Exception as e:
                     logger.error(f"Failed to fetch API transactions for {acc_id}: {e}")
 
-            # 3. Final return from DB
-            return self.get_transactions(identifier, user_uuid, start_date=from_date, end_date=to_date)
+            return self.get_transactions(identifier, user_uuid, start_date=from_date, end_date=to_date, expense_only=expense_only)
         except Exception:
             logger.error("Error in get_bank_transactions", exc_info=True)
             return pd.DataFrame()

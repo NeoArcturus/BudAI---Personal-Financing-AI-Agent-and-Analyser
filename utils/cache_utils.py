@@ -15,7 +15,7 @@ def user_cache_key_builder(
     Constructs a unique cache key incorporating user UUID, endpoint, and specific query parameters.
     """
     logger.info("Entering user_cache_key_builder")
-    # Extract the actual endpoint kwargs passed by fastapi-cache
+
     endpoint_kwargs = kwargs.get("kwargs", {})
     user = endpoint_kwargs.get("current_user")
     

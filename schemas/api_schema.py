@@ -24,15 +24,19 @@ class ChatRequest(BaseModel):
 
 
 class VercelMessage(BaseModel):
-    role: str
+    role: Optional[str] = None
     content: Optional[str] = ""
     parts: Optional[List[Dict[str, Any]]] = None
+    type: Optional[str] = "text"
+    payload: Optional[Dict[str, Any]] = None
 
 
 class StreamChatRequest(BaseModel):
     messages: List[VercelMessage]
     session_id: Optional[str] = None
     active_account_id: Optional[str] = None
+    htil_response: Optional[Dict[str, Any]] = None
+    messageId: Optional[str] = None
 
 
 class ExplanationRequest(BaseModel):
@@ -67,7 +71,12 @@ class RetrainCategorizerRequest(BaseModel):
 class ChatMessageResponse(BaseModel):
     role: str
     content: str
+    reasoning_content: Optional[str] = None
     timestamp: datetime
+
+
+class ChatSessionRenameRequest(BaseModel):
+    title: str
 
 
 class ChatSessionResponse(BaseModel):

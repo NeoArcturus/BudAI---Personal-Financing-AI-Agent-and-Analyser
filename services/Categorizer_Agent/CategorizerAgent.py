@@ -112,6 +112,50 @@ class CategorizerAgent:
             train_df, embeddings, self.model_dir, self.enc_dir)
         success = trainer.train()
         return {"trained": success, "samples": len(train_df)}
+
+    def train_global(self):
+        xgb_model_path = os.path.join(self.model_dir, "gbm_model.joblib")
+        enc_path = os.path.join(self.enc_dir, "label_encoder.joblib")
+        if os.path.exists(xgb_model_path) and os.path.exists(enc_path):
+            return {"trained": False, "reason": "Model already exists."}
+            
+        self._ensure_feedback_table()
+        with SessionLocal() as session:
+            rows = session.execute(text("""
+                SELECT
+                    t.transaction_uuid,
+                    t.account_id,
+                    t.date,
+                    t.amount,
+                    t.description,
+                    t.category
+                FROM transactions t
+            """)).fetchall()
+            
+        if not rows:
+            logger.info("No transactions in DB for global training.")
+            return {"trained": False, "reason": "No transactions available for training."}
+            
+        records = []
+        for row in rows:
+            tx_id, acc_id, date_val, amount, description, category = row
+            records.append({
+                "transaction_id": tx_id,
+                "transaction_uuid": tx_id,
+                "account_id": acc_id,
+                "timestamp": date_val.isoformat() if hasattr(date_val, "isoformat") else str(date_val),
+                "amount": amount,
+                "description": description,
+                "Category": category
+            })
+            
+        raw_df = pd.DataFrame(records)
+        proc = Preprocessor(raw_df, self.local_st_path)
+        train_df, embeddings = proc.preprocess_for_training()
+        trainer = CategorizerTrainer(
+            train_df, embeddings, self.model_dir, self.enc_dir)
+        success = trainer.train()
+        return {"trained": success, "samples": len(train_df)}
     def execute_cycle(self, identifier, user_uuid, start_date, end_date):
         try:
             if str(identifier).upper() == "ALL" or "," in str(identifier):

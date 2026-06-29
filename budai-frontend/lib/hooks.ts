@@ -38,7 +38,7 @@ export function useAccounts() {
     queryKey: ["accounts"],
     queryFn: async () => {
       const res = await apiFetch("/api/accounts", {}, true);
-      const data = await res.json();
+      const data = await res.json() as any;
       return (data.accounts as Account[]) || [];
     },
     staleTime: 1000 * 60 * 5,
@@ -68,7 +68,7 @@ export function useTransactions(
         {},
         true,
       );
-      const data = await res.json();
+      const data = await res.json() as any;
       return (data.transactions as Transaction[]) || [];
     },
     initialData,
@@ -108,7 +108,7 @@ export function useSpendingTrends(
         },
         true,
       );
-      const result = await res.json();
+      const result = await res.json() as any;
       return (result.data as BankChartData[]) || [];
     },
     initialData,
@@ -124,7 +124,7 @@ export function useChatSessions() {
     queryKey: ["chat-sessions"],
     queryFn: async () => {
       const res = await apiFetch("/api/chat/sessions", {}, true);
-      const data = await res.json();
+      const data = await res.json() as any;
       return Array.isArray(data) ? data : [];
     },
     staleTime: 1000 * 60 * 5,
@@ -148,7 +148,7 @@ export function useAdvisorInsight(widgetId: string, contextData: unknown) {
           },
         }),
       }, true);
-      const data = await res.json();
+      const data = await res.json() as any;
       return data.job_id as string;
     },
     staleTime: Infinity,
@@ -161,7 +161,7 @@ export function useAdvisorInsight(widgetId: string, contextData: unknown) {
       const res = await apiFetch(`/api/advisor/status/${initJob.data}`, {
         method: "GET",
       }, true);
-      const data = await res.json();
+      const data = await res.json() as any;
       if (data.status === "pending") {
         throw new Error("STILL_PENDING");
       }

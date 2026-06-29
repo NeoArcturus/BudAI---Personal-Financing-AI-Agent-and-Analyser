@@ -21,7 +21,7 @@ export default function MarketTickerClient({ initialData }: MarketTickerProps) {
     queryKey: ["market-ticker"],
     queryFn: async () => {
       const res = await apiFetch("/api/market/ticker", {}, true);
-      const json = await res.json();
+      const json = (await res.json()) as { tickers: MarketTickerItem[] };
       return json.tickers || [];
     },
     initialData,

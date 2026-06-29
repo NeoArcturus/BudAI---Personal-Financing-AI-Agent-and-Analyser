@@ -32,7 +32,7 @@ export default function RegisterPage() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await res.json() as any;
 
       if (res.ok) {
         router.push("/login");

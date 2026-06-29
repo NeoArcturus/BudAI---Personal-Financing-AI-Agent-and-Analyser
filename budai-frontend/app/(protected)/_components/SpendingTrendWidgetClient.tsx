@@ -21,7 +21,7 @@ import {
 import { useBudAI } from "@/app/context/AppContext";
 import { today, getLocalTimeZone, DateValue } from "@internationalized/date";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
-import { useAdvisorInsight, useSpendingTrends, usePersistedState } from "@/lib/hooks";
+import { useSpendingTrends, usePersistedState } from "@/lib/hooks";
 import WidgetFlipCard from "./WidgetFlipCard";
 import { useRouter } from "next/navigation";
 import { Account, BankChartData } from "@/types";
@@ -113,11 +113,6 @@ export default function SpendingTrendWidgetClient({
     granularity,
   ]);
 
-  const { data: insight, isLoading: isAnalyzing } = useAdvisorInsight(
-    "spendingTrend",
-    chartPayload,
-  );
-
   const handleDiscuss = () => {
     const sessionId = createNewSession("Spending Trend Deep Dive", {
       type: "spending_trend",
@@ -142,8 +137,8 @@ export default function SpendingTrendWidgetClient({
 
   return (
     <WidgetFlipCard
-      insight={insight}
-      isLoading={isAnalyzing}
+      insight={undefined}
+      isLoading={false}
       isDataLoading={isInitialLoading}
       onDiscuss={handleDiscuss}
     >
