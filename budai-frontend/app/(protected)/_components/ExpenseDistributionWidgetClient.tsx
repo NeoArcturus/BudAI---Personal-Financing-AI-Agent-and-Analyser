@@ -340,7 +340,7 @@ export default function ExpenseDistributionWidgetClient({
                               {acc.bank_name}
                             </Label>
                             {selectedAccountId === acc.account_id && (
-                              <Badge className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,127,255,0.6)]" />
+                              <Badge className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,242,255,0.6)]" />
                             )}
                           </Badge.Anchor>
                           <Description className="text-[9px] text-foreground/30 font-mono tracking-[0.2em] pointer-events-none mt-1.5 uppercase">

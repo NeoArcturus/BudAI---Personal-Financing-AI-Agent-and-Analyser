@@ -119,7 +119,7 @@ export default function HealthPage() {
           </div>
 
           <div className="flex-1 w-full flex items-center justify-center min-h-80 bg-white/1 rounded-xl border-[0.5px] border-white/5 relative overflow-hidden p-8">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.02)_0%,transparent_70%)] pointer-events-none" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,242,255,0.02)_0%,transparent_70%)] pointer-events-none" />
             {isLoading ? (
               <Skeleton animationType="shimmer" className="w-80 h-80 rounded-full bg-white/5" />
             ) : chartConfig ? (
@@ -143,7 +143,7 @@ export default function HealthPage() {
             <div className="relative w-48 h-48 flex items-center justify-center mb-10">
               <div className="absolute inset-0 rounded-full border-[0.5px] border-white/5 shadow-inner"></div>
               {!isLoading && (
-                <div className="absolute inset-0 rounded-full border-t-[3px] border-r-[3px] border-primary shadow-[0_0_30px_rgba(0,127,255,0.4)] rotate-45 animate-pulse"></div>
+                <div className="absolute inset-0 rounded-full border-t-[3px] border-r-[3px] border-primary shadow-[0_0_30px_rgba(0,242,255,0.4)] rotate-45 animate-pulse"></div>
               )}
               <div className="flex flex-col items-center">
                 {isLoading ? (

@@ -3,6 +3,8 @@
 import React from "react";
 import { Link, Avatar } from "@heroui/react";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
+import NextLink from "next/link";
 import {
   LayoutDashboard,
   ArrowRightLeft,
@@ -28,16 +30,18 @@ export const TopNavbar = () => {
   ];
 
   return (
-    <header className="relative z-50 w-full h-16 bg-background/80 backdrop-blur-3xl border-b border-white/10 grid grid-cols-3 items-center px-6 shrink-0 shadow-sm">
-      <div className="flex items-center justify-start gap-3">
-        <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shadow-[0_0_15px_rgba(0,127,255,0.4)]">
-          <span className="text-primary-foreground font-black text-sm leading-none tracking-tighter m-0 p-0">
-            B
-          </span>
-        </div>
-        <h1 className="text-foreground text-xl font-bold tracking-tighter uppercase italic">
-          BudAI
-        </h1>
+    <header className="relative z-50 w-full h-24 bg-[#0c131d] border-b-[0.5px] border-white/5 flex justify-between items-center px-6 md:px-10 shrink-0 shadow-sm">
+      <div className="flex items-center gap-2">
+        <NextLink href="/">
+          <Image
+            src="/FullLogo.jpg"
+            alt="BudAI Logo"
+            width={100}
+            height={31}
+            className="rounded-sm"
+            priority
+          />
+        </NextLink>
       </div>
         
       <nav className="hidden md:flex items-center justify-center gap-2">
@@ -50,7 +54,7 @@ export const TopNavbar = () => {
               className={cn(
                 "flex items-center gap-2 px-3 py-2 rounded-lg transition-all border border-transparent",
                 isActive
-                  ? "text-primary bg-primary/10 border-primary/20 shadow-[0_0_15px_rgba(0,127,255,0.05)]"
+                  ? "text-primary bg-primary/10 border-primary/20 shadow-[0_0_15px_rgba(0,242,255,0.05)]"
                   : "text-foreground/50 hover:text-foreground hover:bg-white/5 hover:border-white/10",
               )}
             >
@@ -75,7 +79,7 @@ export const TopNavbar = () => {
             Primary Profile
           </p>
         </div>
-        <Avatar className="w-8 h-8 bg-primary shadow-[0_0_15px_rgba(0,127,255,0.3)] border border-white/10 text-primary-foreground font-black text-sm flex items-center justify-center cursor-pointer">
+        <Avatar className="w-8 h-8 bg-primary shadow-[0_0_15px_rgba(0,242,255,0.3)] border border-white/10 text-primary-foreground font-black text-sm flex items-center justify-center cursor-pointer">
           <Avatar.Fallback>{userName?.charAt(0) || "U"}</Avatar.Fallback>
         </Avatar>
       </div>

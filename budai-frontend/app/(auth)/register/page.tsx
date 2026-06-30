@@ -51,7 +51,7 @@ export default function RegisterPage() {
     <div className="flex h-screen w-screen bg-transparent items-center justify-center font-sans text-white relative overflow-hidden">
       <Card className="w-full max-w-md bg-black/40 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-2xl relative overflow-hidden z-10 p-8">
         <Card.Header className="flex flex-col items-start gap-1 p-0 mb-8 bg-transparent">
-          <h1 className="text-3xl font-black tracking-tighter text-white uppercase italic m-0">
+          <h1 className="text-3xl font-extrabold tracking-tight text-white m-0 drop-shadow-md">
             Sign Up
           </h1>
           <p className="text-muted-foreground text-sm font-medium tracking-wide">
@@ -130,7 +130,7 @@ export default function RegisterPage() {
 
             <Button
               type="submit"
-              className="w-full mt-4 bg-primary text-primary-foreground font-black uppercase tracking-widest rounded-2xl h-14 hover:bg-primary/80 cursor-pointer transition-all flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(0,127,255,0.3)] border-none"
+              className="w-full mt-4 bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white font-extrabold tracking-widest rounded-2xl h-14 hover:shadow-[0_0_40px_rgba(0,242,255,0.6)] cursor-pointer transition-all flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(112,0,255,0.4)] border-none"
             >
               {isLoading && <Loader2 className="animate-spin" size={18} />}
               Get Started

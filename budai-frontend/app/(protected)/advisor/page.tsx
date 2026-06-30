@@ -252,7 +252,7 @@ export default function AdvisorPage() {
   );
 
   return (
-    <div className="flex h-screen w-full bg-background text-foreground font-sans overflow-hidden">
+    <div className="flex h-screen w-full bg-transparent text-foreground font-sans overflow-hidden transition-colors duration-500">
       <AdvisorSidebar
         sessions={sessions as BudAIChatSession[]}
         sessionsLoading={sessionsLoading}
@@ -297,7 +297,7 @@ export default function AdvisorPage() {
             )}
           </div>
           <div
-            className="flex items-center gap-3 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full shadow-[0_0_15px_rgba(0,127,255,0.05)] cursor-pointer hover:bg-white/10 transition-colors"
+            className="flex items-center gap-3 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full shadow-[0_0_15px_rgba(0,242,255,0.05)] cursor-pointer hover:bg-white/10 transition-colors"
             onClick={handleToggleReasoning}
           >
             <div

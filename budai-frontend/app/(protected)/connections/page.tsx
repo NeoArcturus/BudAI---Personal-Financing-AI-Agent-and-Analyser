@@ -75,7 +75,7 @@ export default function ConnectionsPage() {
         <Button
           onPress={handleConnect}
           isPending={isConnecting}
-          className="flex items-center justify-center gap-3 bg-primary text-primary-foreground font-black text-[10px] uppercase tracking-widest rounded-xl px-8 h-12 shadow-[0_0_20px_rgba(0,127,255,0.2)] hover:shadow-[0_0_30px_rgba(0,127,255,0.4)] hover:scale-[1.02] transition-all border-none cursor-pointer"
+          className="flex items-center justify-center gap-3 bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white border-none font-black text-[10px] uppercase tracking-widest rounded-xl px-8 h-12 shadow-[0_0_20px_rgba(0,242,255,0.2)] hover:shadow-[0_0_30px_rgba(0,242,255,0.4)] hover:scale-[1.02] transition-all border-none cursor-pointer"
         >
           <Plus size={16} /> Connect Bank
         </Button>

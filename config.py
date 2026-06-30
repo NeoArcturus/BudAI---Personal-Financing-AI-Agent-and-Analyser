@@ -25,9 +25,9 @@ TRUELAYER_REDIRECT_URI = os.getenv("REDIRECT_URI")
 NEWSDATA_API_KEY = os.getenv("NEWSDATA_API_KEY")
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-raw_origins = os.getenv("ALLOWED_ORIGINS")
-if not raw_origins:
-    raw_origins = FRONTEND_URL
+raw_origins = os.getenv("ALLOWED_ORIGINS", FRONTEND_URL)
+if "bud-ai-platform.vercel.app" not in raw_origins:
+    raw_origins = f"{raw_origins},https://bud-ai-platform.vercel.app"
 ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
 
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", b'cw_8H_1M4bX_3nF8vO5n3Y7A8xQ3_1m8aT2vP5_v5r8=')

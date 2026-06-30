@@ -647,7 +647,7 @@ export const BudAIProvider = ({
                 Cancel
               </Button>
               <Button
-                className="flex-2 bg-primary text-primary-foreground font-black uppercase tracking-widest text-[11px] h-12 rounded-xl shadow-[0_0_20px_rgba(0,127,255,0.3)] hover:shadow-[0_0_30px_rgba(0,127,255,0.5)] transition-all border-none"
+                className="flex-2 bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white border-none font-black uppercase tracking-widest text-[11px] h-12 rounded-xl shadow-[0_0_20px_rgba(0,242,255,0.3)] hover:shadow-[0_0_30px_rgba(0,242,255,0.5)] transition-all border-none"
                 onPress={async () => {
                   if (selectedAccountIds.length > 0) {
                     setIsAccountSelectorOpen(false);

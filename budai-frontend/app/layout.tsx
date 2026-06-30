@@ -23,9 +23,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={cn("dark", jakarta.variable, jetbrains.variable, "font-sans", inter.variable)}>
+    <html lang="en" className={cn(jakarta.variable, jetbrains.variable, "font-sans", inter.variable)} suppressHydrationWarning>
       <body
-        className="antialiased selection:bg-primary/30 selection:text-primary bg-black"
+        className="antialiased selection:bg-primary/30 selection:text-primary bg-background text-foreground"
       >
         <GlobalBackground />
         <Providers>

@@ -148,7 +148,7 @@ export default function CommodityMarketWidgetClient({
       <Card className="w-full h-full liquid-glass border-none rounded-xl flex flex-col relative overflow-hidden">
         <Card.Header className="p-8 border-b-[0.5px] border-white/5 shrink-0 flex items-center justify-between z-10">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,127,255,0.05)]">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,242,255,0.05)]">
               <Globe size={20} />
             </div>
             <div className="flex flex-col">
@@ -163,7 +163,7 @@ export default function CommodityMarketWidgetClient({
         </Card.Header>
 
         <Card.Content className="p-0 flex-1 flex flex-col overflow-hidden min-h-0 relative">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.01)_0%,transparent_70%)] pointer-events-none" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,242,255,0.01)_0%,transparent_70%)] pointer-events-none" />
           <div className="flex-1 flex flex-col p-8 gap-8 overflow-y-auto scrollbar-hide relative z-10">
             <div className="flex flex-col gap-3 shrink-0">
               <span className="text-[9px] font-black uppercase tracking-[0.4em] text-foreground/30 pl-1 italic">
@@ -188,7 +188,7 @@ export default function CommodityMarketWidgetClient({
                     className={cn(
                       "flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all h-auto w-10 border-none",
                       selectedSymbol === s
-                        ? "bg-primary text-primary-foreground shadow-lg"
+                        ? "bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white border-none shadow-lg"
                         : "text-foreground/40 hover:text-foreground data-[hovered=true]:bg-white/10",
                     )}
                   >
@@ -232,7 +232,7 @@ export default function CommodityMarketWidgetClient({
               </div>
 
               <div className="flex-1 relative min-h-40 bg-white/1 rounded-xl border-[0.5px] border-white/10 p-6 overflow-hidden shadow-inner flex items-center justify-center">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.02)_0%,transparent_70%)] pointer-events-none" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,242,255,0.02)_0%,transparent_70%)] pointer-events-none" />
                 {isHistoryLoading ? (
                   <Skeleton
                     animationType="shimmer"

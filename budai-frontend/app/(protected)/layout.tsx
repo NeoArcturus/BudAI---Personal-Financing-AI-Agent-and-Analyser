@@ -63,7 +63,8 @@ export default async function ProtectedLayout({
       initialAccounts={initialAccounts}
       initialSessions={initialSessions}
     >
-      <div className="flex flex-col h-screen w-full bg-background font-sans overflow-hidden">
+      <div className="flex flex-col h-screen w-full bg-transparent font-sans overflow-hidden relative transition-colors duration-500">
+        <div className="absolute inset-0 bg-black/40 dark:bg-black/80 pointer-events-none z-0 backdrop-blur-[2px]" />
         <TopNavbar />
         <div className="relative z-10 flex-1 flex w-full h-full overflow-hidden">
           {children}

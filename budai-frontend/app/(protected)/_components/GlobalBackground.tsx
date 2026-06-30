@@ -1,13 +1,20 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 
 export default function GlobalBackground() {
   return (
     <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden select-none bg-black">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.05)_0%,transparent_70%)] z-10" />
-      <div className="absolute inset-0 bg-grid-pattern opacity-[0.1] z-10" />
-      <div className="absolute inset-0 bg-black/20 z-20" />
+      <Image
+        src="/bg 3.jpg"
+        alt="Background"
+        fill
+        className="object-cover opacity-100"
+        priority
+      />
+      <div className="absolute inset-0 bg-black/10 z-10" />
+      <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-[#0c131d]/80 z-20" />
     </div>
   );
 }

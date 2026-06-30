@@ -124,7 +124,7 @@ export default function PortfolioCardWidget() {
           variant="primary"
           onPress={handleConnectAccount}
           isPending={isConnecting}
-          className="bg-primary text-primary-foreground font-black text-[10px] uppercase tracking-widest px-8 h-12 rounded-lg shadow-lg border-none cursor-pointer"
+          className="bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white border-none font-black text-[10px] uppercase tracking-widest px-8 h-12 rounded-lg shadow-lg border-none cursor-pointer"
         >
           Connect Bank
         </Button>

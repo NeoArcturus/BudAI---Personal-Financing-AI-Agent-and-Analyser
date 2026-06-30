@@ -52,7 +52,7 @@ export default function SimulationControlsModal({
         <Modal.Container className="fixed inset-0 z-101 flex items-center justify-center p-4">
           <Modal.Dialog className="relative max-w-md w-full pointer-events-auto bg-black/60 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-xl shadow-2xl overflow-hidden">
             <Modal.Header className="flex items-center gap-5 p-10 border-b-[0.5px] border-white/5 bg-white/1">
-              <div className="w-12 h-12 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,127,255,0.05)]">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,242,255,0.05)]">
                 <Zap size={24} />
               </div>
               <div>
@@ -90,7 +90,7 @@ export default function SimulationControlsModal({
                   className="w-full"
                 >
                   <Slider.Track className="bg-white/5 h-1 rounded-full overflow-hidden border-[0.5px] border-white/5">
-                    <Slider.Fill className="bg-primary shadow-[0_0_15px_rgba(0,127,255,0.6)]" />
+                    <Slider.Fill className="bg-primary shadow-[0_0_15px_rgba(0,242,255,0.6)]" />
                     <Slider.Thumb className="w-5 h-5 bg-foreground border-[3px] border-primary shadow-xl cursor-pointer" />
                   </Slider.Track>
                 </Slider>
@@ -120,7 +120,7 @@ export default function SimulationControlsModal({
                   className="w-full"
                 >
                   <Slider.Track className="bg-white/5 h-1 rounded-full overflow-hidden border-[0.5px] border-white/5">
-                    <Slider.Fill className="bg-primary shadow-[0_0_15px_rgba(0,127,255,0.6)]" />
+                    <Slider.Fill className="bg-primary shadow-[0_0_15px_rgba(0,242,255,0.6)]" />
                     <Slider.Thumb className="w-5 h-5 bg-foreground border-[3px] border-primary shadow-xl cursor-pointer" />
                   </Slider.Track>
                 </Slider>
@@ -229,7 +229,7 @@ export default function SimulationControlsModal({
               </Button>
               <Button
                 onPress={handleApply}
-                className="flex-1 bg-primary text-primary-foreground font-black uppercase tracking-[0.3em] text-[10px] h-14 rounded-xl shadow-[0_0_20px_rgba(0,127,255,0.3)] hover:shadow-[0_0_30px_rgba(0,127,255,0.5)] hover:scale-[1.02] transition-all cursor-pointer border-none flex items-center justify-center gap-3"
+                className="flex-1 bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white border-none font-black uppercase tracking-[0.3em] text-[10px] h-14 rounded-xl shadow-[0_0_20px_rgba(0,242,255,0.3)] hover:shadow-[0_0_30px_rgba(0,242,255,0.5)] hover:scale-[1.02] transition-all cursor-pointer border-none flex items-center justify-center gap-3"
               >
                 Run simulation
               </Button>

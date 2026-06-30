@@ -129,7 +129,7 @@ export default function FinancialNewsWidgetClient({
       <Card className="w-full h-full liquid-glass border-none rounded-xl flex flex-col relative overflow-hidden">
         <Card.Header className="p-8 border-b-[0.5px] border-white/5 shrink-0 flex items-center justify-between z-10">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,127,255,0.05)]">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,242,255,0.05)]">
               <Newspaper size={20} />
             </div>
             <div className="flex flex-col">
@@ -144,7 +144,7 @@ export default function FinancialNewsWidgetClient({
         </Card.Header>
 
         <Card.Content className="p-0 flex-1 flex flex-col gap-3 overflow-hidden min-h-0 relative">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.01)_0%,transparent_70%)] pointer-events-none" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,242,255,0.01)_0%,transparent_70%)] pointer-events-none" />
           <ScrollShadow
             hideScrollBar
             className="flex-1 min-h-0 overflow-y-auto space-y-12 p-8 scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] relative z-10"

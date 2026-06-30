@@ -49,7 +49,7 @@ export default function WidgetFlipCard({
 
           <Button
             onPress={toggleFlip}
-            className="absolute top-8 right-16 h-8 px-4 rounded-lg flex items-center justify-center gap-2 bg-primary/5 text-primary border-[0.5px] border-primary/20 hover:border-primary/50 z-50 transition-all shadow-[0_0_15px_rgba(0,127,255,0.05)] hover:shadow-[0_0_20px_rgba(0,127,255,0.2)] cursor-pointer"
+            className="absolute top-8 right-16 h-8 px-4 rounded-lg flex items-center justify-center gap-2 bg-primary/5 text-primary border-[0.5px] border-primary/20 hover:border-primary/50 z-50 transition-all shadow-[0_0_15px_rgba(0,242,255,0.05)] hover:shadow-[0_0_20px_rgba(0,242,255,0.2)] cursor-pointer"
           >
             <span className="text-[9px] font-black uppercase tracking-[0.2em] whitespace-nowrap">
               Open Advisor
@@ -70,7 +70,7 @@ export default function WidgetFlipCard({
         >
           <Card className="w-full h-full liquid-glass rounded-xl p-0 flex flex-col border-none shadow-inner overflow-hidden">
             <Card.Header className="flex items-center gap-5 p-10 pb-6 shrink-0 border-b-[0.5px] border-white/5">
-              <div className="w-12 h-12 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,127,255,0.05)] shrink-0">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,242,255,0.05)] shrink-0">
                 <MessageSquare size={24} />
               </div>
               <div className="flex flex-col justify-center">
@@ -84,7 +84,7 @@ export default function WidgetFlipCard({
             </Card.Header>
 
             <Card.Content className="flex-1 px-10 py-0 overflow-hidden min-h-0 relative">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.01)_0%,transparent_70%)] pointer-events-none" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,242,255,0.01)_0%,transparent_70%)] pointer-events-none" />
               <ScrollShadow
                 hideScrollBar
                 className="h-full pr-2 overflow-y-auto scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] relative z-10"
@@ -125,7 +125,7 @@ export default function WidgetFlipCard({
               <Button
                 onPress={onDiscuss}
                 isDisabled={showSkeleton}
-                className="flex-1 bg-primary text-primary-foreground font-black uppercase tracking-[0.2em] text-[11px] h-14 rounded-xl shadow-[0_0_20px_rgba(0,127,255,0.3)] hover:shadow-[0_0_30px_rgba(0,127,255,0.5)] transition-all cursor-pointer border-none flex items-center justify-center gap-3"
+                className="flex-1 bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white border-none font-black uppercase tracking-[0.2em] text-[11px] h-14 rounded-xl shadow-[0_0_20px_rgba(0,242,255,0.3)] hover:shadow-[0_0_30px_rgba(0,242,255,0.5)] transition-all cursor-pointer border-none flex items-center justify-center gap-3"
               >
                 Talk to Advisor
                 <ArrowRight size={18} />

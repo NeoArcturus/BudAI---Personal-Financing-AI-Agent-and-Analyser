@@ -323,7 +323,7 @@ export default function SpendingTrendWidgetClient({
                               {acc.bank_name}
                             </Label>
                             {selectedAccountId === acc.account_id && (
-                              <Badge className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,127,255,0.6)]" />
+                              <Badge className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,242,255,0.6)]" />
                             )}
                           </Badge.Anchor>
                           <Description className="text-[9px] text-foreground/30 font-mono tracking-[0.2em] pointer-events-none mt-1.5 uppercase">
@@ -368,7 +368,7 @@ export default function SpendingTrendWidgetClient({
                   className={cn(
                     "flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all h-auto border-none",
                     granularity === g.id
-                      ? "bg-primary text-primary-foreground shadow-lg"
+                      ? "bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white border-none shadow-lg"
                       : "text-foreground/40 hover:text-foreground data-[hovered=true]:bg-white/10",
                   )}
                 >
@@ -380,7 +380,7 @@ export default function SpendingTrendWidgetClient({
         </Card.Header>
 
         <Card.Content className="flex-1 w-full min-h-0 flex flex-col p-0 z-0 bg-white/1 border-t-[0.5px] border-white/5 relative overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.02)_0%,transparent_70%)] pointer-events-none" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,242,255,0.02)_0%,transparent_70%)] pointer-events-none" />
           <div className="mb-2 shrink-0 p-8">
             {isActuallyLoading ? (
               <div className="space-y-3">

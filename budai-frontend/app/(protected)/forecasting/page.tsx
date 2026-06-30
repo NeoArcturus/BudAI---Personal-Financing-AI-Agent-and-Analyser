@@ -175,7 +175,7 @@ export default function ForecastingPage() {
               </div>
             </div>
             <div className="flex-1 w-full flex items-center justify-center min-h-80 bg-white/1 rounded-xl border-[0.5px] border-white/5 relative overflow-hidden p-8">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.02)_0%,transparent_70%)] pointer-events-none" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,242,255,0.02)_0%,transparent_70%)] pointer-events-none" />
               {isLoading ? (
                 <Skeleton animationType="shimmer" className="w-full h-full rounded-lg bg-white/5" />
               ) : wealthChartConfig ? (
@@ -208,7 +208,7 @@ export default function ForecastingPage() {
               </div>
             </div>
             <div className="flex-1 w-full flex items-center justify-center min-h-80 bg-white/1 rounded-xl border-[0.5px] border-white/5 relative overflow-hidden p-8">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,127,255,0.02)_0%,transparent_70%)] pointer-events-none" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,242,255,0.02)_0%,transparent_70%)] pointer-events-none" />
               {isLoading ? (
                 <Skeleton animationType="shimmer" className="w-full h-full rounded-lg bg-white/5" />
               ) : expenseChartConfig ? (

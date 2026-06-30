@@ -16,10 +16,10 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import Image from "next/image";
 
 export default function LandingPage() {
   const router = useRouter();
-
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -45,13 +45,16 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen text-foreground selection:bg-primary/30 selection:text-primary relative overflow-x-hidden bg-transparent font-sans">
-      <nav className="fixed top-0 w-full z-50 h-16 bg-black/20 backdrop-blur-xl border-b-[0.5px] border-white/5 flex justify-between items-center px-6 md:px-10 transition-all">
+    <div className="dark min-h-screen text-foreground selection:bg-primary/30 selection:text-primary relative overflow-x-hidden bg-transparent font-sans">
+      <nav className="fixed top-0 w-full z-50 h-24 bg-[#0c131d] border-b-[0.5px] border-white/5 flex justify-between items-center px-6 md:px-10 transition-all">
         <div className="flex items-center gap-2">
-          <Activity className="text-primary w-6 h-6" />
-          <span className="font-bold text-foreground text-lg tracking-tighter uppercase italic">
-            BudAI
-          </span>
+          <Image
+            src="/FullLogo.jpg"
+            alt="BudAI Logo"
+            width={130}
+            height={40}
+            className="rounded-sm"
+          />
         </div>
 
         <div className="hidden md:flex items-center gap-10">
@@ -63,9 +66,9 @@ export default function LandingPage() {
           </Link>
           <Link
             className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 hover:text-primary transition-all"
-            href="#engine"
+            href="#dashboard"
           >
-            Engine
+            Dashboard
           </Link>
           <Link
             className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40 hover:text-primary transition-all"
@@ -90,7 +93,7 @@ export default function LandingPage() {
           </Link>
           <Button
             onPress={() => router.push("/register")}
-            className="bg-primary text-primary-foreground font-black text-[10px] uppercase tracking-widest px-6 h-9 rounded-md shadow-[0_0_15px_rgba(0,127,255,0.2)] hover:shadow-[0_0_25px_rgba(0,127,255,0.4)] transition-all border-none"
+            className="bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white font-extrabold text-xs tracking-wide px-6 h-9 rounded-md shadow-[0_0_20px_rgba(112,0,255,0.4)] hover:shadow-[0_0_30px_rgba(0,242,255,0.6)] transition-all border-none"
           >
             Sign Up
           </Button>
@@ -104,7 +107,7 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      <main className="relative z-10 pt-16">
+      <main className="relative z-10 pt-24">
         <section className="relative min-h-[90vh] flex items-center justify-center px-6 py-24">
           <motion.div
             variants={containerVariants}
@@ -112,21 +115,13 @@ export default function LandingPage() {
             animate="visible"
             className="max-w-4xl mx-auto text-center flex flex-col items-center gap-10"
           >
-            <motion.div
-              variants={itemVariants}
-              className="inline-flex items-center gap-3 px-4 py-1.5 rounded-lg border-[0.5px] border-primary/30 bg-primary/5 text-primary text-[9px] font-black uppercase tracking-[0.3em] shadow-[0_0_15px_rgba(0,127,255,0.05)]"
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              <span>All Systems Operational</span>
-            </motion.div>
-
             <motion.h1
               variants={itemVariants}
-              className="text-5xl md:text-8xl font-normal tracking-tighter text-foreground leading-[0.85] uppercase italic"
+              className="text-5xl md:text-7xl font-extrabold tracking-tight text-transparent bg-clip-text bg-linear-to-b from-foreground to-foreground/70 leading-tight"
             >
-              Master Your <br />
-              <span className="text-transparent bg-clip-text bg-linear-to-r from-primary via-primary/80 to-primary/40 not-italic font-black">
-                Money with AI
+              Personal Financial <br />
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-[#7000ff] to-[#00f2ff] drop-shadow-[0_0_25px_rgba(0,242,255,0.4)]">
+                Analysis
               </span>
             </motion.h1>
 
@@ -134,8 +129,8 @@ export default function LandingPage() {
               variants={itemVariants}
               className="text-base md:text-lg text-foreground/50 max-w-xl mx-auto leading-relaxed font-medium tracking-tight"
             >
-              The most precise personal finance companion for students and
-              professionals. Achieve complete clarity and hit goals faster.
+              Institutional-grade financial intelligence and transaction
+              categorization.
             </motion.p>
 
             <motion.div
@@ -144,7 +139,7 @@ export default function LandingPage() {
             >
               <Button
                 onPress={() => router.push("/register")}
-                className="bg-primary text-primary-foreground font-black uppercase tracking-[0.2em] text-[11px] px-12 h-14 rounded-xl shadow-[0_0_30px_rgba(0,127,255,0.3)] hover:shadow-[0_0_40px_rgba(0,127,255,0.5)] hover:scale-[1.02] transition-all border-none"
+                className="bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white font-extrabold tracking-widest text-sm px-12 h-14 rounded-xl shadow-[0_0_30px_rgba(112,0,255,0.4)] hover:shadow-[0_0_40px_rgba(0,242,255,0.6)] hover:scale-[1.02] transition-all border-none"
               >
                 Go to Dashboard
               </Button>
@@ -180,111 +175,164 @@ export default function LandingPage() {
           </motion.div>
         </section>
 
-        <section className="py-24 bg-black/10 backdrop-blur-md border-y border-white/5 overflow-hidden relative z-20">
+        <section className="py-24 bg-background border-y border-white/5 relative z-20">
           <div className="text-center mb-12">
-            <h3 className="text-[10px] font-black text-primary/40 uppercase tracking-[0.4em]">
+            <h3 className="text-sm font-semibold text-foreground/40 tracking-wider">
               Securely connect to your institutions
             </h3>
           </div>
-          <div className="relative flex overflow-x-hidden w-full">
-            <div className="flex animate-marquee whitespace-nowrap gap-24 items-center py-6 opacity-30 px-12">
-              {[
-                "HSBC",
-                "BARCLAYS",
-                "MONZO",
-                "REVOLUT",
-                "LLOYDS",
-                "CHASE",
-                "STARLING",
-                "NATIONWIDE",
-                "NATWEST",
-              ].map((bank, i) => (
+          <div className="flex flex-wrap justify-center gap-12 md:gap-24 items-center opacity-40 px-6 max-w-6xl mx-auto">
+            {["HSBC", "BARCLAYS", "MONZO", "REVOLUT", "LLOYDS", "CHASE"].map(
+              (bank, i) => (
                 <span
                   key={i}
-                  className="text-4xl font-black text-foreground tracking-tighter italic"
+                  className="text-2xl font-bold text-foreground tracking-tight"
                 >
                   {bank}
                 </span>
-              ))}
-            </div>
+              ),
+            )}
           </div>
         </section>
 
-        <section id="engine" className="py-40 px-6 relative z-20">
+        <section id="dashboard" className="py-40 px-6 relative z-20">
           <div className="max-w-6xl mx-auto flex flex-col items-center">
             <div className="text-center mb-24">
               <motion.h2
                 initial={{ opacity: 0, scale: 0.95 }}
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
-                className="text-4xl md:text-6xl font-black text-foreground mb-6 tracking-tighter uppercase italic"
+                className="text-4xl md:text-5xl font-extrabold text-white mb-6 tracking-tight leading-tight drop-shadow-md"
               >
-                Smart Insights, <br />
-                Simple Actions
+                Financial Dashboard
               </motion.h2>
               <p className="text-lg text-foreground/60 max-w-2xl mx-auto font-medium tracking-wide">
-                Your money tells a story. BudAI helps you read it, offering
-                clear advice to grow your savings and spend smarter every day.
+                View transaction history, budget performance, and real-time
+                financial projections.
               </p>
             </div>
 
-            <div className="w-full aspect-video max-w-5xl bg-black/40 backdrop-blur-3xl rounded-[3rem] border border-white/10 p-6 relative overflow-hidden group shadow-2xl">
-              <div className="w-full h-full bg-white/5 rounded-[2rem] flex border border-white/5 overflow-hidden">
-                <div className="w-1/4 border-r border-white/5 p-8 hidden md:flex flex-col gap-8">
-                  <div className="h-10 bg-white/10 rounded-xl w-3/4 mb-4" />
-                  <div className="h-5 bg-white/5 rounded-lg w-full" />
-                  <div className="h-5 bg-white/5 rounded-lg w-5/6" />
-                  <div className="h-5 bg-white/5 rounded-lg w-full" />
-                </div>
+            <div className="w-full aspect-video max-w-5xl bg-black/40 backdrop-blur-3xl rounded-[3rem] border border-white/10 p-8 relative overflow-hidden shadow-2xl flex gap-6 text-left">
+              {/* Sidebar Mock */}
+              <div className="w-48 h-full bg-white/5 rounded-2xl border border-white/5 p-6 flex-col gap-6 hidden md:flex">
+                <div className="w-full h-8 bg-white/10 rounded-lg mb-4" />
+                <div className="w-3/4 h-4 bg-white/5 rounded-md" />
+                <div className="w-5/6 h-4 bg-white/5 rounded-md" />
+                <div className="w-2/3 h-4 bg-white/5 rounded-md" />
+                <div className="w-full h-4 bg-white/5 rounded-md mt-auto" />
+              </div>
 
-                <div className="flex-1 p-10 flex flex-col gap-10 relative">
-                  <motion.div
-                    animate={{ y: [0, -8, 0] }}
-                    transition={{
-                      duration: 4,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                    className="absolute top-1/4 left-1/4 bg-primary/20 border border-primary/30 text-primary px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-3 shadow-xl z-10 hover:scale-105 transition-transform cursor-default"
-                  >
-                    <TrendingUp size={18} /> Budget Performance +12.4%
-                  </motion.div>
-                  <motion.div
-                    animate={{ y: [0, 8, 0] }}
-                    transition={{
-                      duration: 5,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                      delay: 1,
-                    }}
-                    className="absolute bottom-1/3 right-1/4 bg-pink-500/20 border border-pink-500/30 text-pink-500 px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-3 shadow-xl z-10 hover:scale-105 transition-transform cursor-default"
-                  >
-                    <Activity size={18} /> Subscription Alert: Netflix
-                  </motion.div>
-
-                  <div className="grid grid-cols-3 gap-8">
-                    <div className="h-40 bg-white/5 rounded-3xl border border-white/5 animate-pulse" />
-                    <div className="h-40 bg-white/5 rounded-3xl border border-white/5" />
-                    <div className="h-40 bg-white/5 rounded-3xl border border-white/5" />
+              {/* Main Content Area */}
+              <div className="flex-1 h-full flex flex-col gap-6">
+                {/* Top Row: Portfolio & Quick Stats */}
+                <div className="flex gap-6 h-2/5">
+                  {/* Mock Portfolio Card */}
+                  <div className="flex-1 bg-white/3 border-[0.5px] border-primary/30 rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden shadow-inner group">
+                    <div className="absolute inset-0 bg-primary/10 transition-opacity" />
+                    <div className="relative z-10 flex justify-between items-start">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-black text-foreground/40 uppercase tracking-[0.3em]">
+                          Live Account Balance
+                        </span>
+                        <h2 className="text-4xl font-normal tracking-tighter text-foreground mt-1 font-mono">
+                          £14,250.50
+                        </h2>
+                      </div>
+                      <div className="w-12 h-12 bg-foreground text-background rounded-xl flex items-center justify-center font-black text-xl shadow-xl">
+                        B
+                      </div>
+                    </div>
+                    <div className="relative z-10 flex justify-between items-end mt-auto">
+                      <span className="text-lg font-bold tracking-tight uppercase">
+                        BARCLAYS
+                      </span>
+                      <div className="flex items-center gap-4 text-foreground/40 text-[10px] font-bold tracking-[0.2em] font-mono">
+                        <span>****1234</span>
+                        <span className="opacity-20">|</span>
+                        <span>20-45-14</span>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex-1 bg-white/5 rounded-3xl border border-white/5 p-8">
-                    <div className="w-full h-full border-b border-l border-white/10 flex items-end p-6 gap-6">
-                      {[25, 50, 35, 75, 90, 60, 45].map((h, i) => (
-                        <motion.div
+                  {/* Mock Spending/Cashflow */}
+                  <div className="w-1/3 bg-white/5 border-[0.5px] border-white/10 rounded-2xl p-6 flex flex-col justify-between">
+                    <span className="text-[9px] font-black text-foreground/40 uppercase tracking-[0.3em]">
+                      Monthly Spend
+                    </span>
+                    <h2 className="text-2xl font-semibold tracking-tight text-foreground font-mono">
+                      £2,450.00
+                    </h2>
+                    <div className="flex gap-2 mt-4 items-end h-16 w-full border-b border-l border-white/10 p-2">
+                      {[30, 50, 40, 80, 60, 90, 45].map((h, i) => (
+                        <div
                           key={i}
-                          initial={{ height: 0 }}
-                          whileInView={{ height: `${h}%` }}
-                          viewport={{ once: true }}
-                          transition={{
-                            duration: 1.5,
-                            delay: i * 0.1,
-                            ease: "easeOut",
-                          }}
-                          className="flex-1 bg-primary/30 rounded-t-xl border-t border-x border-primary/20 hover:bg-primary/50 transition-colors cursor-pointer"
+                          className="flex-1 bg-primary/40 rounded-t-sm border-t border-x border-primary/20"
+                          style={{ height: `${h}%` }}
                         />
                       ))}
                     </div>
+                  </div>
+                </div>
+
+                {/* Bottom Row: Ledger/Transactions */}
+                <div className="flex-1 bg-white/5 border-[0.5px] border-white/10 rounded-2xl p-6 flex flex-col gap-4">
+                  <span className="text-[9px] font-black text-foreground/40 uppercase tracking-[0.3em]">
+                    Recent Transactions
+                  </span>
+                  <div className="flex flex-col gap-3 flex-1 overflow-hidden">
+                    {[
+                      {
+                        name: "Tesco Extra",
+                        category: "Groceries",
+                        amount: "-£45.20",
+                        date: "Today, 14:30",
+                      },
+                      {
+                        name: "Transport for London",
+                        category: "Travel",
+                        amount: "-£12.50",
+                        date: "Today, 08:45",
+                      },
+                      {
+                        name: "Netflix",
+                        category: "Entertainment",
+                        amount: "-£15.99",
+                        date: "Yesterday",
+                      },
+                    ].map((tx, i) => (
+                      <div
+                        key={i}
+                        className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/5"
+                      >
+                        <div className="flex gap-4 items-center">
+                          <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                            <Activity
+                              size={16}
+                              className="text-foreground/40"
+                            />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-semibold tracking-tight">
+                              {tx.name}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] text-foreground/40 uppercase tracking-widest">
+                                {tx.category}
+                              </span>
+                              <span className="text-[9px] text-foreground/20">
+                                •
+                              </span>
+                              <span className="text-[9px] text-foreground/40">
+                                {tx.date}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-sm font-mono font-semibold tracking-tight">
+                          {tx.amount}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -302,18 +350,20 @@ export default function LandingPage() {
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                className="text-4xl md:text-6xl font-normal text-foreground mb-6 tracking-tighter uppercase italic"
+                className="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-linear-to-r from-foreground to-foreground/50 mb-6 tracking-tight leading-tight"
               >
-                How BudAI <br />
-                <span className="font-black not-italic">Works</span>
+                System{" "}
+                <span className="text-transparent bg-clip-text bg-linear-to-r from-[#7000ff] to-[#00f2ff] drop-shadow-[0_0_15px_rgba(112,0,255,0.3)]">
+                  Architecture
+                </span>
               </motion.h2>
-              <p className="text-[10px] font-black text-primary uppercase tracking-[0.4em] mb-4">
-                Core System Architecture
+              <p className="text-[10px] font-black text-[#00f2ff] uppercase tracking-[0.4em] mb-4 drop-shadow-md">
+                Platform Capabilities
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-10 relative">
-              <div className="hidden md:block absolute top-1/2 left-0 w-full h-[0.5px] bg-linear-to-r from-transparent via-primary/20 to-transparent -translate-y-1/2 z-0" />
+              <div className="hidden md:block absolute top-1/2 left-0 w-full h-[0.5px] bg-linear-to-r from-transparent via-[#7000ff]/30 to-transparent -translate-y-1/2 z-0" />
 
               {[
                 {
@@ -330,9 +380,9 @@ export default function LandingPage() {
                 },
                 {
                   step: "03",
-                  title: "Predictive Insights",
+                  title: "Financial Projections",
                   icon: Sparkles,
-                  desc: "AI-driven forecasting to optimize your cash flow and savings.",
+                  desc: "Forecast cash flow and analyze spending patterns.",
                 },
               ].map((item, i) => (
                 <motion.div
@@ -348,14 +398,14 @@ export default function LandingPage() {
                   whileHover={{ y: -5, scale: 1.01 }}
                   className="bg-black/40 backdrop-blur-xl border-[0.5px] border-white/10 rounded-2xl p-12 relative z-10 flex flex-col gap-10 transition-all group shadow-inner"
                 >
-                  <div className="font-mono text-primary text-6xl font-black opacity-5 absolute -top-4 -right-4 italic pointer-events-none group-hover:opacity-10 transition-opacity">
+                  <div className="font-mono text-[#7000ff] text-6xl font-black opacity-10 absolute -top-4 -right-4 italic pointer-events-none group-hover:opacity-20 transition-opacity">
                     {item.step}
                   </div>
-                  <div className="w-14 h-14 rounded-xl bg-white/5 border-[0.5px] border-white/10 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,127,255,0.05)] group-hover:border-primary/50 transition-all">
+                  <div className="w-14 h-14 rounded-xl bg-white/5 border-[0.5px] border-white/10 flex items-center justify-center text-[#00f2ff] shadow-[0_0_20px_rgba(0,242,255,0.05)] group-hover:border-[#00f2ff]/50 transition-all">
                     <item.icon size={28} />
                   </div>
                   <div className="space-y-4">
-                    <h3 className="text-xl font-black tracking-widest text-foreground uppercase italic">
+                    <h3 className="text-xl font-bold tracking-wide text-foreground">
                       {item.title}
                     </h3>
                     <p className="text-xs text-foreground/40 leading-relaxed font-medium tracking-wide">
@@ -378,18 +428,15 @@ export default function LandingPage() {
             <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 blur-[120px] rounded-full pointer-events-none" />
 
             <div className="flex-1 flex flex-col gap-10 text-center md:text-left items-center md:items-start relative z-10">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-[0.2em]">
-                <Shield size={14} />
-                <span>Your Privacy is our priority</span>
-              </div>
-              <h2 className="text-4xl md:text-6xl font-black text-foreground tracking-tighter uppercase italic leading-[0.95]">
-                Built on Trust, <br />
-                Not Technicality
+              <h2 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight leading-tight drop-shadow-md">
+                Data{" "}
+                <span className="text-transparent bg-clip-text bg-linear-to-r from-[#7000ff] to-[#00f2ff]">
+                  Integrity
+                </span>
               </h2>
               <p className="text-lg text-foreground/60 max-w-xl font-medium tracking-wide leading-relaxed">
-                We believe your financial data belongs to you. We use the same
-                protection as major banks, but with a simple promise: we never
-                sell your data, and we only have read-only access.
+                Secure read-only API access to your financial institutions with
+                automated categorization.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-10 w-full">
@@ -399,10 +446,10 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <h4 className="font-black tracking-tight text-foreground uppercase text-sm mb-1">
-                      Bank-Grade Safety
+                      Secure Connection
                     </h4>
                     <p className="text-xs text-foreground/40 font-medium tracking-wide">
-                      Top-tier protection for your peace of mind.
+                      Read-only access via encrypted endpoints.
                     </p>
                   </div>
                 </div>
@@ -412,10 +459,10 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <h4 className="font-black tracking-tight text-foreground uppercase text-sm mb-1">
-                      Pure Privacy
+                      Data Privacy
                     </h4>
                     <p className="text-xs text-foreground/40 font-medium tracking-wide">
-                      No data selling. No hidden sharing. Ever.
+                      Your data is never sold or shared.
                     </p>
                   </div>
                 </div>
@@ -423,49 +470,17 @@ export default function LandingPage() {
             </div>
 
             <div className="w-full md:w-1/3 flex justify-center relative z-10">
-              <div className="relative w-72 h-72 flex items-center justify-center">
-                <motion.svg
-                  animate={{ rotate: 360 }}
-                  transition={{
-                    duration: 20,
-                    repeat: Infinity,
-                    ease: "linear",
-                  }}
-                  className="absolute inset-0 w-full h-full"
-                >
-                  <circle
-                    cx="144"
-                    cy="144"
-                    r="130"
-                    fill="none"
-                    stroke="rgba(255,255,255,0.05)"
-                    strokeWidth="8"
-                    strokeDasharray="10 20"
-                  />
-                  <circle
-                    cx="144"
-                    cy="144"
-                    r="110"
-                    fill="none"
-                    stroke="rgba(0,127,255,0.2)"
-                    strokeWidth="2"
-                  />
-                </motion.svg>
-                <div className="relative w-56 h-56 rounded-full bg-white/5 border border-white/10 backdrop-blur-2xl flex items-center justify-center shadow-inner">
-                  <div className="text-center">
-                    <Shield className="w-12 h-12 text-primary mx-auto mb-3 drop-shadow-[0_0_15px_rgba(0,127,255,0.6)]" />
-                    <span className="block text-2xl font-black text-foreground tracking-tighter uppercase italic">
-                      SECURE
-                    </span>
-                  </div>
+              <div className="relative w-56 h-56 rounded-full bg-white/5 border border-white/10 backdrop-blur-2xl flex items-center justify-center shadow-inner">
+                <div className="text-center">
+                  <Shield className="w-16 h-16 text-[#00f2ff] mx-auto opacity-60" />
                 </div>
               </div>
             </div>
           </motion.div>
         </section>
 
-        <div className="w-full bg-black/10 backdrop-blur-md py-6 border-y-[0.5px] border-white/5 overflow-hidden flex z-30 relative">
-          <div className="flex animate-marquee whitespace-nowrap gap-16 items-center text-[9px] font-black text-primary/40 uppercase tracking-[0.4em]">
+        <div className="w-full bg-background py-12 border-y-[0.5px] border-white/5 flex z-30 relative justify-center">
+          <div className="flex flex-wrap justify-center gap-12 md:gap-16 items-center text-xs font-semibold text-foreground/60 max-w-6xl px-6">
             {[
               "Read-Only API Access",
               "End-to-End Encryption",
@@ -473,21 +488,8 @@ export default function LandingPage() {
               "Cash Flow Optimization",
               "Multi-Factor Security",
             ].map((stat, i) => (
-              <span key={i} className="flex items-center gap-4">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(0,127,255,0.8)]" />
-                {stat}
-              </span>
-            ))}
-
-            {[
-              "Read-Only API Access",
-              "End-to-End Encryption",
-              "Automated Categorization",
-              "Cash Flow Optimization",
-              "Multi-Factor Security",
-            ].map((stat, i) => (
-              <span key={`dup-${i}`} className="flex items-center gap-4 ml-16">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(0,127,255,0.8)]" />
+              <span key={i} className="flex items-center gap-3">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00f2ff]/40" />
                 {stat}
               </span>
             ))}
@@ -497,8 +499,11 @@ export default function LandingPage() {
         <section id="faq" className="py-40 px-6 relative z-20">
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-6xl font-normal text-foreground tracking-tighter uppercase italic">
-                Support <span className="font-black not-italic">Center</span>
+              <h2 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight leading-tight drop-shadow-md">
+                Support{" "}
+                <span className="text-transparent bg-clip-text bg-linear-to-r from-[#7000ff] to-[#00f2ff] drop-shadow-[0_0_15px_rgba(0,242,255,0.3)]">
+                  Center
+                </span>
               </h2>
             </div>
 
@@ -552,20 +557,19 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-20 mb-24">
             <div className="lg:col-span-2 flex flex-col gap-10">
               <div className="flex items-center gap-3">
-                <Activity className="text-primary w-6 h-6" />
-                <span className="text-xl font-black text-foreground tracking-tighter uppercase italic">
-                  BudAI
-                </span>
+                <Image
+                  src="/FullLogo.jpg"
+                  alt="BudAI Logo"
+                  width={340}
+                  height={112}
+                  className="h-28 w-auto rounded-md"
+                />
               </div>
               <p className="text-foreground/30 max-w-xs leading-relaxed font-medium tracking-wide text-xs">
-                BudAI. AI-Driven Personal Finance. Securely connect your bank to
-                analyze spending and predict future balances using local AI
-                models.
+                BudAI. Personal Financial Advisor. Securely connect your bank to
+                analyze spending and predict future balances using advanced
+                calculations.
               </p>
-              <div className="flex items-center gap-3 text-[9px] font-black text-green-500 bg-green-500/5 border-[0.5px] border-green-500/20 px-4 py-2 rounded-lg w-fit uppercase tracking-[0.3em] shadow-[0_0_15px_rgba(34,197,94,0.05)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                API Status: Healthy
-              </div>
             </div>
 
             <div className="flex flex-col gap-8">

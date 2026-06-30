@@ -386,7 +386,7 @@ export default function LedgerTableWidgetClient({
                               {acc.bank_name}
                             </Label>
                             {selectedAccountId === acc.account_id && (
-                              <Badge className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,127,255,0.6)]" />
+                              <Badge className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,242,255,0.6)]" />
                             )}
                           </Badge.Anchor>
                           <Description className="text-[9px] text-foreground/30 font-mono tracking-[0.2em] pointer-events-none mt-1.5 uppercase">
@@ -708,7 +708,7 @@ export default function LedgerTableWidgetClient({
                     variant="primary"
                     onPress={handleUpdateCategory}
                     isDisabled={isUpdating}
-                    className="bg-primary hover:bg-primary/80 text-primary-foreground font-bold px-8 h-11 rounded-xl transition-colors cursor-pointer border-none shadow-[0_0_15px_rgba(0,127,255,0.4)]"
+                    className="bg-primary hover:bg-primary/80 text-primary-foreground font-bold px-8 h-11 rounded-xl transition-colors cursor-pointer border-none shadow-[0_0_15px_rgba(0,242,255,0.4)]"
                   >
                     {isUpdating ? "Retraining..." : "Update & Retrain"}
                   </Button>

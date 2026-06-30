@@ -34,6 +34,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useBudAI } from "@/app/context/AppContext";
+import { useTheme } from "next-themes";
 
 interface WidgetInstance {
   id: string;
@@ -171,9 +172,15 @@ export default function DashboardClient({
   ticker,
 }: DashboardClientProps) {
   const { userName } = useBudAI();
+  const { theme, setTheme } = useTheme();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [widgets, setWidgets] = useState<WidgetInstance[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!userName || userName === "User") {
@@ -307,13 +314,23 @@ export default function DashboardClient({
             <div className="flex items-center bg-white/5 backdrop-blur-xl border-[0.5px] border-white/10 rounded-full p-1 shadow-inner">
               <Button
                 isIconOnly
-                className="w-8 h-8 min-w-8 rounded-full bg-primary/20 text-primary border-none flex justify-center items-center shadow-[0_0_10px_rgba(0,127,255,0.2)]"
+                onPress={() => setTheme("dark")}
+                className={`w-8 h-8 min-w-8 rounded-full border-none flex justify-center items-center transition-all ${
+                  mounted && theme === "dark"
+                    ? "bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white shadow-[0_0_10px_rgba(0,242,255,0.2)]"
+                    : "text-foreground/30 hover:text-foreground bg-transparent"
+                }`}
               >
                 <Moon size={14} />
               </Button>
               <Button
                 isIconOnly
-                className="w-8 h-8 min-w-8 rounded-full text-foreground/30 hover:text-foreground bg-transparent border-none flex justify-center items-center transition-colors"
+                onPress={() => setTheme("light")}
+                className={`w-8 h-8 min-w-8 rounded-full border-none flex justify-center items-center transition-all ${
+                  mounted && theme === "light"
+                    ? "bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white shadow-[0_0_10px_rgba(0,242,255,0.2)]"
+                    : "text-foreground/30 hover:text-foreground bg-transparent"
+                }`}
               >
                 <Sun size={14} />
               </Button>
@@ -393,7 +410,7 @@ export default function DashboardClient({
                     onPress={() => handleAddWidget(widget.type)}
                     className="w-full h-auto text-left flex justify-start items-center gap-4 p-4 rounded-2xl hover:bg-secondary transition-all border border-transparent hover:border-border group cursor-pointer bg-transparent"
                   >
-                    <div className="w-12 h-12 rounded-xl bg-transparent border border-border flex items-center justify-center text-muted-foreground group-hover:text-primary group-hover:bg-primary/10 group-hover:shadow-[0_0_15px_rgba(0,127,255,0.2)] transition-all shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-transparent border border-border flex items-center justify-center text-muted-foreground group-hover:text-primary group-hover:bg-primary/10 group-hover:shadow-[0_0_15px_rgba(0,242,255,0.2)] transition-all shrink-0">
                       <widget.icon size={20} />
                     </div>
                     <span className="text-foreground font-medium text-sm tracking-wide">

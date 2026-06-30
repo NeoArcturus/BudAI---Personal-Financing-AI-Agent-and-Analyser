@@ -59,12 +59,12 @@ export const AdvisorSidebar = ({
   };
 
   return (
-    <aside className="w-full md:w-64 h-full bg-background border-r border-border flex flex-col shrink-0">
+    <aside className="w-full md:w-64 h-full bg-transparent border-r border-border flex flex-col shrink-0 transition-colors duration-500">
       <div className="p-8">
         <Button
           onPress={handleNewChat}
           variant="primary"
-          className="w-full h-12 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 rounded-xl transition-all shadow-[0_0_20px_rgba(0,127,255,0.1)] hover:shadow-[0_0_30px_rgba(0,127,255,0.2)] group"
+          className="w-full h-12 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 rounded-xl transition-all shadow-[0_0_20px_rgba(0,242,255,0.1)] hover:shadow-[0_0_30px_rgba(0,242,255,0.2)] group"
         >
           <div className="flex items-center justify-center gap-2">
             <Plus
@@ -114,7 +114,7 @@ export const AdvisorSidebar = ({
               className={cn(
                 "group relative flex items-center justify-between p-4 mb-2 rounded-xl cursor-pointer transition-all duration-300 border",
                 activeSessionId === s.session_id
-                  ? "bg-primary/10 border-primary/30 shadow-[0_0_15px_rgba(0,127,255,0.1)]"
+                  ? "bg-primary/10 border-primary/30 shadow-[0_0_15px_rgba(0,242,255,0.1)]"
                   : "bg-transparent border-transparent hover:bg-content1 hover:border-border",
               )}
             >
@@ -254,7 +254,7 @@ export const AdvisorSidebar = ({
                 <Button
                   slot="close"
                   onPress={saveEdit}
-                  className="bg-primary text-primary-foreground font-black uppercase tracking-widest text-[11px] h-10 rounded-xl px-6 shadow-[0_0_15px_rgba(0,127,255,0.3)] hover:shadow-[0_0_25px_rgba(0,127,255,0.5)] transition-all border-none cursor-pointer"
+                  className="bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white border-none font-black uppercase tracking-widest text-[11px] h-10 rounded-xl px-6 shadow-[0_0_15px_rgba(0,242,255,0.3)] hover:shadow-[0_0_25px_rgba(0,242,255,0.5)] transition-all border-none cursor-pointer"
                 >
                   Save Changes
                 </Button>
