@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { ChevronDown, BarChart2 } from "lucide-react";
+import { ChevronDown, BarChart2, Calendar as CalendarIcon } from "lucide-react";
 import CoreChartEngine from "./CoreChartEngine";
 import type { Selection } from "@heroui/react";
 import {
@@ -206,15 +206,44 @@ export default function CashFlowWidgetClient({
                 </DateField.Input>
                 <DateField.Suffix className="ml-2 flex items-center">
                   <DatePicker.Trigger className="text-foreground/30 hover:text-primary cursor-pointer transition-colors">
-                    <ChevronDown size={14} />
+                    <CalendarIcon size={14} />
                   </DatePicker.Trigger>
                 </DateField.Suffix>
               </DateField.Group>
-              <DatePicker.Popover
-                className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-2xl shadow-2xl p-4 z-50"
-                placement="bottom"
-              >
-                <Calendar />
+              <DatePicker.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-2xl p-6 shadow-2xl z-50">
+                <Calendar aria-label="From date" className="w-full min-w-65">
+                  <Calendar.Header className="flex items-center gap-3 mb-6">
+                    <Calendar.YearPickerTrigger className="flex items-center gap-2 mr-auto cursor-pointer hover:opacity-70 transition-opacity">
+                      <Calendar.YearPickerTriggerHeading className="text-sm font-black uppercase tracking-widest text-primary italic" />
+                      <Calendar.YearPickerTriggerIndicator className="text-foreground/30 w-4 h-4" />
+                    </Calendar.YearPickerTrigger>
+                    <Calendar.NavButton
+                      slot="previous"
+                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
+                    />
+                    <Calendar.NavButton
+                      slot="next"
+                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
+                    />
+                  </Calendar.Header>
+                  <Calendar.Grid className="w-full border-collapse">
+                    <Calendar.GridHeader>
+                      {(day) => (
+                        <Calendar.HeaderCell className="text-[9px] font-black text-foreground/20 pb-4 text-center uppercase tracking-widest">
+                          {day}
+                        </Calendar.HeaderCell>
+                      )}
+                    </Calendar.GridHeader>
+                    <Calendar.GridBody>
+                      {(date) => (
+                        <Calendar.Cell
+                          date={date}
+                          className="w-8 h-8 flex items-center justify-center mx-auto text-[11px] font-mono text-foreground rounded-lg hover:bg-white/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-all"
+                        />
+                      )}
+                    </Calendar.GridBody>
+                  </Calendar.Grid>
+                </Calendar>
               </DatePicker.Popover>
             </DatePicker>
 
@@ -241,15 +270,44 @@ export default function CashFlowWidgetClient({
                 </DateField.Input>
                 <DateField.Suffix className="ml-2 flex items-center">
                   <DatePicker.Trigger className="text-foreground/30 hover:text-primary cursor-pointer transition-colors">
-                    <ChevronDown size={14} />
+                    <CalendarIcon size={14} />
                   </DatePicker.Trigger>
                 </DateField.Suffix>
               </DateField.Group>
-              <DatePicker.Popover
-                className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-2xl shadow-2xl p-4 z-50"
-                placement="bottom"
-              >
-                <Calendar />
+              <DatePicker.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-2xl p-6 shadow-2xl z-50">
+                <Calendar aria-label="To date" className="w-full min-w-65">
+                  <Calendar.Header className="flex items-center gap-3 mb-6">
+                    <Calendar.YearPickerTrigger className="flex items-center gap-2 mr-auto cursor-pointer hover:opacity-70 transition-opacity">
+                      <Calendar.YearPickerTriggerHeading className="text-sm font-black uppercase tracking-widest text-primary italic" />
+                      <Calendar.YearPickerTriggerIndicator className="text-foreground/30 w-4 h-4" />
+                    </Calendar.YearPickerTrigger>
+                    <Calendar.NavButton
+                      slot="previous"
+                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
+                    />
+                    <Calendar.NavButton
+                      slot="next"
+                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
+                    />
+                  </Calendar.Header>
+                  <Calendar.Grid className="w-full border-collapse">
+                    <Calendar.GridHeader>
+                      {(day) => (
+                        <Calendar.HeaderCell className="text-[9px] font-black text-foreground/20 pb-4 text-center uppercase tracking-widest">
+                          {day}
+                        </Calendar.HeaderCell>
+                      )}
+                    </Calendar.GridHeader>
+                    <Calendar.GridBody>
+                      {(date) => (
+                        <Calendar.Cell
+                          date={date}
+                          className="w-8 h-8 flex items-center justify-center mx-auto text-[11px] font-mono text-foreground rounded-lg hover:bg-white/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-all"
+                        />
+                      )}
+                    </Calendar.GridBody>
+                  </Calendar.Grid>
+                </Calendar>
               </DatePicker.Popover>
             </DatePicker>
 

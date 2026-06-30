@@ -11,12 +11,10 @@ export default function GlobalChatButton() {
   const router = useRouter();
   const pathname = usePathname();
 
-
   if (pathname === "/advisor") return null;
 
   const handleOpenChat = () => {
-    const sessionId = createNewSession("New Advisory Session");
-    router.push(`/advisor?session=${sessionId}`);
+    router.push(`/advisor`);
   };
 
   return (

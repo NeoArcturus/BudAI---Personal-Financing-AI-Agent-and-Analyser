@@ -13,15 +13,23 @@ export function usePersistedState<T>(key: string, defaultValue: T): [T, (val: T)
     const userName = localStorage.getItem("budai_user_name") || "User";
     const storageKey = `budai_pref_${userName}_${key}`;
     const saved = localStorage.getItem(storageKey);
+    let parsed = defaultValue;
+    
     if (saved !== null) {
       try {
-        setState(JSON.parse(saved));
+        parsed = JSON.parse(saved);
       } catch (e) {
         console.error("Failed to parse persisted state", e);
       }
     }
-    setIsLoaded(true);
-  }, [key]);
+    
+    const timeoutId = setTimeout(() => {
+      setState(parsed);
+      setIsLoaded(true);
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [key, defaultValue]);
 
   useEffect(() => {
     if (!isLoaded || typeof window === "undefined") return;
@@ -38,8 +46,8 @@ export function useAccounts() {
     queryKey: ["accounts"],
     queryFn: async () => {
       const res = await apiFetch("/api/accounts", {}, true);
-      const data = await res.json() as any;
-      return (data.accounts as Account[]) || [];
+      const data = await res.json() as { accounts?: Account[] };
+      return data.accounts || [];
     },
     staleTime: 1000 * 60 * 5,
     refetchInterval: 1000 * 60 * 5,
@@ -68,8 +76,8 @@ export function useTransactions(
         {},
         true,
       );
-      const data = await res.json() as any;
-      return (data.transactions as Transaction[]) || [];
+      const data = await res.json() as { transactions?: Transaction[] };
+      return data.transactions || [];
     },
     initialData,
     enabled: !!accountId,
@@ -108,8 +116,8 @@ export function useSpendingTrends(
         },
         true,
       );
-      const result = await res.json() as any;
-      return (result.data as BankChartData[]) || [];
+      const result = await res.json() as { data?: BankChartData[] };
+      return result.data || [];
     },
     initialData,
     enabled: !!accountId && !!from && !!to,
@@ -124,7 +132,7 @@ export function useChatSessions() {
     queryKey: ["chat-sessions"],
     queryFn: async () => {
       const res = await apiFetch("/api/chat/sessions", {}, true);
-      const data = await res.json() as any;
+      const data = await res.json() as unknown;
       return Array.isArray(data) ? data : [];
     },
     staleTime: 1000 * 60 * 5,
@@ -148,8 +156,8 @@ export function useAdvisorInsight(widgetId: string, contextData: unknown) {
           },
         }),
       }, true);
-      const data = await res.json() as any;
-      return data.job_id as string;
+      const data = await res.json() as { job_id: string };
+      return data.job_id;
     },
     staleTime: Infinity,
     enabled: !!widgetId,
@@ -161,14 +169,14 @@ export function useAdvisorInsight(widgetId: string, contextData: unknown) {
       const res = await apiFetch(`/api/advisor/status/${initJob.data}`, {
         method: "GET",
       }, true);
-      const data = await res.json() as any;
+      const data = await res.json() as { status: string; insight?: string };
       if (data.status === "pending") {
         throw new Error("STILL_PENDING");
       }
       if (data.status === "failed") {
         return "Unable to generate insight at this moment.";
       }
-      return data.insight as string;
+      return data.insight || "";
     },
     enabled: !!initJob.data,
     refetchInterval: (query) => {

@@ -178,7 +178,7 @@ export default function SpendingTrendWidgetClient({
                 </DateField.Input>
                 <DateField.Suffix className="ml-2 flex items-center">
                   <DatePicker.Trigger className="text-foreground/30 hover:text-primary cursor-pointer transition-colors">
-                    <DatePicker.TriggerIndicator />
+                    <CalendarIcon size={14} />
                   </DatePicker.Trigger>
                 </DateField.Suffix>
               </DateField.Group>
@@ -242,7 +242,7 @@ export default function SpendingTrendWidgetClient({
                 </DateField.Input>
                 <DateField.Suffix className="ml-2 flex items-center">
                   <DatePicker.Trigger className="text-foreground/30 hover:text-primary cursor-pointer transition-colors">
-                    <DatePicker.TriggerIndicator />
+                    <CalendarIcon size={14} />
                   </DatePicker.Trigger>
                 </DateField.Suffix>
               </DateField.Group>

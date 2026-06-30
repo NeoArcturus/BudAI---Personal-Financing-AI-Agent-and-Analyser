@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { ChevronDown, ListVideo, Pencil } from "lucide-react";
+import { ChevronDown, ListVideo, Pencil, Calendar as CalendarIcon } from "lucide-react";
 import { Transaction, Account } from "@/types";
 import type { Selection } from "@heroui/react";
 import {
@@ -242,7 +242,7 @@ export default function LedgerTableWidgetClient({
                 </DateField.Input>
                 <DateField.Suffix className="ml-2 flex items-center">
                   <DatePicker.Trigger className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-                    <DatePicker.TriggerIndicator />
+                    <CalendarIcon size={14} />
                   </DatePicker.Trigger>
                 </DateField.Suffix>
               </DateField.Group>
@@ -305,7 +305,7 @@ export default function LedgerTableWidgetClient({
                 </DateField.Input>
                 <DateField.Suffix className="ml-2 flex items-center">
                   <DatePicker.Trigger className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-                    <DatePicker.TriggerIndicator />
+                    <CalendarIcon size={14} />
                   </DatePicker.Trigger>
                 </DateField.Suffix>
               </DateField.Group>
