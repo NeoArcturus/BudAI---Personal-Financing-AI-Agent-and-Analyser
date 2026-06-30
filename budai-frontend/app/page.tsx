@@ -51,8 +51,8 @@ export default function LandingPage() {
           <Image
             src="/FullLogo.jpg"
             alt="BudAI Logo"
-            width={100}
-            height={31}
+            width={80}
+            height={25}
             className="rounded-sm object-contain"
             priority
           />

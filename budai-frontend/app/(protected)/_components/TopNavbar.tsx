@@ -31,14 +31,14 @@ export const TopNavbar = () => {
 
   return (
     <header className="relative z-50 w-full h-24 bg-[#0c131d] border-b-[0.5px] border-white/5 flex justify-between items-center px-6 md:px-10 shrink-0 shadow-sm">
-      <div className="flex items-center gap-2">
-        <NextLink href="/">
+      <div className="flex items-center justify-start shrink-0">
+        <NextLink href="/" className="flex items-center">
           <Image
             src="/FullLogo.jpg"
             alt="BudAI Logo"
-            width={100}
-            height={31}
-            className="rounded-sm"
+            width={80}
+            height={25}
+            className="rounded-sm object-contain"
             priority
           />
         </NextLink>
