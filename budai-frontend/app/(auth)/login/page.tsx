@@ -33,7 +33,7 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json() as any;
+      const data = (await res.json()) as { token?: string; detail?: string };
 
       if (res.ok && data.token) {
         localStorage.setItem("budai_token", data.token);
