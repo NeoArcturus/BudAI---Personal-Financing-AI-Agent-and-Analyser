@@ -47,13 +47,14 @@ export default function LandingPage() {
   return (
     <div className="dark min-h-screen text-foreground selection:bg-primary/30 selection:text-primary relative overflow-x-hidden bg-transparent font-sans">
       <nav className="fixed top-0 w-full z-50 h-24 bg-[#0c131d] border-b-[0.5px] border-white/5 flex justify-between items-center px-6 md:px-10 transition-all">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Image
             src="/FullLogo.jpg"
             alt="BudAI Logo"
-            width={130}
-            height={40}
-            className="rounded-sm"
+            width={100}
+            height={31}
+            className="rounded-sm object-contain"
+            priority
           />
         </div>
 
@@ -562,7 +563,7 @@ export default function LandingPage() {
                   alt="BudAI Logo"
                   width={340}
                   height={112}
-                  className="h-28 w-auto rounded-md"
+                  className="h-28 w-auto rounded-md object-contain"
                 />
               </div>
               <p className="text-foreground/30 max-w-xs leading-relaxed font-medium tracking-wide text-xs">
