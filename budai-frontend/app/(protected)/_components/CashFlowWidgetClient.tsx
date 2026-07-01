@@ -13,7 +13,6 @@ import {
   DateField,
   Calendar,
   CloseButton,
-  Button,
 } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { Transaction, BankChartData } from "@/types";
@@ -148,7 +147,15 @@ export default function CashFlowWidgetClient({
       },
       "Liquidity Intelligence",
     );
-  }, [transactions, selectedAccountId, fromStr, toStr, startDate, endDate, accounts]);
+  }, [
+    transactions,
+    selectedAccountId,
+    fromStr,
+    toStr,
+    startDate,
+    endDate,
+    accounts,
+  ]);
 
   const handleDiscuss = () => {
     const sessionId = createNewSession("Cash Flow Analysis", {
@@ -317,8 +324,13 @@ export default function CashFlowWidgetClient({
               </Label>
               <Dropdown>
                 <Dropdown.Trigger className="h-12 min-h-12 w-full bg-white/5 hover:bg-white/10 border-[0.5px] border-white/10 text-[10px] text-foreground font-black uppercase tracking-widest rounded-xl px-4 flex items-center justify-between transition-all cursor-pointer outline-none focus:border-primary/50 shadow-inner">
-                  <span className="truncate pointer-events-none">{selectedAccountName}</span>
-                  <ChevronDown size={14} className="text-foreground/30 shrink-0 pointer-events-none" />
+                  <span className="truncate pointer-events-none">
+                    {selectedAccountName}
+                  </span>
+                  <ChevronDown
+                    size={14}
+                    className="text-foreground/30 shrink-0 pointer-events-none"
+                  />
                 </Dropdown.Trigger>
                 <Dropdown.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-xl shadow-2xl w-64 z-50 p-2">
                   <Dropdown.Menu
