@@ -13,12 +13,14 @@ import {
   Text,
   Dropdown,
   Selection,
+  CloseButton,
 } from "@heroui/react";
 import { cn } from "@/lib/utils";
 import CoreChartEngine from "./CoreChartEngine";
 import WidgetFlipCard from "./WidgetFlipCard";
 import { useRouter } from "next/navigation";
 import { useBudAI } from "@/app/context/AppContext";
+import { WidgetContext } from "../home/DashboardClient";
 
 interface CommodityHistory {
   symbol: string;
@@ -35,6 +37,7 @@ export default function CommodityMarketWidgetClient({
   initialHistory,
 }: CommodityMarketWidgetProps) {
   const router = useRouter();
+  const { onRemove } = React.useContext(WidgetContext);
   const { createNewSession } = useBudAI();
   const [selectedSymbol, setSelectedSymbol] = useState<string>("GC=F");
   const [selectedRange, setSelectedRange] = useState<string>("1M");
@@ -160,6 +163,10 @@ export default function CommodityMarketWidgetClient({
               </p>
             </div>
           </div>
+          <CloseButton
+            onPress={onRemove}
+            className="text-foreground/20 hover:text-foreground transition-all rounded-md"
+          />
         </Card.Header>
 
         <Card.Content className="p-0 flex-1 flex flex-col overflow-hidden min-h-0 relative">

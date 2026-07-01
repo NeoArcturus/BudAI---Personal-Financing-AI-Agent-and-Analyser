@@ -4,10 +4,11 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Newspaper, ExternalLink, Image as ImageIcon } from "lucide-react";
-import { Card, Skeleton, ScrollShadow, Text, Link } from "@heroui/react";
+import { Card, Skeleton, ScrollShadow, Text, Link, CloseButton } from "@heroui/react";
 import WidgetFlipCard from "./WidgetFlipCard";
 import { useRouter } from "next/navigation";
 import { useBudAI } from "@/app/context/AppContext";
+import { WidgetContext } from "../home/DashboardClient";
 import Image from "next/image";
 
 interface NewsItem {
@@ -26,6 +27,7 @@ export default function FinancialNewsWidgetClient({
   initialNews,
 }: FinancialNewsWidgetProps) {
   const router = useRouter();
+  const { onRemove } = React.useContext(WidgetContext);
   const { createNewSession } = useBudAI();
 
   const { data: newsData, isLoading: isNewsLoading } = useQuery<{
@@ -141,6 +143,10 @@ export default function FinancialNewsWidgetClient({
               </p>
             </div>
           </div>
+          <CloseButton
+            onPress={onRemove}
+            className="text-foreground/20 hover:text-foreground transition-all rounded-md"
+          />
         </Card.Header>
 
         <Card.Content className="p-0 flex-1 flex flex-col gap-3 overflow-hidden min-h-0 relative">
