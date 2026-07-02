@@ -65,7 +65,6 @@ def refresh_all_tokens():
 async def lifespan(app: FastAPI):
     logger.info("INITIALIZING BUDAI CORE ENGINE")
     bridge = MCPBridge()
-    logger.info(f"Local Workspace: {bridge.workspace_dir}")
     FastAPICache.init(InMemoryBackend(), prefix="budai-cache")
     scheduler = BackgroundScheduler()
     scheduler.add_job(func=refresh_all_tokens, trigger="interval", minutes=45)
