@@ -43,7 +43,7 @@ class CategorizerAgent:
             base_url = f"{base_url}/v1"
             
         self.llm = ChatOpenAI(
-            model="qwen3-0.6b-8bit", 
+            model="mlx-community/qwen3-0.6b-8bit", 
             base_url=base_url, 
             api_key="budai-local", 
             temperature=0,
