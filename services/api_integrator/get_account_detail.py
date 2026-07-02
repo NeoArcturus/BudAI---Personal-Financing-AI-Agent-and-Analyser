@@ -153,7 +153,6 @@ class UserAccounts:
 
     def _process_and_store_transactions(self, session, tx_data, user_uuid, bank_uuid, account_id):
         from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
-        from services.Categorizer_Agent.categorizer.preprocessor import Preprocessor
         if not tx_data:
             logger.info(
                 f"No transaction data to process for account {account_id}")
@@ -212,27 +211,11 @@ class UserAccounts:
                 f"All {len(tx_data)} transactions for account {account_id} are already in the database. Skipping.")
             return
         logger.info(
-            f"Found {len(new_txs)} new transactions to categorize and store for account {account_id}")
-        df_new = pd.DataFrame(new_txs)
-        agent = CategorizerAgent()
-        proc = Preprocessor(df_new, agent.local_st_path)
-        xgb_model_path = os.path.join(agent.model_dir, "gbm_model.joblib")
-        enc_path = os.path.join(agent.enc_dir, "label_encoder.joblib")
-        if os.path.exists(xgb_model_path) and os.path.exists(enc_path):
-            logger.info(
-                f"Running AI Categorization for {len(new_txs)} transactions...")
-            clean_df, embeddings = proc.preprocess_for_inference()
-            categorized_df = agent.categorizer.predict(
-                clean_df, embeddings, xgb_model_path, enc_path)
-            category_map = categorized_df.set_index(
-                "transaction_uuid")["Category"].to_dict()
-            for tx in new_txs:
-                tx["category"] = category_map.get(
-                    tx["transaction_uuid"], "Uncategorized")
-            logger.info("AI Categorization completed.")
-        else:
-            logger.warning(
-                f"Categorization models not found at {xgb_model_path}. Storing as 'Uncategorized'.")
+            f"Found {len(new_txs)} new transactions to store for account {account_id}")
+            
+        # We now store all new transactions as 'Uncategorized'. 
+        # The background LLM Categorizer Agent will seamlessly pick them up and categorize them asynchronously!
+
         
         # Fallback regex categorization for any Uncategorized transactions
         rules_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Categorizer_Agent", "budai_category_rules.json")
