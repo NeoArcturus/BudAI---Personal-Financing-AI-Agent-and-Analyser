@@ -114,7 +114,8 @@ class CategorizerAgent:
                     (Transaction.category == 'Uncategorized') | 
                     (Transaction.category == None) |
                     (Transaction.category == '') |
-                    (Transaction.sub_category == None)
+                    (Transaction.sub_category == None) |
+                    (Transaction.sub_category == '')
                 ).all()
                 
                 if not uncategorized_txs:
