@@ -21,7 +21,7 @@ logger = get_core_logger(__name__)
 class CategorizedTransaction(BaseModel):
     transaction_uuid: str
     category: str = Field(description="Must exactly match a top-level key in budai_category_rules.json")
-    sub_category: Optional[str] = Field(description="Must exactly match a sub-category under the chosen category")
+    sub_category: Optional[str] = Field(description="A short 1-3 word specific sub-category generated dynamically based on the transaction description (e.g. 'Groceries', 'Coffee', 'Train Ticket')")
 
 class BatchCategorizationOutput(BaseModel):
     results: List[CategorizedTransaction]
@@ -170,7 +170,7 @@ You must classify transactions based ONLY on the following rules JSON:
 
 Output valid JSON matching the exact schema provided. 
 - Ensure 'category' strictly matches one of the top-level keys in the JSON (e.g. "Food & Dining", "Shopping").
-- Ensure 'sub_category' strictly matches one of the string items listed under 'semantic_anchors' for your chosen category. If no anchor fits perfectly, pick the closest one."""
+- Generate a concise 1-3 word string for 'sub_category' that best describes the specific purchase (e.g. 'Groceries', 'Coffee', 'Train Ticket') based on the transaction description."""
         try:
             response = await self.structured_llm.ainvoke([
                 {"role": "system", "content": system_prompt},
