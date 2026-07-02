@@ -48,6 +48,12 @@ def init_db(db_path=None):
     try:
         ensure_db_exists()
         Base.metadata.create_all(bind=engine)
+        
+        # Auto-migrate: Add sub_category column if it does not exist
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_category VARCHAR;"))
+            
         logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
