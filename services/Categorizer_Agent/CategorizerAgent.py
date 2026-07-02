@@ -109,11 +109,12 @@ class CategorizerAgent:
             from models.database_models import Transaction
             
             with SessionLocal() as session:
-                # Fetch transactions that are uncategorized or missing a category
+                # Fetch transactions that are uncategorized, missing a category, or missing a sub_category
                 uncategorized_txs = session.query(Transaction).filter(
                     (Transaction.category == 'Uncategorized') | 
                     (Transaction.category == None) |
-                    (Transaction.category == '')
+                    (Transaction.category == '') |
+                    (Transaction.sub_category == None)
                 ).all()
                 
                 if not uncategorized_txs:
