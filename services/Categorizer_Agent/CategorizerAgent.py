@@ -131,10 +131,16 @@ class CategorizerAgent:
             logger.info(f"Background Categorizer found {len(transactions)} uncategorized transactions. Processing via LLM...")
 
             batch_size = 20
+            semaphore = asyncio.Semaphore(2)
+            
+            async def sem_task(batch):
+                async with semaphore:
+                    return await self._categorize_batch(batch)
+            
             tasks = []
             for i in range(0, len(transactions), batch_size):
                 batch = transactions[i:i + batch_size]
-                tasks.append(self._categorize_batch(batch))
+                tasks.append(sem_task(batch))
                 
             results = await asyncio.gather(*tasks)
             categorized_list = [item for sublist in results for item in sublist]
@@ -212,10 +218,16 @@ Output valid JSON matching the exact schema provided. Ensure category strictly m
                 })
                 
             batch_size = 20
+            semaphore = asyncio.Semaphore(2)
+            
+            async def sem_task(batch):
+                async with semaphore:
+                    return await self._categorize_batch(batch)
+                    
             tasks = []
             for i in range(0, len(transactions), batch_size):
                 batch = transactions[i:i + batch_size]
-                tasks.append(self._categorize_batch(batch))
+                tasks.append(sem_task(batch))
                 
             results = await asyncio.gather(*tasks)
             categorized_list = [item for sublist in results for item in sublist]
