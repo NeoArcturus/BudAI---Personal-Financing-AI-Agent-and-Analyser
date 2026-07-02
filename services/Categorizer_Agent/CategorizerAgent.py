@@ -7,30 +7,50 @@ import logging
 from datetime import datetime
 from diskcache import Cache
 from sqlalchemy import text
+import asyncio
+
 from config import SessionLocal
-from services.Categorizer_Agent.training.model_trainer import CategorizerTrainer
-from services.Categorizer_Agent.categorizer.preprocessor import Preprocessor
-from services.Categorizer_Agent.categorizer.categorizer import Categorizer
 from services.api_integrator.get_account_detail import UserAccounts
 from services.logger_setup import get_core_logger
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
+from typing import List, Optional
+
 logger = get_core_logger(__name__)
 
-sys.path.append(os.path.abspath(os.path.join(
+class CategorizedTransaction(BaseModel):
+    transaction_uuid: str
+    category: str = Field(description="Must exactly match a top-level key in budai_category_rules.json")
+    sub_category: Optional[str] = Field(description="Must exactly match a sub-category under the chosen category")
 
-    os.path.dirname(__file__), '..', '..')))
+class BatchCategorizationOutput(BaseModel):
+    results: List[CategorizedTransaction]
+
 class CategorizerAgent:
     def __init__(self):
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
-        self.model_dir = os.path.join(self.base_dir, "saved_model")
-        self.enc_dir = os.path.join(self.base_dir, "saved_label_enc")
-        self.local_st_path = os.path.join(self.model_dir, "st_model_local")
         self.cache = Cache('./agent_cache')
-        self.categorizer = Categorizer()
         rules_path = os.path.join(self.base_dir, "budai_category_rules.json")
         with open(rules_path, "r") as f:
+            self.rules = f.read()
+            f.seek(0)
             self.valid_categories = list(
                 json.load(f)["rules"].keys()) + ["Income", "Uncategorized"]
+                
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
+        if not base_url.endswith("/v1"): 
+            base_url = f"{base_url}/v1"
+            
+        self.llm = ChatOpenAI(
+            model="qwen3-0.6b-8bit", 
+            base_url=base_url, 
+            api_key="budai-local", 
+            temperature=0,
+            max_tokens=2000
+        )
+        self.structured_llm = self.llm.with_structured_output(BatchCategorizationOutput)
         self._ensure_feedback_table()
+        
     def _ensure_feedback_table(self):
         with SessionLocal() as session:
             session.execute(text("""
@@ -45,6 +65,7 @@ class CategorizerAgent:
                 )
             """))
             session.commit()
+            
     def save_manual_label(self, user_uuid, transaction_uuid, corrected_label):
         if corrected_label not in self.valid_categories:
             raise ValueError(f"Invalid category label: {corrected_label}")
@@ -70,117 +91,48 @@ class CategorizerAgent:
                 "corrected_label": corrected_label
             })
             session.commit()
+
     def retrain_from_feedback(self, user_uuid):
-        self._ensure_feedback_table()
-        with SessionLocal() as session:
-            rows = session.execute(text("""
-                SELECT
-                    t.transaction_uuid,
-                    t.account_id,
-                    t.date,
-                    t.amount,
-                    t.description,
-                    t.category,
-                    f.corrected_label
-                FROM transactions t
-                LEFT JOIN transaction_label_feedback f
-                    ON f.transaction_uuid = t.transaction_uuid AND f.user_uuid = t.user_uuid
-                WHERE t.user_uuid = :user_uuid
-            """), {"user_uuid": user_uuid}).fetchall()
-        if not rows:
-            return {"trained": False, "reason": "No transactions available for training."}
-        records = []
-        for row in rows:
-            tx_id, acc_id, date_val, amount, description, category, corrected_label = row
-            final_label = corrected_label or category or "Uncategorized"
-            records.append({
-                "transaction_id": tx_id,
-                "transaction_uuid": tx_id,
-                "account_id": acc_id,
-                "timestamp": date_val.isoformat() if hasattr(date_val, "isoformat") else str(date_val),
-                "amount": amount,
-                "description": description,
-                "Category": final_label
-            })
-        raw_df = pd.DataFrame(records)
-        proc = Preprocessor(raw_df, self.local_st_path)
-        train_df, embeddings = proc.preprocess_for_inference()
-        if "Category" not in train_df.columns:
-            return {"trained": False, "reason": "No labels found for training."}
-        train_df["Category"] = raw_df["Category"].values
-        trainer = CategorizerTrainer(
-            train_df, embeddings, self.model_dir, self.enc_dir)
-        success = trainer.train()
-        return {"trained": success, "samples": len(train_df)}
+        return {"trained": True, "reason": "LLM dynamically reads rules, no retraining needed. Feedback applied to DB."}
 
     def train_global(self):
-        xgb_model_path = os.path.join(self.model_dir, "gbm_model.joblib")
-        enc_path = os.path.join(self.enc_dir, "label_encoder.joblib")
-        if os.path.exists(xgb_model_path) and os.path.exists(enc_path):
-            return {"trained": False, "reason": "Model already exists."}
-            
-        self._ensure_feedback_table()
-        with SessionLocal() as session:
-            rows = session.execute(text("""
-                SELECT
-                    t.transaction_uuid,
-                    t.account_id,
-                    t.date,
-                    t.amount,
-                    t.description,
-                    t.category
-                FROM transactions t
-            """)).fetchall()
-            
-        if not rows:
-            logger.info("No transactions in DB for global training.")
-            return {"trained": False, "reason": "No transactions available for training."}
-            
-        records = []
-        for row in rows:
-            tx_id, acc_id, date_val, amount, description, category = row
-            records.append({
-                "transaction_id": tx_id,
-                "transaction_uuid": tx_id,
-                "account_id": acc_id,
-                "timestamp": date_val.isoformat() if hasattr(date_val, "isoformat") else str(date_val),
-                "amount": amount,
-                "description": description,
-                "Category": category
-            })
-            
-        raw_df = pd.DataFrame(records)
-        proc = Preprocessor(raw_df, self.local_st_path)
-        train_df, embeddings = proc.preprocess_for_training()
-        trainer = CategorizerTrainer(
-            train_df, embeddings, self.model_dir, self.enc_dir)
-        success = trainer.train()
-        return {"trained": success, "samples": len(train_df)}
+        return {"trained": True, "reason": "Global LLM rules applied, no local ML training required."}
+
+    async def _categorize_batch(self, batch):
+        minimal_batch = [{"id": t["transaction_uuid"], "desc": t["description"], "amount": t["amount"]} for t in batch]
+        system_prompt = f"""You are a strict financial categorizer.
+You must classify transactions based ONLY on the following rules JSON:
+{self.rules}
+
+Output valid JSON matching the exact schema provided. Ensure category strictly matches top-level keys."""
+        try:
+            response = await self.structured_llm.ainvoke([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(minimal_batch)}
+            ])
+            return response.results
+        except Exception as e:
+            logger.error(f"Error in LLM categorization batch: {e}")
+            return []
+
     def execute_cycle(self, identifier, user_uuid, start_date, end_date):
         try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(self.async_execute_cycle(identifier, user_uuid, start_date, end_date))
+
+    async def async_execute_cycle(self, identifier, user_uuid, start_date, end_date):
+        try:
             if str(identifier).upper() == "ALL" or "," in str(identifier):
-                raise ValueError(
-                    "CategorizerAgent strictly handles a single account identifier.")
+                raise ValueError("CategorizerAgent strictly handles a single account identifier.")
+                
             user_acc = UserAccounts(user_id=user_uuid)
-            raw_df = user_acc.get_bank_transactions(
-                identifier, user_uuid, start_date, end_date)
-            logger.info("Transactions obtained:")
-            logger.info(raw_df)
+            raw_df = user_acc.get_bank_transactions(identifier, user_uuid, start_date, end_date)
             if raw_df is None or raw_df.empty:
                 return None
-            proc = Preprocessor(raw_df, self.local_st_path)
-            xgb_model_path = os.path.join(self.model_dir, "gbm_model.joblib")
-            enc_path = os.path.join(self.enc_dir, "label_encoder.joblib")
-            if not (os.path.exists(xgb_model_path) and os.path.exists(enc_path)):
-                training_df, embeddings = proc.preprocess_for_training()
-                trainer = CategorizerTrainer(
-                    training_df, embeddings, self.model_dir, self.enc_dir)
-                trainer.train()
-                clean_df = training_df.drop(columns=['Category'])
-            else:
-                clean_df, embeddings = proc.preprocess_for_inference()
-            final_df = self.categorizer.predict(
-                clean_df, embeddings, xgb_model_path, enc_path)
+                
             with SessionLocal() as session:
                 feedback_rows = session.execute(text("""
                     SELECT transaction_uuid, corrected_label
@@ -188,12 +140,44 @@ class CategorizerAgent:
                     WHERE user_uuid = :user_uuid
                 """), {"user_uuid": user_uuid}).fetchall()
             feedback_map = {row[0]: row[1] for row in feedback_rows}
-            if "transaction_id" in final_df.columns:
-                final_df["Category"] = final_df.apply(
-                    lambda r: feedback_map.get(
-                        str(r.get("transaction_id")), r.get("Category")),
-                    axis=1
-                )
+            
+            transactions = []
+            for _, row in raw_df.iterrows():
+                tx_uuid = row.get('transaction_uuid') or row.get('transaction_id')
+                if not tx_uuid:
+                    tx_uuid = hashlib.sha256(f"{user_uuid}_{identifier}_{row.get('date')}_{row.get('amount')}_{row.get('description')}".encode()).hexdigest()
+                transactions.append({
+                    "transaction_uuid": tx_uuid,
+                    "description": row.get('description', ''),
+                    "amount": row.get('amount', 0.0),
+                    "original_row": row.to_dict()
+                })
+                
+            batch_size = 20
+            tasks = []
+            for i in range(0, len(transactions), batch_size):
+                batch = transactions[i:i + batch_size]
+                tasks.append(self._categorize_batch(batch))
+                
+            results = await asyncio.gather(*tasks)
+            categorized_list = [item for sublist in results for item in sublist]
+            cat_map = {item.transaction_uuid: (item.category, item.sub_category) for item in categorized_list}
+            
+            final_rows = []
+            for tx in transactions:
+                tx_uuid = tx["transaction_uuid"]
+                orig = tx["original_row"]
+                if tx_uuid in feedback_map:
+                    category = feedback_map[tx_uuid]
+                    sub_category = None
+                else:
+                    category, sub_category = cat_map.get(tx_uuid, ("Uncategorized", None))
+                orig['Category'] = category
+                orig['Sub_Category'] = sub_category
+                orig['transaction_id'] = tx_uuid
+                final_rows.append(orig)
+                
+            final_df = pd.DataFrame(final_rows)
             with SessionLocal() as session:
                 row = session.execute(text("""
                     SELECT a.account_id
@@ -202,20 +186,17 @@ class CategorizerAgent:
                     WHERE (b.bank_name = :identifier OR a.account_id = :identifier) AND a.user_uuid = :user_uuid
                 """), {"identifier": identifier, "user_uuid": user_uuid}).fetchone()
                 actual_acc_id = row[0] if row else identifier
+                
             self._update_sql_memory(final_df, actual_acc_id, user_uuid)
             return final_df
-        except ValueError as ve:
-            logger.error("An error occurred in this block", exc_info=True)
-            raise ve
+            
         except Exception as e:
-            logger.error("An error occurred in this block", exc_info=True)
+            logger.error("An error occurred in async_execute_cycle", exc_info=True)
             logger.error(e)
+
     def _update_sql_memory(self, df, account_id, user_uuid):
         from models.database_models import Transaction, Bank, Account
         from config import SessionLocal
-        import uuid
-        from datetime import datetime
-        import pandas as pd
         with SessionLocal() as session:
             bank = session.query(Bank).join(Account).filter(
                 Account.account_id == account_id, Account.user_uuid == user_uuid).first()
@@ -230,7 +211,6 @@ class CategorizerAgent:
                     try:
                         date_val = pd.to_datetime(raw_date, format='ISO8601').to_pydatetime()
                     except Exception:
-                        logger.error("An error occurred in this block", exc_info=True)
                         date_val = datetime.now()
                 else:
                     date_val = datetime.now()
@@ -238,23 +218,22 @@ class CategorizerAgent:
                 try:
                     amt_val = float(amt_raw)
                 except ValueError:
-                    logger.error("An error occurred in this block", exc_info=True)
                     amt_val = 0.0
                 desc_val = r.get('Description') or r.get('description') or ''
                 cat_val = r.get('Category') or 'Uncategorized'
+                sub_cat_val = r.get('Sub_Category')
                 tx_hash = hashlib.sha256(
                     f"{user_uuid}_{account_id}_{date_val.strftime('%Y-%m-%d')}_{amt_val}_{desc_val}".encode()).hexdigest()
-                tx_id = str(r.get('transaction_id') or r.get(
-                    'transaction_uuid') or tx_hash)
+                tx_id = str(r.get('transaction_id') or r.get('transaction_uuid') or tx_hash)
 
                 if tx_id in seen_ids:
                     continue
                 seen_ids.add(tx_id)
-
-                existing_tx = session.query(Transaction).filter_by(
-                    transaction_uuid=tx_id).first()
-                if existing_tx:
-                    existing_tx.category = cat_val
+                existing = session.query(Transaction).filter_by(
+                    transaction_uuid=tx_id, user_uuid=user_uuid).first()
+                if existing:
+                    existing.category = cat_val
+                    existing.sub_category = sub_cat_val
                 else:
                     new_tx = Transaction(
                         transaction_uuid=tx_id,
@@ -263,14 +242,9 @@ class CategorizerAgent:
                         account_id=acc_id_val,
                         date=date_val,
                         amount=amt_val,
+                        description=desc_val,
                         category=cat_val,
-                        description=desc_val
+                        sub_category=sub_cat_val
                     )
                     session.add(new_tx)
             session.commit()
-    def get_classification_report(self):
-        report_path = os.path.join(self.model_dir, "classification_report.txt")
-        if os.path.exists(report_path):
-            with open(report_path, "r") as f:
-                return f.read()
-        return "Classification report not found."
