@@ -37,7 +37,8 @@ class CategorizerAgent:
             self.valid_categories = list(
                 json.load(f)["rules"].keys()) + ["Income", "Uncategorized"]
                 
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
+        # The categorizer model runs on port 8001, while the main model runs on 8000
+        base_url = os.getenv("CATEGORIZER_LLM_URL", "http://host.docker.internal:8001/v1")
         if not base_url.endswith("/v1"): 
             base_url = f"{base_url}/v1"
             
