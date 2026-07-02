@@ -97,7 +97,64 @@ class CategorizerAgent:
         return {"trained": True, "reason": "LLM dynamically reads rules, no retraining needed. Feedback applied to DB."}
 
     def train_global(self):
-        return {"trained": True, "reason": "Global LLM rules applied, no local ML training required."}
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(self.async_train_global())
+
+    async def async_train_global(self):
+        try:
+            from models.database_models import Transaction
+            
+            with SessionLocal() as session:
+                # Fetch transactions that are uncategorized or missing a category
+                uncategorized_txs = session.query(Transaction).filter(
+                    (Transaction.category == 'Uncategorized') | 
+                    (Transaction.category == None) |
+                    (Transaction.category == '')
+                ).all()
+                
+                if not uncategorized_txs:
+                    return {"trained": True, "samples": 0, "reason": "All transactions are already categorized."}
+                
+                # Convert to dict for processing
+                transactions = []
+                for tx in uncategorized_txs:
+                    transactions.append({
+                        "transaction_uuid": tx.transaction_uuid,
+                        "description": tx.description or '',
+                        "amount": tx.amount or 0.0,
+                    })
+
+            logger.info(f"Background Categorizer found {len(transactions)} uncategorized transactions. Processing via LLM...")
+
+            batch_size = 20
+            tasks = []
+            for i in range(0, len(transactions), batch_size):
+                batch = transactions[i:i + batch_size]
+                tasks.append(self._categorize_batch(batch))
+                
+            results = await asyncio.gather(*tasks)
+            categorized_list = [item for sublist in results for item in sublist]
+            
+            # Update database with new categories
+            with SessionLocal() as session:
+                updated_count = 0
+                for item in categorized_list:
+                    existing = session.query(Transaction).filter_by(transaction_uuid=item.transaction_uuid).first()
+                    if existing:
+                        existing.category = item.category
+                        existing.sub_category = item.sub_category
+                        updated_count += 1
+                session.commit()
+
+            return {"trained": True, "samples": updated_count, "reason": "Successfully categorized via background LLM batching."}
+
+        except Exception as e:
+            logger.error(f"Error in background global categorization: {e}")
+            return {"trained": False, "samples": 0, "reason": str(e)}
 
     async def _categorize_batch(self, batch):
         minimal_batch = [{"id": t["transaction_uuid"], "desc": t["description"], "amount": t["amount"]} for t in batch]
