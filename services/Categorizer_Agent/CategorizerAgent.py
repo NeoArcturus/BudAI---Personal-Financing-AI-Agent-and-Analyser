@@ -37,13 +37,13 @@ class CategorizerAgent:
             self.valid_categories = list(
                 json.load(f)["rules"].keys()) + ["Income", "Uncategorized"]
                 
-        # The categorizer model runs on port 8001, while the main model runs on 8000
-        base_url = os.getenv("CATEGORIZER_LLM_URL", "http://host.docker.internal:8001/v1")
+        # We use the main model on port 8000 for categorization as well
+        base_url = os.getenv("LLM_BASE_URL", "http://host.docker.internal:8000/v1")
         if not base_url.endswith("/v1"): 
             base_url = f"{base_url}/v1"
             
         self.llm = ChatOpenAI(
-            model="mlx-community/qwen3-0.6b-8bit", 
+            model="mlx-community/Qwen3.5-4B-4bit", 
             base_url=base_url, 
             api_key="budai-local", 
             temperature=0,
