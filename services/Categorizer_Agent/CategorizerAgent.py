@@ -168,7 +168,9 @@ class CategorizerAgent:
 You must classify transactions based ONLY on the following rules JSON:
 {self.rules}
 
-Output valid JSON matching the exact schema provided. Ensure category strictly matches top-level keys."""
+Output valid JSON matching the exact schema provided. 
+- Ensure 'category' strictly matches one of the top-level keys in the JSON (e.g. "Food & Dining", "Shopping").
+- Ensure 'sub_category' strictly matches one of the string items listed under 'semantic_anchors' for your chosen category. If no anchor fits perfectly, pick the closest one."""
         try:
             response = await self.structured_llm.ainvoke([
                 {"role": "system", "content": system_prompt},
