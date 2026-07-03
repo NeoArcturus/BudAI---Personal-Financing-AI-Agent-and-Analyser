@@ -145,7 +145,7 @@ class CategorizerAgent:
 
             logger.info(f"Background Categorizer found {len(transactions)} uncategorized transactions. Processing via LLM...")
 
-            batch_size = 20
+            batch_size = 100
             semaphore = asyncio.Semaphore(2)
             
             async def sem_task(batch):
@@ -244,7 +244,7 @@ Output valid JSON matching the exact schema provided.
                     "original_row": row.to_dict()
                 })
                 
-            batch_size = 20
+            batch_size = 100
             semaphore = asyncio.Semaphore(2)
             
             async def sem_task(batch):

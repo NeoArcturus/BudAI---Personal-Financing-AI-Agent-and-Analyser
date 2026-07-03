@@ -74,16 +74,20 @@ export default function SpendingTrendWidgetClient({
 
   const totalExpenses = useMemo(() => {
     let total = 0;
-    chartPayload.forEach((bank: BankChartData) => {
-      bank.data.forEach((point: Record<string, string | number>) => {
-        total += Number(point.Amount || point.amount || 0);
+    if (Array.isArray(chartPayload)) {
+      chartPayload.forEach((bank: BankChartData) => {
+        if (Array.isArray(bank.data)) {
+          bank.data.forEach((point: Record<string, string | number>) => {
+            total += Number(point.Amount || point.amount || 0);
+          });
+        }
       });
-    });
+    }
     return total;
   }, [chartPayload]);
 
   const config = useMemo(() => {
-    if (!startDate || !endDate || chartPayload.length === 0) return null;
+    if (!startDate || !endDate || !Array.isArray(chartPayload) || chartPayload.length === 0) return null;
 
     const chartType =
       granularity === "daily"
@@ -415,7 +419,7 @@ export default function SpendingTrendWidgetClient({
           </div>
 
           <div className="flex-1 w-full min-h-62.5 mb-6 relative flex items-center justify-center px-8">
-            {isActuallyLoading && chartPayload.length === 0 ? (
+            {isActuallyLoading && (!Array.isArray(chartPayload) || chartPayload.length === 0) ? (
               <Skeleton
                 className="w-full h-full rounded-xl bg-white/5"
                 animationType="shimmer"

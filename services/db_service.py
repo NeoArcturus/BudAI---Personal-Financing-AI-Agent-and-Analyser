@@ -49,10 +49,16 @@ def init_db(db_path=None):
         ensure_db_exists()
         Base.metadata.create_all(bind=engine)
         
-        # Auto-migrate: Add sub_category column if it does not exist
+        # Auto-migrate: Add sub_category and TrueLayer extended columns if they do not exist
         from sqlalchemy import text
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_category VARCHAR;"))
+            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transaction_type VARCHAR;"))
+            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS provider_category VARCHAR;"))
+            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transaction_classification JSON;"))
+            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS merchant_name VARCHAR;"))
+            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS running_balance JSON;"))
+            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS meta_status VARCHAR;"))
             
         logger.info("Database initialized successfully")
     except Exception as e:

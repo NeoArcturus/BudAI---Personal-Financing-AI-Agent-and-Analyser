@@ -44,7 +44,7 @@ def classify_financial_data(user_uuid: str, from_date: str, to_date: str, accoun
                     "Total_Amount": total,
                     "count": len(cat_df)
                 })
-                acc_summary.append(f"- {cat}: £{total} ({len(cat_df)} transactions)")
+                acc_summary.append(f"- {cat}: Amount spent: £{total}")
             
             data_summary.append("\n".join(acc_summary))
             bank_data.sort(key=lambda x: x["Total_Amount"], reverse=True)
@@ -52,7 +52,7 @@ def classify_financial_data(user_uuid: str, from_date: str, to_date: str, accoun
             
         cache_id = _cache_chart_data(payload)
         summary_text = "\n\n".join(data_summary)
-        return f"Classified {len(combined_df)} transactions. [TRIGGER_CATEGORIZED_CHART:{cache_id}]\n\nDATA SUMMARY:\n{summary_text}"
+        return f"[TRIGGER_CATEGORIZED_CHART:{cache_id}]\n\nDATA SUMMARY:\n{summary_text}"
     except Exception as e:
         logger.error(f"Error: {e}")
         return f"Error: {str(e)}"

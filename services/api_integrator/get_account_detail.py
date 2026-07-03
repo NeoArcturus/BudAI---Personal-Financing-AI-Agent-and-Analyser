@@ -162,7 +162,9 @@ class UserAccounts:
         new_txs = []
         seen_in_batch = set()
         for tx in tx_data:
-            tx_id = tx.get("transaction_id", str(uuid.uuid4()))
+            norm_id = tx.get("normalised_provider_transaction_id")
+            raw_tx_id = tx.get("transaction_id")
+            
             date_str = tx.get("timestamp")
             if date_str:
                 try:
@@ -174,8 +176,10 @@ class UserAccounts:
                     date_val = datetime.utcnow()
             else:
                 date_val = datetime.utcnow()
+            
             amount = float(tx.get("amount", 0.0))
             original_desc = str(tx.get("description", ""))
+            
             classification_list = tx.get("transaction_classification", [])
             if isinstance(classification_list, list) and classification_list:
                 classification_str = " ".join(
@@ -183,8 +187,11 @@ class UserAccounts:
                 desc_val = f"{original_desc} {classification_str}".strip()
             else:
                 desc_val = original_desc
+                
             tx_hash = hashlib.sha256(
                 f"{user_uuid}_{account_id}_{date_val.strftime('%Y-%m-%d')}_{amount}_{desc_val}".encode()).hexdigest()
+            
+            tx_id = norm_id or raw_tx_id or tx_hash
             
             if tx_id in seen_in_batch or tx_hash in seen_in_batch:
                 continue
@@ -194,6 +201,7 @@ class UserAccounts:
                 (Transaction.transaction_uuid == tx_hash)
             ).first()
             if not existing_tx:
+                import json
                 new_txs.append({
                     "transaction_uuid": tx_id,
                     "user_uuid": user_uuid,
@@ -202,7 +210,13 @@ class UserAccounts:
                     "date": date_val,
                     "amount": amount,
                     "description": desc_val,
-                    "category": "Uncategorized"
+                    "category": "Uncategorized",
+                    "transaction_type": tx.get("transaction_type"),
+                    "provider_category": tx.get("transaction_category"),
+                    "transaction_classification": classification_list,
+                    "merchant_name": tx.get("merchant_name"),
+                    "running_balance": tx.get("running_balance"),
+                    "meta_status": tx.get("meta", {}).get("status") if isinstance(tx.get("meta"), dict) else None
                 })
                 seen_in_batch.add(tx_id)
                 seen_in_batch.add(tx_hash)

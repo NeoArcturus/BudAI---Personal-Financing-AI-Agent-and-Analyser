@@ -151,7 +151,7 @@ export default function LedgerTableWidgetClient({
     const sessionId = createNewSession("Transaction Audit Session", {
       type: "ledger_audit",
       accountId: selectedAccountId,
-      data: transactions.slice(0, 15),
+      data: Array.isArray(transactions) ? transactions.slice(0, 15) : [],
     });
     router.push(`/advisor?session=${sessionId}`);
   };
@@ -453,7 +453,7 @@ export default function LedgerTableWidgetClient({
                 </div>
               ))}
             </div>
-          ) : transactions.length === 0 ? (
+          ) : !Array.isArray(transactions) || transactions.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full w-full opacity-50">
               <div className="w-12 h-12 rounded-full border-2 border-dashed border-muted-foreground flex items-center justify-center mb-3">
                 <ListVideo size={20} className="text-muted-foreground" />
@@ -490,7 +490,7 @@ export default function LedgerTableWidgetClient({
                     </Table.Column>
                   </Table.Header>
                   <Table.Body className="w-full divide-y-[0.5px] divide-white/5">
-                    {transactions.map((tx, i) => {
+                    {(Array.isArray(transactions) ? transactions : []).map((tx, i) => {
                       const desc = tx.description || "UNDEFINED_ENTITY";
                       const amount = tx.amount ?? 0;
                       const cat = tx.category || "UNCATEGORIZED";

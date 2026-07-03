@@ -57,7 +57,16 @@ class Transaction(Base):
     date = Column(DateTime)
     amount = Column(Float)
     category = Column(String)
+    sub_category = Column(String, nullable=True)
     description = Column(String)
+    
+    # TrueLayer extended fields
+    transaction_type = Column(String, nullable=True)
+    provider_category = Column(String, nullable=True)
+    transaction_classification = Column(JSON, nullable=True)
+    merchant_name = Column(String, nullable=True)
+    running_balance = Column(JSON, nullable=True)
+    meta_status = Column(String, nullable=True)
     user = relationship("User", back_populates="transactions")
     account = relationship("Account", back_populates="transactions")
 

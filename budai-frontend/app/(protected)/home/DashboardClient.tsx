@@ -193,8 +193,6 @@ export default function DashboardClient({
 
     const defaultWidgets: WidgetInstance[] = [
       { id: "portfolio-1", type: "portfolio", height: 450, colSpan: 1 },
-      { id: "cashFlow-1", type: "cashFlow", height: 450, colSpan: 1 },
-      { id: "ledger-1", type: "ledger", height: 450, colSpan: 2 },
     ];
     const storageKey = `budai_widgets_dashboard_${userName}`;
     const saved = localStorage.getItem(storageKey);

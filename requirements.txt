@@ -32,10 +32,7 @@ joblib
 
 yfinance
 newsdataapi
-scikit-learn
-xgboost
 faiss-cpu
-sentence-transformers
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch
 torchvision

@@ -76,20 +76,22 @@ export default function ExpenseDistributionWidgetClient({
   const aggregatedData = useMemo(() => {
     const categories: Record<string, number> = {};
 
-    transactions.forEach((tx) => {
-      const amount = tx.amount || tx.Amount || 0;
-      if (
-        amount > 0 &&
-        tx.category?.toLowerCase() !== "expense" &&
-        tx.Category?.toLowerCase() !== "expense"
-      ) {
-        return;
-      }
+    if (Array.isArray(transactions)) {
+      transactions.forEach((tx) => {
+        const amount = tx.amount || tx.Amount || 0;
+        if (
+          amount > 0 &&
+          tx.category?.toLowerCase() !== "expense" &&
+          tx.Category?.toLowerCase() !== "expense"
+        ) {
+          return;
+        }
 
-      const cat = tx.category || tx.Category || "Other";
-      if (!categories[cat]) categories[cat] = 0;
-      categories[cat] += Math.abs(amount);
-    });
+        const cat = tx.category || tx.Category || "Other";
+        if (!categories[cat]) categories[cat] = 0;
+        categories[cat] += Math.abs(amount);
+      });
+    }
 
     return Object.entries(categories)
       .map(([name, value]) => ({ name, value }))

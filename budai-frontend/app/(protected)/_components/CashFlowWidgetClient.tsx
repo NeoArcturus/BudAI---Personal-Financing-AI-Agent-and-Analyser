@@ -62,7 +62,7 @@ export default function CashFlowWidgetClient({
   );
 
   const chartConfig = useMemo(() => {
-    if (!startDate || !endDate || transactions.length === 0) return null;
+    if (!startDate || !endDate || !Array.isArray(transactions) || transactions.length === 0) return null;
 
     const getMonthsInRange = (start: DateValue, end: DateValue) => {
       const months = [];
@@ -96,28 +96,30 @@ export default function CashFlowWidgetClient({
       monthlyData[m] = { Income: 0, Expense: 0 };
     });
 
-    transactions.forEach((tx) => {
-      const date = new Date(tx.timestamp || tx.date || "");
-      if (isNaN(date.getTime())) return;
+    if (Array.isArray(transactions)) {
+      transactions.forEach((tx) => {
+        const date = new Date(tx.timestamp || tx.date || "");
+        if (isNaN(date.getTime())) return;
 
-      const monthYear = date.toLocaleDateString("en-US", {
-        month: "short",
-        year: "2-digit",
-      });
+        const monthYear = date.toLocaleDateString("en-US", {
+          month: "short",
+          year: "2-digit",
+        });
 
-      if (monthlyData[monthYear]) {
-        const amount = tx.amount || tx.Amount || 0;
-        if (
-          amount > 0 ||
-          tx.category?.toLowerCase() === "income" ||
-          tx.Category?.toLowerCase() === "income"
-        ) {
-          monthlyData[monthYear].Income += Math.abs(amount);
-        } else {
-          monthlyData[monthYear].Expense += Math.abs(amount);
+        if (monthlyData[monthYear]) {
+          const amount = tx.amount || tx.Amount || 0;
+          if (
+            amount > 0 ||
+            tx.category?.toLowerCase() === "income" ||
+            tx.Category?.toLowerCase() === "income"
+          ) {
+            monthlyData[monthYear].Income += Math.abs(amount);
+          } else {
+            monthlyData[monthYear].Expense += Math.abs(amount);
+          }
         }
-      }
-    });
+      });
+    }
 
     const chartData = allMonths.map((m) => ({
       Month: m,
