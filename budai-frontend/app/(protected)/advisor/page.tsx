@@ -20,6 +20,9 @@ interface BudAIChatMessage {
   content: string;
   reasoning_content?: string | null;
   timestamp: string;
+  ttft_ms?: number | null;
+  compute_time_ms?: number | null;
+  tokens?: number | null;
 }
 
 export interface BudAIAdvisorContext {
@@ -154,11 +157,22 @@ export default function AdvisorPage() {
                   parts.push({ type: "text", text: text });
                 }
 
+                const annotations = [];
+                if (msg.ttft_ms || msg.compute_time_ms || msg.tokens) {
+                  annotations.push({
+                    type: "telemetry",
+                    ttft_ms: msg.ttft_ms,
+                    compute_time_ms: msg.compute_time_ms,
+                    tokens: msg.tokens,
+                  });
+                }
+
                 return {
                   id: Math.random().toString(36).substring(7),
                   role: msg.role as "user" | "assistant" | "system" | "data",
                   content: text,
                   parts: parts,
+                  annotations: annotations,
                   createdAt: new Date(msg.timestamp),
                 } as BudAIMessage;
               },

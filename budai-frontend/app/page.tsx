@@ -375,7 +375,7 @@ export default function LandingPage() {
                 },
                 {
                   step: "02",
-                  title: "Intelligent Analysis",
+                  title: "Transaction Analysis",
                   icon: MessageSquare,
                   desc: "Automated categorization mapping every transaction with precision.",
                 },
@@ -568,7 +568,7 @@ export default function LandingPage() {
               </div>
               <p className="text-foreground/30 max-w-xs leading-relaxed font-medium tracking-wide text-xs">
                 BudAI. Personal Financial Advisor. Securely connect your bank to
-                analyze spending and predict future balances using advanced
+                analyze spending and predict future balances using quantitative
                 calculations.
               </p>
             </div>

@@ -26,11 +26,11 @@ export default function Error({
 
         <div className="space-y-3">
           <h1 className="text-3xl font-black text-foreground tracking-tighter uppercase italic">
-            System Friction Detected
+            System Error Detected
           </h1>
           <p className="text-muted-foreground font-medium leading-relaxed">
-            An unexpected error occurred during financial orchestration. The
-            multi-agent system has been alerted.
+            An unexpected error occurred during data analysis. The
+            analysis service has been alerted.
           </p>
           <div className="bg-secondary/50 border border-border p-4 rounded-2xl mt-4 backdrop-blur-sm">
             <code className="text-xs text-destructive font-mono break-all font-bold">
@@ -44,7 +44,7 @@ export default function Error({
           className="bg-destructive text-white font-black px-10 h-14 rounded-2xl neon-glow-alert hover:bg-destructive/80 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer uppercase tracking-widest text-xs"
         >
           <RefreshCcw size={18} />
-          Retry Orchestration
+          Retry Analysis
         </Button>
       </div>
     </div>

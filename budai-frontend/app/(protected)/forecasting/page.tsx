@@ -335,7 +335,7 @@ export default function ForecastingPage() {
               </Button>
               <div className="pt-2">
                 <p className="text-[8px] text-foreground/20 text-center leading-relaxed font-black uppercase tracking-[0.3em]">
-                  Projections are based on historical data and AI models. Always verify with your actual bank balance.
+                  Projections are based on historical data and mathematical forecasts. Always verify with your actual bank balance.
                 </p>
               </div>
             </div>

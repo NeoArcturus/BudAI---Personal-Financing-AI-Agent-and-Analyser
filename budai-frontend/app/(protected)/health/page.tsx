@@ -175,7 +175,7 @@ export default function HealthPage() {
             ) : (
               <div className="bg-white/5 backdrop-blur-xl border-[0.5px] border-white/10 rounded-xl p-5 max-w-xs shadow-inner">
                 <p className="text-foreground/60 text-[11px] leading-relaxed font-medium uppercase tracking-wide">
-                  Your score is based on liquidity runway, debt drag, and net worth velocity.
+                  Your score is based on liquidity runway, debt drag, and net worth growth.
                 </p>
               </div>
             )}
