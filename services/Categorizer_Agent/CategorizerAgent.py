@@ -20,7 +20,7 @@ logger = get_core_logger(__name__)
 
 class CategorizedTransaction(BaseModel):
     transaction_uuid: str
-    category: str = Field(description="Must exactly match a top-level key in budai_category_rules.json")
+    category: str = Field(description="Must exactly match one of the main categories: Food & Dining, Transportation, Bills & Utilities, Shopping, Entertainment, Health & Wellness, Transfers & Investments, High-Risk / Anomaly, Income, Uncategorized")
     sub_category: Optional[str] = Field(description="A short 1-3 word specific sub-category generated dynamically based on the transaction description (e.g. 'Groceries', 'Coffee', 'Train Ticket')")
 
 class BatchCategorizationOutput(BaseModel):
@@ -30,13 +30,19 @@ class CategorizerAgent:
     def __init__(self):
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self.cache = Cache('./agent_cache')
-        rules_path = os.path.join(self.base_dir, "budai_category_rules.json")
-        with open(rules_path, "r") as f:
-            self.rules = f.read()
-            f.seek(0)
-            self.valid_categories = list(
-                json.load(f)["rules"].keys()) + ["Income", "Uncategorized"]
-                
+        self.valid_categories = [
+            "Food & Dining",
+            "Transportation",
+            "Bills & Utilities",
+            "Shopping",
+            "Entertainment",
+            "Health & Wellness",
+            "Transfers & Investments",
+            "High-Risk / Anomaly",
+            "Income",
+            "Uncategorized"
+        ]
+        
         # We use the main model on port 8000 for categorization as well
         base_url = os.getenv("LLM_BASE_URL", "http://host.docker.internal:8000/v1")
         if not base_url.endswith("/v1"): 
@@ -166,12 +172,12 @@ class CategorizerAgent:
 
     async def _categorize_batch(self, batch):
         minimal_batch = [{"id": t["transaction_uuid"], "desc": t["description"], "amount": t["amount"]} for t in batch]
-        system_prompt = f"""You are a strict financial categorizer.
-You must classify transactions based ONLY on the following rules JSON:
-{self.rules}
+        categories_str = ", ".join(self.valid_categories)
+        system_prompt = f"""You are a highly intelligent financial categorizer.
+Classify each transaction based on your understanding of the transaction description.
 
 Output valid JSON matching the exact schema provided. 
-- Ensure 'category' strictly matches one of the top-level keys in the JSON (e.g. "Food & Dining", "Shopping").
+- Ensure 'category' strictly matches one of the following main categories: {categories_str}.
 - Generate a concise 1-3 word string for 'sub_category' that best describes the specific purchase (e.g. 'Groceries', 'Coffee', 'Train Ticket') based on the transaction description."""
         try:
             response = await self.structured_llm.ainvoke([
