@@ -19,9 +19,15 @@ from typing import List, Optional
 logger = get_core_logger(__name__)
 
 class CategorizedTransaction(BaseModel):
-    transaction_uuid: str
+    id: int = Field(description="The integer id provided in the input batch")
     category: str = Field(description="Must exactly match one of the main categories: Food & Dining, Transportation, Bills & Utilities, Shopping, Entertainment, Health & Wellness, Transfers & Investments, High-Risk / Anomaly, Income, Uncategorized")
     sub_category: Optional[str] = Field(description="A short 1-3 word specific sub-category generated dynamically based on the transaction description (e.g. 'Groceries', 'Coffee', 'Train Ticket')")
+
+class CategorizedResult:
+    def __init__(self, transaction_uuid, category, sub_category):
+        self.transaction_uuid = transaction_uuid
+        self.category = category
+        self.sub_category = sub_category
 
 class BatchCategorizationOutput(BaseModel):
     results: List[CategorizedTransaction]
@@ -132,6 +138,7 @@ class CategorizerAgent:
                 for tx in uncategorized_txs:
                     transactions.append({
                         "transaction_uuid": tx.transaction_uuid,
+                        "date": str(tx.date.date()) if tx.date else "",
                         "description": tx.description or '',
                         "amount": tx.amount or 0.0,
                     })
@@ -171,10 +178,10 @@ class CategorizerAgent:
             return {"trained": False, "samples": 0, "reason": str(e)}
 
     async def _categorize_batch(self, batch):
-        minimal_batch = [{"id": t["transaction_uuid"], "desc": t["description"], "amount": t["amount"]} for t in batch]
+        minimal_batch = [{"id": i, "date": t.get("date", ""), "amount": t.get("amount", 0.0), "desc": t.get("description", t.get("desc", ""))} for i, t in enumerate(batch)]
         categories_str = ", ".join(self.valid_categories)
         system_prompt = f"""You are a highly intelligent financial categorizer.
-Classify each transaction based on your understanding of the transaction description.
+Classify each transaction based on your understanding of the transaction description, amount, and date.
 
 Output valid JSON matching the exact schema provided. 
 - Ensure 'category' strictly matches one of the following main categories: {categories_str}.
@@ -184,7 +191,17 @@ Output valid JSON matching the exact schema provided.
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": json.dumps(minimal_batch)}
             ])
-            return response.results
+            
+            final_results = []
+            for item in response.results:
+                idx = item.id
+                if 0 <= idx < len(batch):
+                    final_results.append(CategorizedResult(
+                        transaction_uuid=batch[idx]["transaction_uuid"],
+                        category=item.category,
+                        sub_category=item.sub_category
+                    ))
+            return final_results
         except Exception as e:
             logger.error(f"Error in LLM categorization batch: {e}")
             return []
