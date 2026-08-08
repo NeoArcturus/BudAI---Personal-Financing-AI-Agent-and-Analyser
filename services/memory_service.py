@@ -2,8 +2,7 @@ import os
 import faiss
 import pickle
 import numpy as np
-from sentence_transformers import SentenceTransformer
-import torch
+from langchain_huggingface import HuggingFaceEmbeddings
 import uuid
 from services.logger_setup import get_core_logger
 
@@ -23,10 +22,6 @@ class MemoryService:
         if self._initialized:
             return
             
-        self.device = "mps" if torch.backends.mps.is_available() else (
-            "cuda" if torch.cuda.is_available() else "cpu")
-        logger.debug(f"Using device: {self.device}")
-        
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.db_path = os.path.join(self.base_dir, "agent_cache", "faiss_memory")
         os.makedirs(self.db_path, exist_ok=True)
@@ -34,40 +29,51 @@ class MemoryService:
         self.index_file = os.path.join(self.db_path, "transactions.index")
         self.metadata_file = os.path.join(self.db_path, "metadata.pkl")
         
-        self.embedding_dim = 384
+        base_url = os.getenv("LLM_BASE_URL", "http://host.docker.internal:8000/v1")
+        if not base_url.endswith("/v1"):
+            base_url = f"{base_url}/v1"
+            
+        logger.debug("Initializing HuggingFaceEmbeddings locally")
+        self._model = HuggingFaceEmbeddings(
+            model_name=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+        )
+        
+        dummy_emb = self._model.embed_query("init")
+        self.embedding_dim = len(dummy_emb)
+        logger.debug(f"Dynamically determined embedding dimension: {self.embedding_dim}")
         
         if os.path.exists(self.index_file):
             logger.debug(f"Loading existing FAISS index from {self.index_file}")
             self.index = faiss.read_index(self.index_file)
+            if self.index.d != self.embedding_dim:
+                logger.warning(f"Existing FAISS index dimension ({self.index.d}) mismatch with model ({self.embedding_dim}). Creating new index.")
+                self.index = faiss.IndexFlatL2(self.embedding_dim)
+                self.metadata = []
         else:
-            logger.info("Creating new FAISS IndexFlatL2")
+            logger.debug("Creating new FAISS IndexFlatL2")
             self.index = faiss.IndexFlatL2(self.embedding_dim)
             
-        if os.path.exists(self.metadata_file):
+        if os.path.exists(self.metadata_file) and (getattr(self.index, 'ntotal', 0) > 0 or not os.path.exists(self.index_file)):
             logger.debug(f"Loading metadata from {self.metadata_file}")
             with open(self.metadata_file, 'rb') as f:
                 self.metadata = pickle.load(f)
-        else:
-            logger.info("Creating new metadata store")
+        elif not hasattr(self, 'metadata'):
+            logger.debug("Creating new metadata store")
             self.metadata = []
 
-        logger.info("Loading SentenceTransformer model")
-        self._model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device=self.device)
         self._initialized = True
-        logger.info("MemoryService initialization complete")
+        logger.debug("MemoryService initialization complete")
 
     def _save(self):
-        logger.debug("Saving FAISS index and metadata")
         try:
             faiss.write_index(self.index, self.index_file)
             with open(self.metadata_file, 'wb') as f:
                 pickle.dump(self.metadata, f)
-            logger.debug("Save complete")
         except Exception as e:
             logger.error(f"Failed to save MemoryService state: {e}")
 
     def index_transactions(self, transactions, user_uuid):
-        logger.info(f"Indexing {len(transactions) if transactions else 0} transactions for user {user_uuid}")
+        logger.debug(f"Indexing {len(transactions) if transactions else 0} transactions for user {user_uuid}")
         if not transactions:
             logger.debug("No transactions to index")
             return
@@ -95,28 +101,25 @@ class MemoryService:
             })
             
         if new_docs:
-            logger.debug(f"Encoding {len(new_docs)} documents")
             try:
-                embs = self._model.encode(new_docs, convert_to_numpy=True).astype('float32')
-                logger.debug("Adding embeddings to FAISS index")
+                embs_list = self._model.embed_documents(new_docs)
+                embs = np.array(embs_list).astype('float32')
                 self.index.add(embs)
                 self.metadata.extend(new_metas)
                 self._save()
-                logger.info(f"Successfully indexed {len(new_docs)} transactions")
+                logger.debug(f"Successfully indexed {len(new_docs)} transactions")
             except Exception as e:
                 logger.error(f"FAISS indexing failed: {e}")
 
     def semantic_search(self, query, user_uuid, limit=10):
-        logger.info(f"Performing semantic search for user {user_uuid}")
-        logger.debug(f"Query: {query}, Limit: {limit}")
+        logger.debug(f"Performing semantic search for user {user_uuid}")
         try:
-            query_emb = self._model.encode([query], convert_to_numpy=True).astype('float32')
-            logger.debug("Searching FAISS index")
+            query_emb_list = self._model.embed_query(query)
+            query_emb = np.array([query_emb_list]).astype('float32')
             distances, indices = self.index.search(query_emb, limit * 5)
             
             results = {"documents": [[]], "metadatas": [[]]}
             count = 0
-            logger.debug(f"Filtering {len(indices[0])} raw results")
             for idx in indices[0]:
                 if idx == -1: continue
                 if idx >= len(self.metadata):
@@ -131,14 +134,14 @@ class MemoryService:
                 if count >= limit:
                     break
             
-            logger.info(f"Search complete. Found {count} relevant results")
+            logger.debug(f"Search complete. Found {count} relevant results")
             return results
         except Exception as e:
             logger.error(f"FAISS semantic search failed: {e}")
             return {"documents": [[]], "metadatas": [[]]}
 
     def get_seasonal_context(self, user_uuid, limit=5):
-        logger.info(f"Getting seasonal context for user {user_uuid}")
+        logger.debug(f"Getting seasonal context for user {user_uuid}")
         from datetime import datetime
         now = datetime.now()
         month_name = now.strftime('%B')

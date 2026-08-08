@@ -2,13 +2,12 @@ import pandas as pd
 import os
 import asyncio
 from datetime import datetime, timedelta
-from services.api_integrator.get_account_detail import UserAccounts
+from services.api_integrator.account_reader import AccountReader
 from services.Forecaster_Agent.ForecasterAgent import ForecasterAgent
 from services.logger_setup import get_core_logger
 from services.mcp_bridge import MCPBridge
 
 logger = get_core_logger("profile_builder")
-
 
 class ProfileBuilder:
     def __init__(self, user_uuid: str):
@@ -17,7 +16,7 @@ class ProfileBuilder:
     async def build_profile(self) -> str:
         logger.info(f"Building profile for user {self.user_uuid}")
         try:
-            user_acc = UserAccounts(user_id=self.user_uuid)
+            user_acc = AccountReader(user_id=self.user_uuid)
             
             logger.debug("Fetching recent transactions (180d window)")
             now_dt = datetime.now()

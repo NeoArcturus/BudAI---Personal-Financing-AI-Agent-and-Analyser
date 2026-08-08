@@ -9,14 +9,28 @@ from datetime import datetime, timedelta
 
 logger = get_core_logger(__name__)
 
+
 @tool(args_schema=HistoricalMarketDataInput)
 def get_historical_market_data(ticker: str, period: str = "6mo", interval: str = "1d") -> str:
-    """Fetches historical market data for a given ticker and returns a summary of the trend."""
+    """
+    Fetches historical market data for a given ticker and returns a summary of the trend.
+    
+    Args:
+        ticker (str): The stock ticker symbol.
+        period (str, optional): The historical period (e.g., '6mo').
+        interval (str, optional): The interval step (e.g., '1d').
+        
+    Returns:
+        str: Summary of the asset's historical performance.
+    """
+    logger.info(f"Executing MCP Tool: get_historical_market_data")
     try:
         t = yf.Ticker(ticker)
         hist = t.history(period=period, interval=interval)
         if hist.empty:
-            return f"No historical data found for ticker: {ticker}"
+            _res = f"No historical data found for ticker: {ticker}"
+            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            return _res
         
         start_price = hist['Close'].iloc[0]
         end_price = hist['Close'].iloc[-1]
@@ -28,27 +42,46 @@ def get_historical_market_data(ticker: str, period: str = "6mo", interval: str =
         summary += f"- Total Change: {change_pct:+.2f}%\n"
         summary += f"- Volatility (StdDev): {hist['Close'].std():.2f}\n"
         
-        return summary
+        _res = summary
+        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        return _res
     except Exception as e:
         logger.error(f"Market Tool Error: {e}")
-        return f"Error fetching market history: {str(e)}"
+        _res = f"Error fetching market history: {str(e)}"
+        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        return _res
 
 @tool(args_schema=MarketComparisonInput)
 def compare_spending_to_market(user_uuid: str, category: str, ticker: str, days: int = 180) -> str:
-    """Compares a user's spending in a specific category to a market asset's performance.
-    Useful for explaining how inflation or commodity prices affect personal finances.
     """
+    Compares a user's spending in a specific category to a market asset's performance.
+    Useful for explaining how inflation or commodity prices affect personal finances.
+    
+    Args:
+        user_uuid (str): The unique identifier of the user.
+        category (str): The spending category to compare.
+        ticker (str): The stock/commodity ticker to compare against.
+        days (int, optional): The historical window in days.
+        
+    Returns:
+        str: A statistical correlation and comparison summary.
+    """
+    logger.info(f"Executing MCP Tool: compare_spending_to_market")
     try:
         from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         to_date = datetime.now().strftime("%Y-%m-%d")
         
         df_spending = _get_combined_categorized_data(["ALL"], "", user_uuid, from_date, to_date)
         if df_spending.empty:
-            return "No spending data found for comparison."
+            _res = "No spending data found for comparison."
+            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            return _res
         
         df_cat = df_spending[df_spending['Category'].str.lower() == category.lower()]
         if df_cat.empty:
-            return f"No spending found in category '{category}' over the last {days} days."
+            _res = f"No spending found in category '{category}' over the last {days} days."
+            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            return _res
         
         df_cat['date'] = pd.to_datetime(df_cat['date'])
         user_trend = df_cat.set_index('date')['amount'].abs().resample('W').sum()
@@ -56,7 +89,9 @@ def compare_spending_to_market(user_uuid: str, category: str, ticker: str, days:
         t = yf.Ticker(ticker)
         hist = t.history(start=from_date, end=to_date)
         if hist.empty:
-            return f"Could not fetch market data for {ticker}."
+            _res = f"Could not fetch market data for {ticker}."
+            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            return _res
         
         market_trend = hist['Close'].resample('W').mean()
         
@@ -86,8 +121,12 @@ def compare_spending_to_market(user_uuid: str, category: str, ticker: str, days:
         else:
             summary += f"Observation: Low correlation. Your {category} spending appears independent of {ticker} market fluctuations."
             
-        return summary
+        _res = summary
+        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        return _res
         
     except Exception as e:
         logger.error(f"Comparison Tool Error: {e}")
-        return f"Error performing comparison: {str(e)}"
+        _res = f"Error performing comparison: {str(e)}"
+        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        return _res

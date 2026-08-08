@@ -31,17 +31,13 @@ llm = ChatOpenAI(
     api_key="budai-local", 
     temperature=0,
     streaming=False,
-    extra_body={"chat_template_kwargs": {"enable_thinking": True}}
+    reasoning_effort="high",
+    timeout=600,
+    model_kwargs={"extra_body": {"chat_template_kwargs": {"enable_thinking": True}}}
 )
 bridge = MCPBridge()
 
 from services.mcp_tools.external_tools import export_advisory_state, export_custom_statement
-
-@tool
-async def classify_financial_data_wrapper(from_date: str, to_date: str, account_ids: list[str], state: Annotated[BudAIState, InjectedState]) -> str:
-    """Categorize transactions for selected accounts."""
-    user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("categorizer", "classify_financial_data", {"from_date": from_date, "to_date": to_date, "account_ids": account_ids, "user_uuid": user_uuid})
 
 @tool
 async def create_bargraph_chart_and_save_wrapper(account_ids: list[str], state: Annotated[BudAIState, InjectedState]) -> str:
@@ -79,7 +75,6 @@ async def export_custom_statement_wrapper(ai_summary: str, state: Annotated[BudA
     user_uuid = state.get("user_uuid")
     return export_custom_statement.invoke({"user_uuid": user_uuid, "ai_summary": ai_summary})
 
-
 @tool
 async def get_connected_accounts_wrapper(state: Annotated[BudAIState, InjectedState]) -> str:
     """Use this tool to fetch the user's connected account IDs if you need to reference specific accounts."""
@@ -93,7 +88,6 @@ async def ask_user(question: str) -> str:
     return "Thinking..."
 
 tools = [
-    classify_financial_data_wrapper, 
     create_bargraph_chart_and_save_wrapper, 
     create_pie_chart_and_save_wrapper,
     update_transaction_category_wrapper,
@@ -116,11 +110,9 @@ You analyze and categorize transactions.
 1. NO FABRICATION: You are strictly forbidden from fabricating data. Use ONLY data from tool DATA SUMMARY blocks.
 2. TOOL EXECUTION IS MANDATORY: You must emit a valid JSON tool call to fetch data. You CANNOT roleplay or pretend to execute a tool in your output.
 3. ADMIT IGNORANCE: If a tool returns no data, state "I do not have the data." Do not guess.
-4. GBP ONLY: All financial values must use the £ symbol. No emojis.
-5. REASONING VISIBILITY: You MUST ALWAYS provide an internal monologue wrapped explicitly inside <think> and </think> tags before taking ANY action, returning findings, or calling tools. Keep your <think> block EXTREMELY short (under 4 sentences). You MUST start your response exactly with `<think> Brief assessment: `
+4. MULTI-CURRENCY: Respect the native currency returned by the tools (e.g., £, €, $). Do not force GBP. No emojis.
 
 ROUTING (Use these tools):
-- classify_financial_data_wrapper: Categorize transactions.
 - create_bargraph_chart_and_save_wrapper: Bar chart of categories.
 - create_pie_chart_and_save_wrapper: Pie chart of categories.
 - update_transaction_category_wrapper: Manually update category.
@@ -129,10 +121,6 @@ ROUTING (Use these tools):
 - export_custom_statement_wrapper: Generate CSV.
 - get_connected_accounts_wrapper: Get account IDs.
 - ask_user: Ask clarifying questions.
-
-FINAL AND MOST IMPORTANT INSTRUCTION:
-You MUST start your VERY FIRST output character with the exact string: <think>
-Do not say anything else before it.
 """,
     middleware=[
         HumanInTheLoopMiddleware(interrupt_on={"ask_user": True})

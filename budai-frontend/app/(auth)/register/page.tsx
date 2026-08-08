@@ -12,6 +12,7 @@ import {
   Link,
   TextField,
   Form,
+  toast,
 } from "@heroui/react";
 
 export default function RegisterPage() {
@@ -19,12 +20,10 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isVisible, setIsVisible] = useState(false);
-  const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setIsLoading(true);
 
     try {
@@ -35,13 +34,29 @@ export default function RegisterPage() {
       const data = (await res.json()) as { detail?: string };
 
       if (res.ok) {
-        router.push("/login");
+        
+        const loginRes = await apiFetch("/api/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email, password }),
+        });
+        const loginData = (await loginRes.json()) as { token?: string; detail?: string };
+        
+        if (loginRes.ok && loginData.token) {
+          const username = email.split("@")[0] || "User";
+          localStorage.removeItem(`budai_widgets_dashboard_${username}`);
+          localStorage.setItem("budai_token", loginData.token);
+          localStorage.setItem("budai_user_name", username);
+          document.cookie = `budai_token=${loginData.token}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
+          router.push("/home");
+        } else {
+          router.push("/login");
+        }
       } else {
-        setError(data.detail || "Registration failed. Please try again.");
+        toast.danger(data.detail || "Registration failed. Please try again.");
       }
     } catch (err) {
-      console.log(err);
-      setError("Unable to connect to servers.");
+      console.error(err);
+      toast.danger("Unable to connect to servers.");
     } finally {
       setIsLoading(false);
     }
@@ -59,14 +74,7 @@ export default function RegisterPage() {
           </p>
         </Card.Header>
 
-        <Card.Content className="p-0 relative">
-          {error && (
-            <div className="mb-8 text-pink-500 text-xs font-black uppercase tracking-widest bg-pink-500/10 py-4 px-5 rounded-2xl border border-pink-500/20 z-10 relative shadow-[0_0_20px_rgba(236,72,153,0.1)]">
-              {error}
-            </div>
-          )}
-
-          <Form
+        <Card.Content className="p-0 relative">          <Form
             onSubmit={handleRegister}
             validationBehavior="native"
             className="flex flex-col gap-6 w-full z-10 relative"
@@ -78,11 +86,13 @@ export default function RegisterPage() {
               <InputGroup
                 className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary/50 transition-all w-full border border-white/10 h-14"
                 variant="secondary"
+                isDisabled={isLoading}
               >
                 <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
                   <Mail size={18} />
                 </InputGroup.Prefix>
                 <InputGroup.Input
+                  disabled={isLoading}
                   placeholder="name@email.com"
                   type="email"
                   required
@@ -100,11 +110,13 @@ export default function RegisterPage() {
               <InputGroup
                 className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary/50 transition-all w-full border border-white/10 h-14"
                 variant="secondary"
+                isDisabled={isLoading}
               >
                 <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
                   <Lock size={18} />
                 </InputGroup.Prefix>
                 <InputGroup.Input
+                  disabled={isLoading}
                   placeholder="••••••••"
                   type={isVisible ? "text" : "password"}
                   required
@@ -116,6 +128,7 @@ export default function RegisterPage() {
                   <Button
                     isIconOnly
                     type="button"
+                    isDisabled={isLoading}
                     aria-label={isVisible ? "Hide Password" : "Show Password"}
                     variant="ghost"
                     onPress={() => setIsVisible(!isVisible)}
@@ -130,10 +143,11 @@ export default function RegisterPage() {
 
             <Button
               type="submit"
-              className="w-full mt-4 bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white font-extrabold tracking-widest rounded-2xl h-14 hover:shadow-[0_0_40px_rgba(0,242,255,0.6)] cursor-pointer transition-all flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(112,0,255,0.4)] border-none"
+              isDisabled={isLoading}
+              className="w-full mt-4 font-extrabold tracking-widest rounded-2xl h-14 cursor-pointer transition-all flex items-center justify-center gap-3 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
             >
               {isLoading && <Loader2 className="animate-spin" size={18} />}
-              Get Started
+              {isLoading ? "Authenticating..." : "Get Started"}
             </Button>
           </Form>
 

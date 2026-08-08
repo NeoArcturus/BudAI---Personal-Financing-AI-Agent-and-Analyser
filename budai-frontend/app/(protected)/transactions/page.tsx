@@ -1,4 +1,4 @@
-import LedgerTableWidget from "@/app/(protected)/_components/LedgerTableWidget";
+import LedgerTableWidget from "@/app/(protected)/_components/widgets/Transactions";
 import TransactionsClient from "./TransactionsClient";
 
 export default async function TransactionsPage() {

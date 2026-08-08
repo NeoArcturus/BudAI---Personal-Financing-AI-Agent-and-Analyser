@@ -3,7 +3,7 @@ import numpy as np
 import logging
 from sqlalchemy import text
 from config import SessionLocal
-from services.api_integrator.get_account_detail import UserAccounts
+from services.api_integrator.account_reader import AccountReader
 from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
@@ -36,7 +36,7 @@ class FinancialHealthAnalyzer:
             total = 0.0
             for b in banks:
                 try:
-                    balance = UserAccounts(self.user_uuid).get_account_balance(
+                    balance = AccountReader(self.user_uuid).get_account_balance(
                         b[0], self.user_uuid)
                     if balance is not None:
                         total += float(balance)

@@ -12,6 +12,7 @@ import {
   Link,
   TextField,
   Form,
+  toast,
 } from "@heroui/react";
 
 export default function LoginPage() {
@@ -20,12 +21,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
 
   const [isVisible, setIsVisible] = useState(false);
-  const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setIsLoading(true);
 
     try {
@@ -41,12 +40,12 @@ export default function LoginPage() {
         document.cookie = `budai_token=${data.token}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
         router.push("/home");
       } else {
-        setError(data.detail || "Invalid credentials.");
+        toast.danger(data.detail || "Invalid credentials.");
         setIsLoading(false);
       }
     } catch (err) {
-      console.log(err);
-      setError("Unable to connect. Please try again.");
+      console.error(err);
+      toast.danger("Unable to connect. Please try again.");
       setIsLoading(false);
     }
   };
@@ -62,14 +61,7 @@ export default function LoginPage() {
             Securely access your financial dashboard.
           </p>
         </Card.Header>
-        <Card.Content className="p-0 relative">
-          {error && (
-            <div className="mb-8 text-pink-500 text-xs font-black uppercase tracking-widest bg-pink-500/10 py-4 px-5 rounded-2xl border border-pink-500/20 z-10 relative shadow-[0_0_20px_rgba(236,72,153,0.1)]">
-              {error}
-            </div>
-          )}
-
-          <Form
+        <Card.Content className="p-0 relative">          <Form
             onSubmit={handleLogin}
             validationBehavior="native"
             className="flex flex-col gap-6 w-full z-10 relative"
@@ -81,11 +73,13 @@ export default function LoginPage() {
               <InputGroup
                 className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary/50 transition-all w-full border border-white/10 h-14"
                 variant="secondary"
+                isDisabled={isLoading}
               >
                 <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
                   <Mail size={18} />
                 </InputGroup.Prefix>
                 <InputGroup.Input
+                  disabled={isLoading}
                   placeholder="name@email.com"
                   type="email"
                   required
@@ -103,11 +97,13 @@ export default function LoginPage() {
               <InputGroup
                 className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary/50 transition-all w-full border border-white/10 h-14"
                 variant="secondary"
+                isDisabled={isLoading}
               >
                 <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
                   <Lock size={18} />
                 </InputGroup.Prefix>
                 <InputGroup.Input
+                  disabled={isLoading}
                   placeholder="••••••••"
                   type={isVisible ? "text" : "password"}
                   required
@@ -119,6 +115,7 @@ export default function LoginPage() {
                   <Button
                     isIconOnly
                     type="button"
+                    isDisabled={isLoading}
                     aria-label={isVisible ? "Hide Password" : "Show Password"}
                     variant="ghost"
                     onPress={() => setIsVisible(!isVisible)}
@@ -133,10 +130,11 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full mt-4 bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white font-extrabold tracking-widest rounded-2xl h-14 hover:shadow-[0_0_40px_rgba(0,242,255,0.6)] cursor-pointer transition-all flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(112,0,255,0.4)] border-none"
+              isDisabled={isLoading}
+              className="w-full mt-4 font-extrabold tracking-widest rounded-2xl h-14 cursor-pointer transition-all flex items-center justify-center gap-3 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
             >
               {isLoading && <Loader2 className="animate-spin" size={18} />}
-              Log In
+              {isLoading ? "Authenticating..." : "Log In"}
             </Button>
           </Form>
 

@@ -55,6 +55,7 @@ services:
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
       - HF_TOKEN=${HF_TOKEN}
+      - WEBHOOK_BASE_URL=${WEBHOOK_BASE_URL}
     ports:
       - "8080:8080"
     restart: always

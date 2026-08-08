@@ -1,6 +1,6 @@
 # BudAI: Agentic AI Personal Financing Platform
 
-BudAI is a personal financing platform built with an agentic AI architecture. It performs deterministic financial analysis, retrieval-augmented generation (RAG), and stochastic forecasting. The system uses deep learning for parameter extraction, a C++ core for simulations, and a distributed Python backend for orchestration.
+BudAI is a personal financing platform built with a multi-agent architecture. It performs deterministic financial analysis, retrieval-augmented generation (RAG), and stochastic forecasting. The system uses deep learning for parameter extraction, a C++ core for simulations, and a distributed Python backend for orchestration.
 
 ---
 
@@ -30,7 +30,7 @@ The analytical logic is governed by a stateful directed acyclic graph (DAG) impl
 
 ### 1.3 Quantitative Forecasting Pipeline
 Projections are generated via a hybrid computational architecture:
-- **DNA Parameter Extraction:** A PyTorch-based **LSTM (Long Short-Term Memory)** network processes a 30-day window of transaction amounts and categories. It extracts Bates model parameters: Mean Reversion Speed ($\kappa$), Long-term Variance ($\theta$), Volatility of Volatility ($\xi$), and Jump Intensity ($\lambda$).
+- **Parameter Extraction:** A PyTorch-based **LSTM (Long Short-Term Memory)** network processes a 30-day window of transaction amounts and categories. It extracts Bates model parameters: Mean Reversion Speed ($\kappa$), Long-term Variance ($\theta$), Volatility of Volatility ($\xi$), and Jump Intensity ($\lambda$).
 - **Stochastic Core:** The extracted parameters drive a **C++ shared object (.so)** implementing the Bates Model. It runs 1,000 parallel Monte Carlo simulations per account, incorporating recurring bill detection to clamp simulated paths to deterministic historical patterns.
 
 ### 1.4 Retrieval-Augmented Generation (RAG)
@@ -38,8 +38,8 @@ Projections are generated via a hybrid computational architecture:
 - **Embedding Model:** Transactions are vectorized using the **`all-MiniLM-L6-v2`** SentenceTransformer (384-dimensional dense vectors).
 - **Contextual Financial Profile (CFP):** Compiles an 8k-token grounding block including:
     - Tier 1: Immediate Liquidity & Net Cash Flow.
-    - Tier 2: Recurring Bill Rhythm & Subscription Footprint.
-    - Tier 3: Merchant Clusters & High-Velocity Categories.
+    - Tier 2: Recurring Bill Frequency & Active Subscriptions.
+    - Tier 3: Merchant Clusters & High-Frequency Categories.
     - Tier 4: RAG-retrieved semantic historical context.
 
 ### 1.5 Session Management & Observability
@@ -52,6 +52,8 @@ Projections are generated via a hybrid computational architecture:
 ## 2. Data Integrity & Management
 
 ### 2.1 Ingestion and Deduplication
+- **Asynchronous Webhook Ingestion:** Syncing is offloaded to background threads. The system triggers TrueLayer data updates via the `/truelayer` webhook, processing massive payloads asynchronously without blocking the user interface.
+- **Database-First Caching & High-Water Marks:** To avoid rate limits, the system tracks the `last_synced_at` timestamp per account. It queries local PostgreSQL first and only hits the TrueLayer API for the exact missing time window.
 - **SHA-256 Hashing:** Every transaction is hashed using a composite key (UserUUID + AccountID + Date + Amount + Description) to ensure deduplication across redundant TrueLayer API syncs.
 - **PostgreSQL Persistence:** All records are stored in a PostgreSQL 15 cluster with optimized pooling (SQLAlchemy `pool_size=20`, `max_overflow=40`).
 
@@ -79,25 +81,43 @@ Projections are generated via a hybrid computational architecture:
 
 ## 4. Development and Deployment
 
-### 4.1 Cluster Initialization
+### 4.1 Prerequisites
+- **Docker Desktop** (mandatory for full cluster deployment).
+- **NVIDIA Container Toolkit** (required for GPU acceleration of PyTorch and local LLMs).
+- **Node.js 20+** (for independent frontend development).
+
+### 4.2 Cluster Initialization
 The application is deployed as a 9-container fleet to ensure isolation of high-CPU ML workloads.
 
 ```bash
-# Environment Configuration
+# Environment Configuration (.env must include DATABASE_URL, OLLAMA_BASE_URL, and TrueLayer API Keys)
 cp .env.example .env
 
-# Build and Deploy
+# Build and Deploy backend services
 docker compose build --no-cache
 docker compose up -d
 ```
 
-### 4.2 C++ Shared Object Compilation
+### 4.3 Local Frontend Execution & Testing
+To run the Next.js frontend independently for UI development:
+```bash
+cd budai-frontend
+npm install
+npm run dev
+```
+
+For running backend unit tests:
+```bash
+pytest tests/
+```
+
+### 4.4 C++ Shared Object Compilation
 ```bash
 cd services/Forecaster_Agent/mathematics/algorithm
 g++ -O3 -shared -fPIC -std=c++17 -o ../hybrid_forecaster.so algorithm.cpp hybrid_algorithm.cpp
 ```
 
-### 4.3 Database Inspection
+### 4.5 Database Inspection
 ```bash
 docker exec -it budai-db psql -U postgres -d budai
 ```
@@ -108,3 +128,23 @@ docker exec -it budai-db psql -U postgres -d budai
 - **Deterministic Grounding:** The AI is strictly prohibited from extrapolating or inventing metrics. It enforces a "Strict Data Boundary" where any missing metric results in a "Data Unavailable" response.
 - **Privacy First:** All PII and financial data remains within the localized Docker infrastructure. No data is transmitted to external LLM providers.
 - **Type Integrity:** Full TypeScript and Pydantic coverage ensuring schema-level enforcement of all data structures moving across the microservices bus.
+
+---
+
+## 6. API Documentation
+
+Interactive API documentation is automatically generated by FastAPI. Once the cluster is running, the OpenAPI schema and Swagger UI can be accessed via:
+- **Swagger UI:** `http://localhost:8000/docs`
+- **ReDoc:** `http://localhost:8000/redoc`
+
+---
+
+## 7. Technical Roadmap & Scaling Strategy
+
+As BudAI prepares to scale to 20,000+ active users, the architecture is evolving from a localized Digital Twin to a distributed micro-services architecture:
+
+- **Vector Database Migration:** Transitioning from in-memory FAISS to **pgvector** to support partitioned, hardware-accelerated metadata pre-filtering and prevent RAM exhaustion.
+- **Asynchronous Task Queues:** Migrating heavy ML workloads (PyTorch Monte Carlo simulations, XGBoost retraining) out of the FastAPI ASGI event loop into a dedicated **Celery** cluster using Redis as the message broker.
+- **Connection Pooling:** Implementing **PgBouncer** and transitioning to asynchronous database drivers (`asyncpg`) to prevent SQLAlchemy connection starvation under high concurrency.
+- **Multi-Node LLM Inference:** Scaling the current local inference (`host.docker.internal`) into a distributed **vLLM Kubernetes cluster** with continuous batching and HAProxy load balancing.
+- **Advanced Budgeting:** Implementing variance analytics, subscription detection, and cash flow prediction arrays to alert users to future overdrafts.

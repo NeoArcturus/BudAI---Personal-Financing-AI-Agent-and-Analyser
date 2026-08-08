@@ -55,6 +55,31 @@ const baseOptions = {
       borderWidth: 1,
       padding: 12,
       usePointStyle: true,
+      callbacks: {
+        label: (context: any) => {
+          let value = context.parsed;
+          if (value && typeof value === 'object') {
+            value = value.y !== undefined ? value.y : (value.r !== undefined ? value.r : value);
+          }
+          
+          const isRadar = context.chart?.config?.type === 'radar';
+          if (isRadar) {
+            return `${context.dataset.label || ""}: ${Number(value).toFixed(1)}`;
+          }
+
+          const rawData = context.raw;
+          const symbol = rawData?.currency === "USD" ? "$" :
+            rawData?.currency === "EUR" ? "€" : "£";
+          return `${context.dataset.label || ""}: ${symbol}${Number(value).toFixed(2)}`;
+        },
+        afterLabel: (context: any) => {
+          const rawData = context.raw;
+          if (rawData?.descriptions && rawData.descriptions.length > 0) {
+            return ["---", "Transactions:", ...rawData.descriptions.map((desc: string) => `• ${desc}`)];
+          }
+          return null;
+        }
+      }
     },
   },
   scales: {
@@ -78,13 +103,14 @@ const baseOptions = {
 };
 
 const colorPalette = [
-  "#0F52BA",
-  "#007FFF",
-  "#3B82F6",
-  "#60A5FA",
-  "#93C5FD",
-  "#BFDBFE",
-  "#DBEAFE",
+  "#00F2FF",
+  "#A855F7",
+  "#EC4899",
+  "#22C55E",
+  "#6366F1",
+  "#14B8A6",
+  "#F43F5E",
+  "#8B5CF6",
 ];
 
 const getColorForMetric = (
@@ -230,8 +256,8 @@ export const buildChartConfig = (
         label: `${b.bank_name} Spent (£)`,
         data: allLabels.map((l) => {
           const pt = (b.data || []).find((d) => String(d.Category) === l);
-          return pt ? Number(pt.Total_Amount) : 0;
-        }),
+          return pt ? { ...pt, x: l, y: Number(pt.Total_Amount) } : { x: l, y: 0 };
+        }) as any[],
         backgroundColor: metricColor,
         borderRadius: 6,
         hoverBackgroundColor: `${metricColor}cc`,
@@ -377,8 +403,22 @@ export const buildChartConfig = (
 
   if (type === "health_radar") {
     const dataArray = payloadData[0]?.data || [];
-    const labels = dataArray.map((d) => String(d.Metric || ""));
-    const scores = dataArray.map((d) => Number(d.Score || 0));
+    const termMap: Record<string, string> = {
+      "Liquidity Runway": "Cash Reserves",
+      "Net Worth Velocity": "Growth Speed",
+      "Savings Rate (MPC)": "Savings Rate",
+      "Shock Absorption": "Emergency Readiness",
+      "Interest Drag": "Debt Burden"
+    };
+
+    const labels = dataArray.map((d) => {
+      const metric = String(d.Metric || d.metric || "");
+      return termMap[metric] || metric;
+    });
+    const scores = dataArray.map((d) => {
+      const val = Number(d.Score !== undefined ? d.Score : d.score);
+      return isNaN(val) ? 0 : val;
+    });
 
     return {
       type: "radar",
@@ -386,7 +426,7 @@ export const buildChartConfig = (
         labels,
         datasets: [
           {
-            label: "Health Index",
+            label: "Score",
             data: scores,
             backgroundColor: "rgba(0, 127, 255, 0.2)",
             borderColor: "var(--primary)",
@@ -446,7 +486,7 @@ export const buildChartConfig = (
             const mDateA = new Date(`01 ${a}`).getTime();
             const mDateB = new Date(`01 ${b}`).getTime();
             if (!isNaN(mDateA) && !isNaN(mDateB)) return mDateA - mDateB;
-          } catch {}
+          } catch { }
         }
         return a.localeCompare(b);
       });
@@ -465,14 +505,18 @@ export const buildChartConfig = (
             const pt = (b.data || []).find(
               (d) => String(d.Day || d.Month || d.Date || "") === label,
             );
-            return Number(
-              pt?.["Expected Balance"] ||
+            return pt ? {
+              ...pt,
+              x: label,
+              y: Number(
+                pt?.["Expected Balance"] ||
                 pt?.["Balance"] ||
                 pt?.["expected_balance"] ||
                 pt?.["balance"] ||
                 0,
-            );
-          }),
+              )
+            } : { x: label, y: 0 };
+          }) as any[],
           borderColor: metricColor,
           backgroundColor: `${metricColor}1A`,
           fill: true,
@@ -511,14 +555,18 @@ export const buildChartConfig = (
             const pt = (b.data || []).find(
               (d) => String(d.Day || d.Month || d.Date || "") === label,
             );
-            return Number(
-              pt?.["Projected Daily Spend (£)"] ||
+            return pt ? {
+              ...pt,
+              x: label,
+              y: Number(
+                pt?.["Projected Daily Spend (£)"] ||
                 pt?.["Projected Spend"] ||
                 pt?.["spend"] ||
                 pt?.["Amount"] ||
                 0,
-            );
-          }),
+              )
+            } : { x: label, y: 0 };
+          }) as any[],
           borderColor: metricColor,
           backgroundColor: `${metricColor}1A`,
           fill: true,
@@ -546,9 +594,9 @@ export const buildChartConfig = (
         ...baseOptions,
         animation: (animationOverride ||
           getProgressiveAnimation(allLabels.length)) as unknown as Record<
-          string,
-          unknown
-        >,
+            string,
+            unknown
+          >,
         plugins: {
           ...baseOptions.plugins,
           tooltip: {
@@ -609,8 +657,12 @@ export const buildChartConfig = (
           const pt = (b.data || []).find(
             (d) => String(d.Date || d.Month || d.date || d.month || "") === date,
           );
-          return pt ? Number(pt.Amount || pt.Total_Amount || pt.amount || pt.total_amount || 0) : 0;
-        }),
+          return pt ? {
+            ...pt,
+            x: date,
+            y: Number(pt.Amount || pt.Total_Amount || pt.amount || pt.total_amount || 0)
+          } : { x: date, y: 0 };
+        }) as any[],
         borderColor: metricColor,
         fill: false,
         tension: 0.4,
@@ -628,9 +680,9 @@ export const buildChartConfig = (
         ...baseOptions,
         animation: (animationOverride ||
           getProgressiveAnimation(allDates.length)) as unknown as Record<
-          string,
-          unknown
-        >,
+            string,
+            unknown
+          >,
         plugins: {
           ...baseOptions.plugins,
         },

@@ -39,3 +39,10 @@ torchvision
 redis
 arize-phoenix
 openinference-instrumentation-langchain
+sqlmodel
+scikit-learn
+hdbscan
+
+sentence-transformers
+langchain-huggingface
+

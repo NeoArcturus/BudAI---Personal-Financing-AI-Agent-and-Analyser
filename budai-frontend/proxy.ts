@@ -7,14 +7,11 @@ export function proxy(request: NextRequest) {
 
   const isPublicPath = path === '/' || path === '/login' || path === '/register';
 
-  // Redirect authenticated users away from public pages
   if (isPublicPath && token) {
     return NextResponse.redirect(new URL('/home', request.url));
   }
 
-  // Redirect unauthenticated users away from protected pages
-  if (!isPublicPath && !token) {
-    // Exclude Next.js internals, API routes, and static files
+  if (!token && !isPublicPath) {
     if (
       !path.startsWith('/api/') &&
       !path.startsWith('/_next/') &&

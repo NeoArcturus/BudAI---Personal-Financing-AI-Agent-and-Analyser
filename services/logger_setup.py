@@ -1,7 +1,6 @@
 import logging
 import sys
 
-
 def get_core_logger(module_name: str) -> logging.Logger:
     logger = logging.getLogger("uvicorn.error")
 
@@ -25,7 +24,6 @@ def get_core_logger(module_name: str) -> logging.Logger:
 
     return logger
 
-
 def log_mcp_tool(logger: logging.Logger):
     """
     Decorator to log MCP tool requests and responses to stderr.
@@ -36,9 +34,9 @@ def log_mcp_tool(logger: logging.Logger):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             tool_name = func.__name__
-            logger.info(f"--- MCP REQUEST: [{tool_name}] ---")
-            logger.info(f"ARGS: {args}")
-            logger.info(f"KWARGS: {kwargs}")
+            logger.debug(f"--- MCP REQUEST: [{tool_name}] ---")
+            logger.debug(f"ARGS: {args}")
+            logger.debug(f"KWARGS: {kwargs}")
 
             try:
                 result = func(*args, **kwargs)
@@ -47,8 +45,8 @@ def log_mcp_tool(logger: logging.Logger):
                 if len(result_str) > 1000:
                     result_str = result_str[:1000] + "... [TRUNCATED]"
                 
-                logger.info(f"--- MCP RESPONSE: [{tool_name}] ---")
-                logger.info(f"RESULT: {result_str}")
+                logger.debug(f"--- MCP RESPONSE: [{tool_name}] ---")
+                logger.debug(f"RESULT: {result_str}")
                 return result
             except Exception as e:
                 logger.error(f"--- MCP ERROR: [{tool_name}] ---")

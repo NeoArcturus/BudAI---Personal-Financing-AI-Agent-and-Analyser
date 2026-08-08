@@ -17,6 +17,7 @@ import {
   Label,
   Key,
   Selection,
+  toast,
 } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useChat, UIMessage } from "@ai-sdk/react";
@@ -149,6 +150,8 @@ export const BudAIProvider = ({
     if (stored) setUserName(stored);
 
     const handleUnauthorized = () => {
+      queryClient.clear();
+      sessionStorage.clear();
       router.push("/login");
     };
     window.addEventListener("budai-unauthorized", handleUnauthorized);
@@ -310,6 +313,11 @@ export const BudAIProvider = ({
     },
     onError(error) {
       console.error("[BudAI Stream Error]:", error);
+      if (error?.message?.includes("423")) {
+        toast.danger("Advisor is busy please try later");
+      } else {
+        toast.danger("Connection error");
+      }
     },
   });
 
@@ -647,7 +655,7 @@ export const BudAIProvider = ({
                 Cancel
               </Button>
               <Button
-                className="flex-2 bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white border-none font-black uppercase tracking-widest text-[11px] h-12 rounded-xl shadow-[0_0_20px_rgba(0,242,255,0.3)] hover:shadow-[0_0_30px_rgba(0,242,255,0.5)] transition-all border-none"
+                className="flex-2 font-black uppercase tracking-widest text-[11px] h-12 rounded-xl transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
                 onPress={async () => {
                   if (selectedAccountIds.length > 0) {
                     setIsAccountSelectorOpen(false);

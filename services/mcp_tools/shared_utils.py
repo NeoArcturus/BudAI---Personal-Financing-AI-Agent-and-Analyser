@@ -21,11 +21,14 @@ class GenerateFinancialForecastInput(BaseModel):
     stress_test_active: bool = Field(default=False)
     macro_environment: str = Field(default="Stable")
 
-class ClassifyFinancialDataInput(BaseModel):
+class GetBudgetVarianceInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
-    from_date: str = Field(...)
-    to_date: str = Field(...)
-    account_ids: List[str] = Field(...)
+    category: str | None = Field(default=None, description="Optional category to filter budget variance for.")
+
+class ForecastBudgetImpactInput(BaseModel):
+    user_uuid: str = Field(..., description="The user UUID.")
+    account_ids: List[str] = Field(..., description="List of accounts.")
+    days: int = Field(default=30)
 
 class FindTotalSpentInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
@@ -165,6 +168,8 @@ def _get_combined_categorized_data(accounts, suffix, user_uuid, from_date=None, 
             if accounts and "ALL" not in [str(acc).upper() for acc in accounts]:
                 query += " AND (b.bank_name = ANY(:accounts) OR a.account_id = ANY(:accounts))"
                 params["accounts"] = accounts
+            
+            query += " ORDER BY t.date DESC"
                 
             rows = session.execute(text(query), params).fetchall()
             

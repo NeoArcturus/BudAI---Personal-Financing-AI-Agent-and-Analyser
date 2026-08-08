@@ -13,8 +13,8 @@ rapid-mlx serve mlx-community/Qwen3.5-4B-4bit \
     --host 0.0.0.0 \
     --port 8000 \
     --continuous-batching \
-    --max-num-seqs 4 \
-    --prefill-batch-size 1 \
+    --max-num-seqs 2 \
+    --prefill-batch-size 16 \
     --use-paged-cache \
     --chunked-prefill-tokens 512 \
     --gpu-memory-utilization 0.8 &

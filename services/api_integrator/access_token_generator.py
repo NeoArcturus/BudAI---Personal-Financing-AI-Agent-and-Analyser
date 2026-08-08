@@ -28,14 +28,15 @@ class AccessTokenGenerator:
         self.auth_base_url = TRUELAYER_AUTH_URL
         self.token_url = "https://auth.truelayer.com/connect/token"
         self.cipher_suite = Fernet(ENCRYPTION_KEY)
-    def get_auth_link(self, user_uuid):
+    def get_auth_link(self, user_uuid, origin=None):
+        state_str = f"{user_uuid}::{origin}" if origin else user_uuid
         params = {
             "response_type": "code",
             "client_id": self.client_id,
             "scope": "info accounts balance cards transactions direct_debits standing_orders offline_access",
             "redirect_uri": self.redirect_uri,
             "providers": "uk-ob-all uk-oauth-all",
-            "state": user_uuid
+            "state": state_str
         }
         return f"{self.auth_base_url}?{urlencode(params)}"
     def get_reauth_link(self, refresh_token, user_uuid):
@@ -57,8 +58,7 @@ class AccessTokenGenerator:
                 logger.error(
                     f"[ERROR] TrueLayer reauthuri returned {response.status_code}: {response.text}")
         except Exception as e:
-            logger.error("An error occurred in this block", exc_info=True)
-            logger.error(f"[ERROR] TrueLayer reauthuri generation failed: {e}")
+            logger.error(f"[ERROR] TrueLayer reauthuri generation failed: {e}", exc_info=True)
         return None
     async def generate_token_from_code(self, code, state):
         payload = {
@@ -83,8 +83,8 @@ class AccessTokenGenerator:
                     return None
                 try:
                     return pd.to_datetime(date_str, format='ISO8601').to_pydatetime()
-                except Exception:
-                    logger.error("An error occurred in this block", exc_info=True)
+                except Exception as e:
+                    logger.error(f"Failed to parse TL date '{date_str}': {e}", exc_info=True)
                     return datetime.now()
             updated_at = parse_tl_date(
                 me_res['results'][0].get('consent_status_updated_at'))
@@ -92,7 +92,7 @@ class AccessTokenGenerator:
                 me_res['results'][0].get('consent_created_at'))
             expires_at = parse_tl_date(
                 me_res['results'][0].get('consent_expires_at'))
-            logger.info(f"{updated_at} {created_at} {expires_at}")
+
             enc_access = self.cipher_suite.encrypt(
                 res["access_token"].encode())
             enc_refresh = self.cipher_suite.encrypt(
@@ -132,19 +132,18 @@ class AccessTokenGenerator:
             logger.info(
                 f"[AUTH LOG] Bank {provider_name} successfully linked/updated.")
             try:
-                from services.api_integrator.get_account_detail import UserAccounts
+                from services.api_integrator.truelayer_sync import TrueLayerSync
                 from fastapi_cache import FastAPICache
                 import asyncio
                 logger.info(
                     f"Dispatching background account initialization for {provider_name}...")
-                user_acc = UserAccounts(user_id=state)
+                user_acc = TrueLayerSync(user_id=state)
                 loop = asyncio.get_running_loop()
                 loop.run_in_executor(
                     None, user_acc.initialise_accounts, bank_id_to_init, state)
             except Exception as init_err:
-                logger.error("An error occurred in this block", exc_info=True)
                 logger.error(
-                    f"Failed to trigger immediate initialization: {init_err}")
+                    f"Failed to trigger immediate initialization: {init_err}", exc_info=True)
             return True
         else:
             logger.error(
@@ -227,6 +226,6 @@ class AccessTokenGenerator:
                     results.append(
                         {"status": "failed", "truelayer_error": response.text})
             except Exception as e:
-                logger.error("An error occurred in this block", exc_info=True)
+                logger.error(f"Revoke provider failed: {e}", exc_info=True)
                 results.append({"status": "error", "message": str(e)})
         return results

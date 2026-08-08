@@ -13,17 +13,14 @@ class MCPBridge:
         
     async def call_tool(self, server_name: str, tool_name: str, arguments: dict):
         try:
-            # Map "categorizer" -> "services.mcp_tools.categorizer_tools"
             module_name = f"services.mcp_tools.{server_name}_tools"
             module = __import__(module_name, fromlist=[tool_name])
             
             tool_func = getattr(module, tool_name)
             
-            # If it's a LangChain @tool, call .invoke()
             if hasattr(tool_func, "invoke"):
                 return tool_func.invoke(arguments)
                 
-            # Otherwise, call as a standard Python function
             if inspect.iscoroutinefunction(tool_func):
                 return await tool_func(**arguments)
             else:

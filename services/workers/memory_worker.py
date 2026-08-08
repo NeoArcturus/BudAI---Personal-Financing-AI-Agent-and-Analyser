@@ -20,7 +20,6 @@ from models.graph_state import BudAIState
 
 logger = get_core_logger(__name__)
 
-
 """Returns a compiled subagent for financial knowledge and history."""
 current_date_str = datetime.now().strftime("%Y-%m-%d")
 current_year_str = str(datetime.now().year)
@@ -35,10 +34,11 @@ llm = ChatOpenAI(
     api_key="budai-local",
     temperature=0,
     streaming=False,
-    extra_body={"chat_template_kwargs": {"enable_thinking": True}}
+    reasoning_effort="high",
+    timeout=600,
+    model_kwargs={"extra_body": {"chat_template_kwargs": {"enable_thinking": True}}}
 )
 bridge = MCPBridge()
-
 
 @tool
 async def search_financial_history_semantic_wrapper(query: str, state: Annotated[BudAIState, InjectedState]) -> str:
@@ -46,13 +46,11 @@ async def search_financial_history_semantic_wrapper(query: str, state: Annotated
     user_uuid = state.get("user_uuid")
     return await bridge.call_tool("memory", "search_financial_history_semantic", {"query": query, "user_uuid": user_uuid})
 
-
 @tool
 async def get_seasonal_behavior_context_wrapper(state: Annotated[BudAIState, InjectedState]) -> str:
     """Retrieves a summary of how the user historically behaves in the current month."""
     user_uuid = state.get("user_uuid")
     return await bridge.call_tool("memory", "get_seasonal_behavior_context", {"user_uuid": user_uuid})
-
 
 @tool
 async def export_advisory_state_wrapper(chart_type: str, raw_data: dict, ai_analysis: str, state: Annotated[BudAIState, InjectedState]) -> str:
@@ -60,13 +58,11 @@ async def export_advisory_state_wrapper(chart_type: str, raw_data: dict, ai_anal
     user_uuid = state.get("user_uuid")
     return export_advisory_state.invoke({"user_uuid": user_uuid, "chart_type": chart_type, "raw_data": raw_data, "ai_analysis": ai_analysis})
 
-
 @tool
 async def export_custom_statement_wrapper(ai_summary: str, state: Annotated[BudAIState, InjectedState]) -> str:
     """Generates a downloadable CSV transaction statement with embedded AI analysis."""
     user_uuid = state.get("user_uuid")
     return export_custom_statement.invoke({"user_uuid": user_uuid, "ai_summary": ai_summary})
-
 
 @tool
 async def get_connected_accounts_wrapper(state: Annotated[BudAIState, InjectedState]) -> str:
@@ -74,7 +70,6 @@ async def get_connected_accounts_wrapper(state: Annotated[BudAIState, InjectedSt
     user_uuid = state.get("user_uuid")
     from services.mcp_tools.account_tools import get_connected_accounts
     return get_connected_accounts.invoke({"user_uuid": user_uuid})
-
 
 @tool
 async def ask_user(question: str) -> str:
@@ -104,8 +99,7 @@ You retrieve qualitative facts and search multi-year history.
 1. NO FABRICATION: You are strictly forbidden from fabricating data. Use ONLY data from tool DATA SUMMARY blocks.
 2. TOOL EXECUTION IS MANDATORY: You must emit a valid JSON tool call to fetch data. You CANNOT roleplay or pretend to execute a tool in your output.
 3. ADMIT IGNORANCE: If a tool returns no data, state "I do not have the data." Do not guess.
-4. GBP ONLY: All financial values must use the £ symbol. No emojis.
-5. REASONING VISIBILITY: You MUST ALWAYS provide an internal monologue wrapped explicitly inside <think> and </think> tags before taking ANY action, returning findings, or calling tools. Keep your <think> block EXTREMELY short (under 4 sentences). You MUST start your response exactly with `<think> Brief assessment: `
+4. MULTI-CURRENCY: Respect the native currency returned by the tools (e.g., £, €, $). Do not force GBP. No emojis.
 
 ROUTING (Use these tools):
 - search_financial_history_semantic_wrapper: Semantic search on transactions.
@@ -116,16 +110,11 @@ ROUTING (Use these tools):
 - export_custom_statement_wrapper: Generate CSV.
 - get_connected_accounts_wrapper: Get account IDs.
 - ask_user: Ask clarifying questions.
-
-FINAL AND MOST IMPORTANT INSTRUCTION:
-You MUST start your VERY FIRST output character with the exact string: <think>
-Do not say anything else before it.
 """,
     middleware=[
         HumanInTheLoopMiddleware(interrupt_on={"ask_user": True})
     ]
 )
-
 
 @tool("call_memory_specialist", description="Use this tool ONLY for retrieving specific qualitative facts, past preferences, or seasonal historical behavior from the user long-term memory store.")
 async def call_memory_agent(

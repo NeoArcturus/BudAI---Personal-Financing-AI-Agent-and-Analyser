@@ -2,25 +2,33 @@ import { ChartConfiguration, ChartData } from "chart.js";
 
 export interface Account {
   account_id: string;
-  truelayer_account_id?: string;
-  provider_name?: string;
   bank_name?: string;
-  account_number: string;
-  sort_code: string;
-  currency: string;
-  balance: number;
+  provider_name?: string;
+  account_number?: string;
+  sort_code?: string;
+  currency?: string;
+  balance?: number;
   status?: string;
   provider_id?: string;
+  logo_url?: string;
+  
+  truelayer_account_id?: string;
 }
 
 export interface Transaction {
   transaction_id: string;
-  transaction_uuid?: string;
   date?: string;
-  timestamp?: string;
   amount?: number;
-  description?: string;
   category?: string;
+  merchant_name?: string;
+  description?: string;
+  status?: string;
+  account_id?: string;
+  bank_uuid?: string;
+  user_uuid?: string;
+
+  transaction_uuid?: string;
+  timestamp?: string;
   Category?: string;
   Amount?: number;
 }
@@ -51,9 +59,20 @@ export type NativeChartConfig = ChartConfiguration<
   "line" | "bar" | "doughnut" | "radar"
 >;
 
+export interface ChartDataPoint {
+  Date?: string;
+  Month?: string;
+  Category?: string;
+  Amount?: number;
+  Total_Amount?: number;
+  currency?: string;
+  descriptions?: string[];
+  [key: string]: any;
+}
+
 export interface BankChartData {
   bank_name: string;
-  data: Record<string, string | number>[];
+  data: ChartDataPoint[];
 }
 
 export interface ChartConfig {

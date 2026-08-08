@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlmodel import create_engine
 from services.logger_setup import get_core_logger
 import redis
 
@@ -14,7 +14,8 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localho
 if os.path.exists("/.dockerenv") and ("localhost" in DATABASE_URL or "127.0.0.1" in DATABASE_URL):
     DATABASE_URL = DATABASE_URL.replace("localhost", "budai-db").replace("127.0.0.1", "budai-db")
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-jwt-key")
+import secrets
+SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_hex(32))
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 TRUELAYER_BASE_URL = os.getenv("BASE_URL", "https://api.truelayer.com/data/v1")
@@ -42,7 +43,6 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
 def get_db():
     db = SessionLocal()

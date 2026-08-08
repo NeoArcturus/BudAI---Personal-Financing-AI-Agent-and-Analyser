@@ -36,7 +36,6 @@ logger = get_core_logger("orchestrator_graph")
 OLLAMA_BASE_URL = os.getenv(
     "OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
 
-
 @tool
 async def ask_user(question: str) -> str:
     """Ask the user a question for clarification or more information. Use this if the user's request is ambiguous or if you need more details to decide which specialist tool to call."""
@@ -50,6 +49,42 @@ def get_connected_accounts_orchestrator(state: Annotated[BudAIState, InjectedSta
     from services.mcp_tools.account_tools import get_connected_accounts
     user_uuid = state.get("user_uuid", "ea0e5c07-ab5b-4c14-9ad9-95a036b24637")
     return get_connected_accounts.invoke({"user_uuid": user_uuid})
+
+@tool
+def get_user_lifestyle_profile_wrapper(state: Annotated[BudAIState, InjectedState]) -> str:
+    """Retrieves the user's Macro-Persona and their top HDBSCAN micro-lifestyles."""
+    from services.mcp_tools.lifestyle_tools import get_user_lifestyle_profile
+    return get_user_lifestyle_profile.invoke({"user_uuid": state.get("user_uuid")})
+
+@tool
+def get_semantic_anomalies_wrapper(state: Annotated[BudAIState, InjectedState]) -> str:
+    """Fetches recent transactions flagged as semantic anomalies."""
+    from services.mcp_tools.lifestyle_tools import get_semantic_anomalies
+    return get_semantic_anomalies.invoke({"user_uuid": state.get("user_uuid")})
+
+@tool
+def get_lifestyle_trajectory_wrapper(state: Annotated[BudAIState, InjectedState]) -> str:
+    """Calculates how the user's cluster density has shifted over the last 3 months."""
+    from services.mcp_tools.lifestyle_tools import get_lifestyle_trajectory
+    return get_lifestyle_trajectory.invoke({"user_uuid": state.get("user_uuid")})
+
+@tool
+def benchmark_persona_budget_wrapper(state: Annotated[BudAIState, InjectedState]) -> str:
+    """Compares the user's spending against statistical averages for their assigned Macro-Persona."""
+    from services.mcp_tools.lifestyle_tools import benchmark_persona_budget
+    return benchmark_persona_budget.invoke({"user_uuid": state.get("user_uuid")})
+
+@tool
+def predict_impulse_vulnerability_wrapper(state: Annotated[BudAIState, InjectedState]) -> str:
+    """Analyzes time/day vectors to identify statistical impulse buying windows."""
+    from services.mcp_tools.lifestyle_tools import predict_impulse_vulnerability
+    return predict_impulse_vulnerability.invoke({"user_uuid": state.get("user_uuid")})
+
+@tool
+def get_upcoming_subscriptions_wrapper(state: Annotated[BudAIState, InjectedState]) -> str:
+    """Retrieves detected recurring subscriptions, bills, and any hidden price hikes."""
+    from services.mcp_tools.lifestyle_tools import get_upcoming_subscriptions
+    return get_upcoming_subscriptions.invoke({"user_uuid": state.get("user_uuid")})
 
 
 def get_session_history(user_uuid: str, session_id: Optional[str] = None):
@@ -73,7 +108,6 @@ def get_session_history(user_uuid: str, session_id: Optional[str] = None):
         logger.error(f"Failed to fetch session history: {e}")
     return history[-6:]
 
-
 def ensure_string(content: Any) -> str:
     """Robustly converts LLM content to a single string."""
     if isinstance(content, str):
@@ -82,12 +116,10 @@ def ensure_string(content: Any) -> str:
         return "".join([b.get("text", b.get("content", "")) if isinstance(b, dict) else str(b) for b in content])
     return str(content)
 
-
 def strip_thinking(content: Any) -> str:
     """Removes thinking tags from output."""
     text = ensure_string(content)
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-
 
 async def generate_session_title(session_id: str, first_msg: str):
     """Generates an automatic session title."""
@@ -108,7 +140,6 @@ async def generate_session_title(session_id: str, first_msg: str):
                 session.commit()
     except Exception:
         pass
-
 
 async def execute_chat_graph_async(initial_state: dict):
     """Initializes the database records for a chat session."""
@@ -144,7 +175,6 @@ async def execute_chat_graph_async(initial_state: dict):
     except Exception as e:
         logger.error(f"DB failed: {e}")
 
-
 supervisor_llm = ChatOpenAI(
     model="mlx-community/Qwen3.5-4B-4bit",
     base_url=OLLAMA_BASE_URL,
@@ -152,7 +182,9 @@ supervisor_llm = ChatOpenAI(
     temperature=0.1,
     streaming=True,
     max_tokens=4096,
-    extra_body={"chat_template_kwargs": {"enable_thinking": True}}
+    reasoning_effort="high",
+    timeout=600,
+    model_kwargs={"extra_body": {"chat_template_kwargs": {"enable_thinking": True}}}
 )
 
 supervisor_tools = [
@@ -164,7 +196,13 @@ supervisor_tools = [
     call_market_agent,
     call_scenario_agent,
     ask_user,
-    get_connected_accounts_orchestrator
+    get_connected_accounts_orchestrator,
+    get_user_lifestyle_profile_wrapper,
+    get_semantic_anomalies_wrapper,
+    get_lifestyle_trajectory_wrapper,
+    benchmark_persona_budget_wrapper,
+    predict_impulse_vulnerability_wrapper,
+    get_upcoming_subscriptions_wrapper
 ]
 
 current_date_str = datetime.now().strftime("%Y-%m-%d")
@@ -182,11 +220,11 @@ You are BudAI, a personal finance advisor.
 1. NO FABRICATION: You are strictly forbidden from fabricating data. Use ONLY data from tool DATA SUMMARY blocks.
 2. TOOL EXECUTION IS MANDATORY: You must emit a valid JSON tool call to fetch data. You CANNOT roleplay or pretend to execute a tool in your output.
 3. ADMIT IGNORANCE: If a tool returns no data, state "I do not have the data." Do not guess.
-4. GBP ONLY: All financial values must use the £ symbol. No emojis.
-5. REASONING VISIBILITY: You MUST ALWAYS provide an internal monologue wrapped explicitly inside <think> and </think> tags before taking ANY action or responding. Keep your <think> block EXTREMELY short (under 4 sentences). You MUST start your response exactly with `<think> Brief assessment: `
-6. FRESH DATA: Always execute tools for fresh data. Never copy-paste numbers from chat history.
-7. CHART TRIGGERS: If a tool outputs a tag like `[TRIGGER_...:CACHE_...]`, copy it EXACTLY as the very last line of your text response. Do not modify it.
-8. SINGLE ACCOUNT: Default to the connected account if only 1 exists. Ask user if multiple exist and query is ambiguous.
+4. MULTI-CURRENCY: Respect the native currency returned by the tools (e.g., £, €, $). Do not force GBP. No emojis.
+5. FRESH DATA: Always execute tools for fresh data. Never copy-paste numbers from chat history.
+6. CHART TRIGGERS: If a tool outputs a tag like `[TRIGGER_...:CACHE_...]`, copy it EXACTLY as the very last line of your text response. Do not modify it.
+7. SINGLE ACCOUNT: Default to the connected account if only 1 exists. Ask user if multiple exist and query is ambiguous.
+8. NO INTERNAL IDs: Never print or reveal raw database IDs (e.g., account IDs, uuids) in your final response to the user. Use only the bank name.
 
 ROUTING (Use these tools):
 - call_analyser_agent: historical transactions, spending totals, cash flow.
@@ -196,10 +234,6 @@ ROUTING (Use these tools):
 - call_memory_agent: past preferences, qualitative facts.
 - call_market_agent: real-time/historical market data (stocks, FX).
 - call_scenario_agent: complex 'What-If' scenarios.
-
-FINAL AND MOST IMPORTANT INSTRUCTION:
-You MUST start your VERY FIRST output character with the exact string: <think>
-Do not say anything else before it.
 """,
     middleware=[
         HumanInTheLoopMiddleware(interrupt_on={"ask_user": True})

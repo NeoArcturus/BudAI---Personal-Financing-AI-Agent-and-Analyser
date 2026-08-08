@@ -1,7 +1,8 @@
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from urllib.parse import urlparse
-from config import Base, engine, DATABASE_URL
+from config import engine, DATABASE_URL
+from sqlmodel import SQLModel
 from services.logger_setup import get_core_logger
 
 logger = get_core_logger("db_service")
@@ -10,7 +11,7 @@ def ensure_db_exists():
     if "postgresql" not in DATABASE_URL:
         return
         
-    logger.info("Ensuring PostgreSQL database exists")
+    logger.debug("Ensuring PostgreSQL database exists")
     result = urlparse(DATABASE_URL)
     username = result.username
     password = result.password
@@ -37,7 +38,7 @@ def ensure_db_exists():
             cur.execute(f'CREATE DATABASE {database}')
             logger.info(f"Database {database} created successfully.")
         else:
-            logger.info(f"Database {database} already exists.")
+            logger.debug(f"Database {database} already exists.")
             
         cur.close()
         conn.close()
@@ -47,20 +48,14 @@ def ensure_db_exists():
 def init_db(db_path=None):
     try:
         ensure_db_exists()
-        Base.metadata.create_all(bind=engine)
+        SQLModel.metadata.create_all(bind=engine)
         
-        # Auto-migrate: Add sub_category and TrueLayer extended columns if they do not exist
         from sqlalchemy import text
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_category VARCHAR;"))
-            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transaction_type VARCHAR;"))
-            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS provider_category VARCHAR;"))
-            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transaction_classification JSON;"))
-            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS merchant_name VARCHAR;"))
-            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS running_balance JSON;"))
-            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS meta_status VARCHAR;"))
-            
-        logger.info("Database initialized successfully")
+            conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_semantic_anomaly BOOLEAN DEFAULT FALSE;"))
+
+        logger.debug("Database initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
         raise

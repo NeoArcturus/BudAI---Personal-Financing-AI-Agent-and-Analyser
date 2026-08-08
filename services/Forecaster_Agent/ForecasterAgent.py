@@ -5,13 +5,12 @@ import logging
 import torch
 from sqlalchemy import text
 from config import SessionLocal
-from services.api_integrator.get_account_detail import UserAccounts
+from services.api_integrator.account_reader import AccountReader
 from services.Forecaster_Agent.mathematics.mathematics import run_hybrid_engine, run_converged_expense_engine
 from services.Forecaster_Agent.models.parameter_lstm import ParameterLSTM
 from models.database_models import ForecastParameters
 from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
-
 
 _global_device = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
 _global_lstm = None
@@ -33,7 +32,7 @@ class ForecasterAgent:
         self.lstm = _global_lstm
 
     def fetch_live_balance(self, identifier, user_uuid):
-        user_acc = UserAccounts(user_id=user_uuid)
+        user_acc = AccountReader(user_id=user_uuid)
         balance = user_acc.get_account_balance(identifier, user_uuid)
         return float(balance) if balance is not None else 0.0
 
@@ -49,7 +48,7 @@ class ForecasterAgent:
         try:
             from services.memory_service import MemoryService
             mem = MemoryService()
-            user_acc = UserAccounts(user_id=user_uuid)
+            user_acc = AccountReader(user_id=user_uuid)
             df = user_acc.get_transactions("ALL", user_uuid)
             if df.empty or len(df) < 30:
                 return
@@ -86,7 +85,7 @@ class ForecasterAgent:
             with SessionLocal() as session:
                 row = session.execute(text("SELECT b.bank_name FROM banks b LEFT JOIN accounts a ON b.bank_uuid = a.bank_uuid WHERE a.account_id=:account_id OR b.bank_name ILIKE :ident"), {
                                       "account_id": account_id, "ident": f"%{account_id}%"}).fetchone()
-                user = UserAccounts(user_uuid)
+                user = AccountReader(user_uuid)
                 bank_name = row[0] if row else account_id
                 df = user.get_transactions(
                     identifier=bank_name, user_uuid=user_uuid)
@@ -118,7 +117,7 @@ class ForecasterAgent:
             with SessionLocal() as session:
                 row = session.execute(text("SELECT b.bank_name FROM banks b LEFT JOIN accounts a ON b.bank_uuid = a.bank_uuid WHERE a.account_id=:account_id OR b.bank_name ILIKE :ident"), {
                                       "account_id": account_id, "ident": f"%{account_id}%"}).fetchone()
-                user = UserAccounts(user_uuid)
+                user = AccountReader(user_uuid)
                 bank_name = row[0] if row else account_id
                 df = user.get_transactions(
                     identifier=bank_name, user_uuid=user_uuid)
@@ -143,7 +142,7 @@ class ForecasterAgent:
         if df_input is not None:
             df = df_input
         else:
-            user_acc = UserAccounts(user_id=user_uuid)
+            user_acc = AccountReader(user_id=user_uuid)
             df = user_acc.get_transactions(account_id, user_uuid)
 
         if df.empty:

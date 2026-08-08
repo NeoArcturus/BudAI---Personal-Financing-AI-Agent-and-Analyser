@@ -18,7 +18,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Button, CloseButton, SearchField } from "@heroui/react";
+import { Button, toast, CloseButton, SearchField } from "@heroui/react";
 import {
   Globe,
   Bell,
@@ -32,6 +32,13 @@ import {
   PieChart,
   MessageSquare,
   Sparkles,
+  User,
+  Brain,
+  Repeat,
+  Zap,
+  ShieldAlert,
+  CalendarDays,
+  Activity,
 } from "lucide-react";
 import { useBudAI } from "@/app/context/AppContext";
 import { useTheme } from "next-themes";
@@ -56,34 +63,19 @@ export const WidgetContext = React.createContext<{
 }>({});
 
 const AVAILABLE_WIDGET_TYPES = [
-  { type: "cashFlow", label: "Cash Flow - Income vs Expense", icon: BarChart },
-  {
-    type: "spendingTrend",
-    label: "Spending Trend - Historical",
-    icon: LineChart,
-  },
-  {
-    type: "expenseDistribution",
-    label: "Expense Distribution",
-    icon: PieChart,
-  },
-  {
-    type: "ledger",
-    label: "Ledger Table - Historical Transactions",
-    icon: Clock,
-  },
-  { type: "portfolio", label: "Portfolio Card", icon: CreditCard },
-  {
-    type: "commodityMarket",
-    label: "Market Intelligence - Commodities",
-    icon: Globe,
-  },
-  {
-    type: "financialNews",
-    label: "Global Financial Feed - News",
-    icon: MessageSquare,
-  },
-  { type: "aiChat", label: "AI Chat Session Headings", icon: MessageSquare },
+  { type: "cashFlow", label: "Cash Flow", icon: BarChart },
+  { type: "spendingTrend", label: "Spending Trend", icon: LineChart },
+  { type: "expenseDistribution", label: "Expense Distribution", icon: PieChart },
+  { type: "ledger", label: "Transactions", icon: Clock },
+  { type: "commodityMarket", label: "Commodities Market", icon: Globe },
+  { type: "financialNews", label: "Financial News", icon: MessageSquare },
+  { type: "aiChat", label: "Chat Sessions", icon: MessageSquare },
+  { type: "analyticsHealth", label: "Financial Health", icon: Activity },
+  { type: "analyticsHabits", label: "Habits", icon: Brain },
+  { type: "analyticsSubscriptions", label: "Subscriptions", icon: Repeat },
+  { type: "analyticsAnomalies", label: "Anomalies", icon: Zap },
+  { type: "analyticsRisk", label: "Liability Health", icon: ShieldAlert },
+  { type: "analyticsForecast", label: "30-Day Forecast", icon: CalendarDays },
 ];
 
 function SortableWidgetItem({
@@ -118,12 +110,12 @@ function SortableWidgetItem({
 
       const newHeight = Math.max(300, startHeight + deltaY);
 
-      // Decouple colSpan from height and tie it to horizontal drag distance instead
+      
       let newColSpan = startColSpan;
       if (deltaX > 100) {
-        newColSpan = 2; // Dragging right snaps to 2 columns
+        newColSpan = 2; 
       } else if (deltaX < -100) {
-        newColSpan = 1; // Dragging left snaps back to 1 column
+        newColSpan = 1; 
       }
 
       onResize(id, newHeight, newColSpan);
@@ -175,7 +167,7 @@ export default function DashboardClient({
   const { theme, setTheme } = useTheme();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [widgets, setWidgets] = useState<WidgetInstance[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [loadedUser, setLoadedUser] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -183,10 +175,7 @@ export default function DashboardClient({
   }, []);
 
   useEffect(() => {
-    if (!userName || userName === "User") {
-      // Wait for the real username to be loaded from AppContext if it's still "User"
-      // but only if we are in a client environment where it might change.
-      // If the user actually IS named "User", this might delay, but it's a safe trade-off.
+    if (!userName || userName === "User" || userName === "Verified User") {
       const actualName = localStorage.getItem("budai_user_name");
       if (actualName && actualName !== userName) return;
     }
@@ -201,20 +190,21 @@ export default function DashboardClient({
         setWidgets(JSON.parse(saved));
       } catch (e) {
         console.error("Failed to load widgets:", e);
+        toast.danger("Failed to load widgets layout");
         setWidgets(defaultWidgets);
       }
     } else {
       setWidgets(defaultWidgets);
     }
-    setIsLoaded(true);
+    setLoadedUser(userName);
   }, [userName]);
 
   useEffect(() => {
-    if (isLoaded && userName && userName !== "User") {
+    if (loadedUser === userName && userName && userName !== "User" && userName !== "Verified User") {
       const storageKey = `budai_widgets_dashboard_${userName}`;
       localStorage.setItem(storageKey, JSON.stringify(widgets));
     }
-  }, [widgets, isLoaded, userName]);
+  }, [widgets, loadedUser, userName]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -302,7 +292,7 @@ export default function DashboardClient({
               <SearchField.Group className="flex flex-row border-[0.5px] rounded-xl py-2 px-4 justify-center items-center bg-white/5 border-white/10 hover:border-primary/50 transition-all shadow-inner">
                 <SearchField.SearchIcon className="text-foreground/30" />
                 <SearchField.Input
-                  placeholder="Search intelligence database..."
+                  placeholder="Search records..."
                   className="w-80 border-none outline-none ring-0 focus:outline-none focus:ring-0 px-3 text-[11px] font-medium tracking-wide placeholder:text-foreground/20"
                 />
               </SearchField.Group>
@@ -315,7 +305,7 @@ export default function DashboardClient({
                 onPress={() => setTheme("dark")}
                 className={`w-8 h-8 min-w-8 rounded-full border-none flex justify-center items-center transition-all ${
                   mounted && theme === "dark"
-                    ? "bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white shadow-[0_0_10px_rgba(0,242,255,0.2)]"
+                    ? "bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
                     : "text-foreground/30 hover:text-foreground bg-transparent"
                 }`}
               >
@@ -326,7 +316,7 @@ export default function DashboardClient({
                 onPress={() => setTheme("light")}
                 className={`w-8 h-8 min-w-8 rounded-full border-none flex justify-center items-center transition-all ${
                   mounted && theme === "light"
-                    ? "bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white shadow-[0_0_10px_rgba(0,242,255,0.2)]"
+                    ? "bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
                     : "text-foreground/30 hover:text-foreground bg-transparent"
                 }`}
               >
@@ -344,7 +334,7 @@ export default function DashboardClient({
         </div>
 
         <div className="flex-1 overflow-y-auto scrollbar-hide pb-24 relative">
-          {!isLoaded ? (
+          {!loadedUser ? (
             <div className="w-full h-96 flex items-center justify-center">
               <span className="text-primary font-medium tracking-widest uppercase text-xs">
                 Restoring Workspace...

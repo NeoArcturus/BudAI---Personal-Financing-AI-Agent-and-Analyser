@@ -16,6 +16,21 @@ export const getAuthToken = (): string => {
   return localStorage.getItem("budai_token") || "";
 };
 
+export const getUserUuid = (): string | null => {
+  const token = getAuthToken();
+  if (!token) return null;
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload).sub || null;
+  } catch (e) {
+    return null;
+  }
+};
+
 export const clearAdviceCache = (): void => {
   if (typeof window !== "undefined") {
     Object.keys(localStorage).forEach((key) => {
@@ -42,15 +57,66 @@ export const apiClient = axios.create({
   },
 });
 
+let isRefreshing = false;
+let failedQueue: { resolve: (value: unknown) => void; reject: (reason?: unknown) => void }[] = [];
+
+const processQueue = (error: Error | null, token: string | null = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
-      clearSession();
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("budai-unauthorized"));
+  async (error) => {
+    const originalRequest = error.config;
+    
+    if (axios.isAxiosError(error) && error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then(token => {
+          originalRequest.headers['Authorization'] = 'Bearer ' + token;
+          return apiClient(originalRequest);
+        }).catch(err => {
+          return Promise.reject(err);
+        });
+      }
+      
+      originalRequest._retry = true;
+      isRefreshing = true;
+      
+      try {
+        const refreshResponse = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {}, {
+          withCredentials: true
+        });
+        const newToken = refreshResponse.data.token;
+        if (typeof window !== "undefined") {
+          localStorage.setItem("budai_token", newToken);
+          
+          document.cookie = `budai_token=${newToken}; path=/; max-age=604800; samesite=lax`;
+        }
+        apiClient.defaults.headers.common['Authorization'] = 'Bearer ' + newToken;
+        originalRequest.headers['Authorization'] = 'Bearer ' + newToken;
+        processQueue(null, newToken);
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        processQueue(refreshError as Error, null);
+        clearSession();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("budai-unauthorized"));
+        }
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
+    
     return Promise.reject(error);
   },
 );
@@ -62,7 +128,7 @@ interface MockResponse {
   json: () => Promise<unknown>;
 }
 
-// Drop-in replacement for the native fetch using axios
+
 export async function apiFetch(
   path: string,
   init?: RequestInit,

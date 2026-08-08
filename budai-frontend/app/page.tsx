@@ -94,7 +94,7 @@ export default function LandingPage() {
           </Link>
           <Button
             onPress={() => router.push("/register")}
-            className="bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white font-extrabold text-xs tracking-wide px-6 h-9 rounded-md shadow-[0_0_20px_rgba(112,0,255,0.4)] hover:shadow-[0_0_30px_rgba(0,242,255,0.6)] transition-all border-none"
+            className="font-extrabold text-xs tracking-wide px-6 h-9 rounded-md transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
           >
             Sign Up
           </Button>
@@ -130,7 +130,7 @@ export default function LandingPage() {
               variants={itemVariants}
               className="text-base md:text-lg text-foreground/50 max-w-xl mx-auto leading-relaxed font-medium tracking-tight"
             >
-              Institutional-grade financial intelligence and transaction
+              Institutional-grade financial analysis and transaction
               categorization.
             </motion.p>
 
@@ -140,7 +140,7 @@ export default function LandingPage() {
             >
               <Button
                 onPress={() => router.push("/register")}
-                className="bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white font-extrabold tracking-widest text-sm px-12 h-14 rounded-xl shadow-[0_0_30px_rgba(112,0,255,0.4)] hover:shadow-[0_0_40px_rgba(0,242,255,0.6)] hover:scale-[1.02] transition-all border-none"
+                className="font-extrabold tracking-widest text-sm px-12 h-14 rounded-xl hover:scale-[1.02] transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
               >
                 Go to Dashboard
               </Button>

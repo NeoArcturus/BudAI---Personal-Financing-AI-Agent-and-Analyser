@@ -12,7 +12,6 @@ class StripCacheControlMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         logger.debug(f"Intercepting request: {request.url.path}")
         
-
         headers = request.scope.get("headers", [])
         new_headers = [
             (k, v) for k, v in headers 
@@ -20,7 +19,7 @@ class StripCacheControlMiddleware(BaseHTTPMiddleware):
         ]
         
         if len(new_headers) < len(headers):
-            logger.info(f"Stripped cache-bypass headers from request to {request.url.path}")
+            logger.debug(f"Stripped cache-bypass headers from request to {request.url.path}")
             request.scope["headers"] = new_headers
             
         response = await call_next(request)

@@ -30,7 +30,7 @@ export default function NotFound() {
 
         <Button
           onPress={() => router.push("/")}
-          className="bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white border-none font-black px-10 h-14 rounded-2xl neon-glow-primary hover:bg-primary/80 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer uppercase tracking-widest text-xs"
+          className="font-black px-10 h-14 rounded-2xl flex items-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer uppercase tracking-widest text-xs bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
         >
           <Home size={18} />
           Return to Dashboard

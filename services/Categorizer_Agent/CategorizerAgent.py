@@ -10,7 +10,6 @@ from sqlalchemy import text
 import asyncio
 
 from config import SessionLocal
-from services.api_integrator.get_account_detail import UserAccounts
 from services.logger_setup import get_core_logger
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
@@ -49,7 +48,6 @@ class CategorizerAgent:
             "Uncategorized"
         ]
         
-        # We use the main model on port 8000 for categorization as well
         base_url = os.getenv("LLM_BASE_URL", "http://host.docker.internal:8000/v1")
         if not base_url.endswith("/v1"): 
             base_url = f"{base_url}/v1"
@@ -59,7 +57,7 @@ class CategorizerAgent:
             base_url=base_url, 
             api_key="budai-local", 
             temperature=0,
-            max_tokens=2000
+            max_tokens=4000
         )
         self.structured_llm = self.llm.with_structured_output(BatchCategorizationOutput)
         self._ensure_feedback_table()
@@ -121,7 +119,6 @@ class CategorizerAgent:
             from models.database_models import Transaction
             
             with SessionLocal() as session:
-                # Fetch transactions that are uncategorized, missing a category, or missing a sub_category
                 uncategorized_txs = session.query(Transaction).filter(
                     (Transaction.category == 'Uncategorized') | 
                     (Transaction.category == None) |
@@ -133,34 +130,42 @@ class CategorizerAgent:
                 if not uncategorized_txs:
                     return {"trained": True, "samples": 0, "reason": "All transactions are already categorized."}
                 
-                # Convert to dict for processing
                 transactions = []
                 for tx in uncategorized_txs:
                     transactions.append({
                         "transaction_uuid": tx.transaction_uuid,
                         "date": str(tx.date.date()) if tx.date else "",
-                        "description": tx.description or '',
+                        "raw_string": tx.description or '',
+                        "semi_cleaned_string": tx.semi_cleaned_description or '',
+                        "fully_cleaned_string": tx.fully_cleaned_description or '',
                         "amount": tx.amount or 0.0,
                     })
 
             logger.info(f"Background Categorizer found {len(transactions)} uncategorized transactions. Processing via LLM...")
 
-            batch_size = 100
-            semaphore = asyncio.Semaphore(2)
+            batch_size = 10
+            semaphore = asyncio.Semaphore(1)
             
             async def sem_task(batch):
                 async with semaphore:
-                    return await self._categorize_batch(batch)
+                    res = await self._categorize_batch(batch)
+                    await asyncio.sleep(2.0)
+                    return res
             
             tasks = []
             for i in range(0, len(transactions), batch_size):
                 batch = transactions[i:i + batch_size]
                 tasks.append(sem_task(batch))
                 
-            results = await asyncio.gather(*tasks)
+            total_batches = len(tasks)
+            results = []
+            for idx, coro in enumerate(asyncio.as_completed(tasks), 1):
+                res = await coro
+                results.append(res)
+                logger.info(f"Categorization Progress: {idx}/{total_batches} batches complete. ({(idx/total_batches)*100:.1f}%)")
+                
             categorized_list = [item for sublist in results for item in sublist]
             
-            # Update database with new categories
             with SessionLocal() as session:
                 updated_count = 0
                 for item in categorized_list:
@@ -178,19 +183,28 @@ class CategorizerAgent:
             return {"trained": False, "samples": 0, "reason": str(e)}
 
     async def _categorize_batch(self, batch):
-        minimal_batch = [{"id": i, "date": t.get("date", ""), "amount": t.get("amount", 0.0), "desc": t.get("description", t.get("desc", ""))} for i, t in enumerate(batch)]
+        minimal_batch = [{"id": i, "date": t.get("date", ""), "amount": t.get("amount", 0.0), "raw_string": t.get("raw_string", ""), "semi_cleaned_string": t.get("semi_cleaned_string", ""), "fully_cleaned_string": t.get("fully_cleaned_string", "")} for i, t in enumerate(batch)]
         categories_str = ", ".join(self.valid_categories)
         system_prompt = f"""You are a highly intelligent financial categorizer.
-Classify each transaction based on your understanding of the transaction description, amount, and date.
+Classify each transaction based on your understanding of the transaction strings, amount, and date.
+Rely primarily on the `semi_cleaned_string` to deduce the merchant. Use `raw_string` as fallback context, and `fully_cleaned_string` to cross-reference stripped alphabetical roots.
 
 Output valid JSON matching the exact schema provided. 
 - Ensure 'category' strictly matches one of the following main categories: {categories_str}.
-- Generate a concise 1-3 word string for 'sub_category' that best describes the specific purchase (e.g. 'Groceries', 'Coffee', 'Train Ticket') based on the transaction description."""
+- Generate a concise 1-3 word string for 'sub_category' that best describes the specific purchase (e.g. 'Groceries', 'Coffee', 'Train Ticket')."""
         try:
-            response = await self.structured_llm.ainvoke([
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": json.dumps(minimal_batch)}
-            ])
+            def _locked_call():
+                from services.llm_manager import GlobalLLMManager
+                GlobalLLMManager.acquire_background()
+                try:
+                    return self.structured_llm.invoke([
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": json.dumps(minimal_batch)}
+                    ], config={"callbacks": []})
+                finally:
+                    GlobalLLMManager.release()
+            
+            response = await asyncio.to_thread(_locked_call)
             
             final_results = []
             for item in response.results:
@@ -219,8 +233,9 @@ Output valid JSON matching the exact schema provided.
             if str(identifier).upper() == "ALL" or "," in str(identifier):
                 raise ValueError("CategorizerAgent strictly handles a single account identifier.")
                 
-            user_acc = UserAccounts(user_id=user_uuid)
-            raw_df = user_acc.get_bank_transactions(identifier, user_uuid, start_date, end_date)
+            from services.api_integrator.account_reader import AccountReader
+            user_acc = AccountReader(user_id=user_uuid)
+            raw_df = user_acc.get_transactions(identifier, user_uuid, start_date, end_date)
             if raw_df is None or raw_df.empty:
                 return None
                 
@@ -244,19 +259,27 @@ Output valid JSON matching the exact schema provided.
                     "original_row": row.to_dict()
                 })
                 
-            batch_size = 100
-            semaphore = asyncio.Semaphore(2)
+            batch_size = 10
+            semaphore = asyncio.Semaphore(1)
             
             async def sem_task(batch):
                 async with semaphore:
-                    return await self._categorize_batch(batch)
+                    res = await self._categorize_batch(batch)
+                    await asyncio.sleep(2.0)
+                    return res
                     
             tasks = []
             for i in range(0, len(transactions), batch_size):
                 batch = transactions[i:i + batch_size]
                 tasks.append(sem_task(batch))
                 
-            results = await asyncio.gather(*tasks)
+            total_batches = len(tasks)
+            results = []
+            for idx, coro in enumerate(asyncio.as_completed(tasks), 1):
+                res = await coro
+                results.append(res)
+                logger.info(f"Dynamic Categorization Progress: {idx}/{total_batches} batches complete.")
+                
             categorized_list = [item for sublist in results for item in sublist]
             cat_map = {item.transaction_uuid: (item.category, item.sub_category) for item in categorized_list}
             

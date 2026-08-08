@@ -2,7 +2,6 @@ import "./globals.css";
 import { Plus_Jakarta_Sans, JetBrains_Mono, Inter } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { Providers } from "./providers";
-import GlobalBackground from "@/app/(protected)/_components/GlobalBackground";
 
 const inter = Inter({subsets:['latin'],variable:'--font-sans'});
 
@@ -27,7 +26,6 @@ export default function RootLayout({
       <body
         className="antialiased selection:bg-primary/30 selection:text-primary bg-background text-foreground"
       >
-        <GlobalBackground />
         <Providers>
           <div className="relative z-10">
             {children}

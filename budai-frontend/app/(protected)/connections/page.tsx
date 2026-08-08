@@ -10,7 +10,7 @@ import {
   CheckCircle2,
   Trash2,
 } from "lucide-react";
-import { Button, Card, Skeleton } from "@heroui/react";
+import { Button, Card, Skeleton, toast } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { apiFetch } from "@/lib/api";
 import { useRouter } from "next/navigation";
@@ -38,6 +38,7 @@ export default function ConnectionsPage() {
       })
       .catch((err) => {
         console.error(err);
+        toast.danger("Failed to load connection status");
         setIsLoading(false);
       });
 
@@ -56,6 +57,7 @@ export default function ConnectionsPage() {
       }
     } catch (error) {
       console.error(error);
+      toast.danger("Failed to initiate bank connection");
     } finally {
       setIsConnecting(false);
     }
@@ -75,7 +77,7 @@ export default function ConnectionsPage() {
         <Button
           onPress={handleConnect}
           isPending={isConnecting}
-          className="flex items-center justify-center gap-3 bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white border-none font-black text-[10px] uppercase tracking-widest rounded-xl px-8 h-12 shadow-[0_0_20px_rgba(0,242,255,0.2)] hover:shadow-[0_0_30px_rgba(0,242,255,0.4)] hover:scale-[1.02] transition-all border-none cursor-pointer"
+          className="flex items-center justify-center gap-3 font-black text-[10px] uppercase tracking-widest rounded-xl px-8 h-12 hover:scale-[1.02] transition-all cursor-pointer bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
         >
           <Plus size={16} /> Connect Bank
         </Button>

@@ -1,6 +1,8 @@
 import { BudAIProvider, ChatSession } from "@/app/context/AppContext";
-import GlobalChatButton from "@/app/(protected)/_components/GlobalChatButton";
-import { TopNavbar } from "@/app/(protected)/_components/TopNavbar";
+import { SearchProvider } from "@/app/context/SearchContext";
+import GlobalSearchModal from "@/app/(protected)/_components/layout/SearchModal";
+import GlobalChatButton from "@/app/(protected)/_components/layout/ChatButton";
+import { TopNavbar } from "@/app/(protected)/_components/layout/Navbar";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Account } from "@/types";
@@ -63,14 +65,17 @@ export default async function ProtectedLayout({
       initialAccounts={initialAccounts}
       initialSessions={initialSessions}
     >
-      <div className="flex flex-col h-screen w-full bg-transparent font-sans overflow-hidden relative transition-colors duration-500">
-        <div className="absolute inset-0 bg-black/40 dark:bg-black/80 pointer-events-none z-0 backdrop-blur-[2px]" />
-        <TopNavbar />
-        <div className="relative z-10 flex-1 flex w-full h-full overflow-hidden">
-          {children}
+      <SearchProvider>
+        <div className="flex flex-col h-screen w-full bg-transparent font-sans overflow-hidden relative transition-colors duration-500">
+
+          <TopNavbar />
+          <div className="relative z-10 flex-1 flex w-full h-full overflow-hidden">
+            {children}
+          </div>
         </div>
-      </div>
-      <GlobalChatButton />
+        <GlobalChatButton />
+        <GlobalSearchModal />
+      </SearchProvider>
     </BudAIProvider>
   );
 }

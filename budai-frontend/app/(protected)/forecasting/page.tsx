@@ -13,12 +13,12 @@ import {
 import { Button, Card, Select, ListBox, Skeleton } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { apiFetch } from "@/lib/api";
-import CoreChartEngine from "@/app/(protected)/_components/CoreChartEngine";
+import CoreChartEngine from "@/app/(protected)/_components/internal/ChartEngine";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
 import { BankChartData } from "@/types";
 import SimulationControlsModal, {
   SimulationOverrides,
-} from "@/app/(protected)/_components/SimulationControlsModal";
+} from "@/app/(protected)/_components/modals/SimulationControlsModal";
 
 export default function ForecastingPage() {
   const { accounts } = useBudAI();
@@ -120,7 +120,7 @@ export default function ForecastingPage() {
       "expense_forecast",
       expenseForecast,
       { bank_name_or_id: localAccountId, days: 30 },
-      "AI Expense Convergence (30 Days)",
+      "Expense Projection (30 Days)",
     );
   }, [expenseForecast, localAccountId]);
 
@@ -142,7 +142,7 @@ export default function ForecastingPage() {
             Financial Projections
           </h2>
           <p className="text-[9px] font-black text-foreground/30 uppercase tracking-[0.4em] mt-1.5">
-            AI-Driven Financial Forecasting
+            Financial Forecasting
           </p>
         </div>
         <div className="flex items-center gap-4">

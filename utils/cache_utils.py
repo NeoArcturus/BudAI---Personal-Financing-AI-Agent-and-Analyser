@@ -44,3 +44,17 @@ def global_cache_key_builder(
     url_hash = hashlib.md5(req_url.encode()).hexdigest()
     return f"{namespace}:global:{func.__name__}:{url_hash}"
 
+def clear_user_cache(user_uuid: str, namespace: str = None):
+    from config import redis_client
+    try:
+        pattern = f"fastapi-cache:{namespace if namespace else '*'}:{user_uuid}:*"
+        keys_to_delete = []
+        for key in redis_client.scan_iter(match=pattern):
+            keys_to_delete.append(key)
+        
+        if keys_to_delete:
+            redis_client.delete(*keys_to_delete)
+            logger.info(f"Cleared {len(keys_to_delete)} cache keys for user {user_uuid} (namespace: {namespace})")
+    except Exception as e:
+        logger.error(f"Failed to clear Redis cache for user {user_uuid}: {e}")
+

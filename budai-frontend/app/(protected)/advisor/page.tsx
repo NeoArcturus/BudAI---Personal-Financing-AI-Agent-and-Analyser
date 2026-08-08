@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 
-import { Button, Text } from "@heroui/react";
+import { Button, Text, toast } from "@heroui/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { BudAIMessage } from "./BudAIMessage";
@@ -119,7 +119,7 @@ export default function AdvisorPage() {
                 const msg = m as BudAIChatMessage;
                 const parts: Array<{ type: "text" | "reasoning"; text: string }> = [];
 
-                // History Sync: Map reasoning_content to a custom reasoning part
+                
                 if (msg.reasoning_content) {
                   parts.push({
                     type: "reasoning",
@@ -127,7 +127,7 @@ export default function AdvisorPage() {
                   });
                 }
 
-                // Extract <think> from history just in case it's stored that way
+                
                 const text = msg.content || "";
                 const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g;
                 let hasThinkTags = false;
@@ -183,6 +183,7 @@ export default function AdvisorPage() {
           }
         } catch (error) {
           console.error("Failed to fetch session messages:", error);
+          toast.danger("Failed to fetch chat history");
         }
       };
 
@@ -193,12 +194,19 @@ export default function AdvisorPage() {
   const handleSend = async (text: string) => {
     try {
       if (typeof sendMessage === "function") {
+        let currentSessionId = activeSessionId;
+        
+        if (!currentSessionId || currentSessionId === "new-session") {
+          currentSessionId = crypto.randomUUID();
+          setActiveSessionId(currentSessionId);
+          router.replace(`/advisor?session=${currentSessionId}`);
+        }
+
         sendMessage(
           { text: text },
           {
             body: {
-              session_id:
-                activeSessionId === "new-session" ? null : activeSessionId,
+              session_id: currentSessionId,
             },
           },
         );
@@ -207,6 +215,7 @@ export default function AdvisorPage() {
       }
     } catch (error) {
       console.error("Failed to send message:", error);
+      toast.danger("Failed to send message");
     }
   };
 
@@ -227,6 +236,7 @@ export default function AdvisorPage() {
       }
     } catch (error) {
       console.error("Failed to create new session:", error);
+      toast.danger("Failed to start new chat");
     }
   };
 
@@ -241,6 +251,7 @@ export default function AdvisorPage() {
       }
     } catch (error) {
       console.error("Failed to delete session:", error);
+      toast.danger("Failed to delete chat");
     }
   };
 
@@ -257,6 +268,7 @@ export default function AdvisorPage() {
       queryClient.invalidateQueries({ queryKey: ["chat-sessions"] });
     } catch (error) {
       console.error("Failed to rename session:", error);
+      toast.danger("Failed to rename chat");
     }
   };
 
@@ -266,7 +278,7 @@ export default function AdvisorPage() {
   );
 
   return (
-    <div className="flex h-screen w-full bg-transparent text-foreground font-sans overflow-hidden transition-colors duration-500">
+    <div className="flex h-screen w-full bg-black text-foreground font-sans overflow-hidden transition-colors duration-500">
       <AdvisorSidebar
         sessions={sessions as BudAIChatSession[]}
         sessionsLoading={sessionsLoading}
@@ -277,7 +289,7 @@ export default function AdvisorPage() {
         handleRenameSession={handleRenameSession}
       />
 
-      <main className="flex-1 flex flex-col h-full bg-transparent relative overflow-hidden">
+      <main className="flex-1 flex flex-col h-full bg-black relative overflow-hidden">
         <header className="h-16 flex items-center justify-between py-4 px-6 border-b border-white/10 shrink-0 bg-black/20 backdrop-blur-xl z-20">
           <div className="flex flex-col">
             <div className="flex items-center gap-3 mt-1">

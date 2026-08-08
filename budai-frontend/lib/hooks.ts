@@ -49,9 +49,9 @@ export function useAccounts() {
       const data = await res.json() as { accounts?: Account[] };
       return data.accounts || [];
     },
-    staleTime: 1000 * 60 * 5,
-    refetchInterval: 1000 * 60 * 5,
-    refetchOnWindowFocus: false,
+    staleTime: 1000 * 30, 
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -80,10 +80,31 @@ export function useTransactions(
       return data.transactions || [];
     },
     initialData,
-    enabled: !!accountId,
+    enabled: !!accountId && !accountId.startsWith("react-aria-"),
     staleTime: 1000 * 60 * 5,
-    refetchInterval: 1000 * 60 * 5,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      return (!data || data.length === 0) ? 3000 : 1000 * 60 * 5;
+    },
     refetchOnWindowFocus: false,
+  });
+}
+
+export function useSearchTransactions(query: string) {
+  return useQuery({
+    queryKey: ["transactions-search", query],
+    queryFn: async () => {
+      if (!query || query.length < 2) return [];
+      const res = await apiFetch(
+        `/api/accounts/transactions/search?q=${encodeURIComponent(query)}`,
+        {},
+        true,
+      );
+      const data = await res.json() as { transactions?: Transaction[] };
+      return data.transactions || [];
+    },
+    enabled: query.length >= 2,
+    staleTime: 1000 * 60,
   });
 }
 
@@ -93,6 +114,7 @@ export function useSpendingTrends(
   to: string,
   timeType: "monthly" | "weekly" | "daily" = "monthly",
   initialData?: BankChartData[],
+  isReady: boolean = true,
 ) {
   return useQuery({
     queryKey: ["spending-trends", accountId, from, to, timeType],
@@ -120,7 +142,7 @@ export function useSpendingTrends(
       return result.data || [];
     },
     initialData,
-    enabled: !!accountId && !!from && !!to,
+    enabled: !!accountId && !accountId.startsWith("react-aria-") && !!from && !!to && isReady,
     staleTime: 1000 * 60 * 5,
     refetchInterval: 1000 * 60 * 5,
     refetchOnWindowFocus: false,

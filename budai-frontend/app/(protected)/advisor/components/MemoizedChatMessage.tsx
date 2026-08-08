@@ -110,10 +110,7 @@ export const MemoizedChatMessage = React.memo(
                                   },
                                   {
                                     body: {
-                                      session_id:
-                                        activeSessionId === "new-session"
-                                          ? null
-                                          : activeSessionId,
+                                      session_id: activeSessionId,
                                       htil_response: {
                                         user_message: val,
                                       },
@@ -130,8 +127,12 @@ export const MemoizedChatMessage = React.memo(
                 </div>
               )}
 
-            {message.parts && message.parts.length > 0
-              ? message.parts.map((part, index) => {
+            {(() => {
+              const displayParts = message.parts && message.parts.length > 0 
+                ? message.parts 
+                : [{ type: "text", text: (message as any).content || "" }];
+
+              return displayParts.map((part: any, index: number) => {
                   if (part.type === "text") {
                     const text = part.text;
                     const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g;
@@ -322,8 +323,8 @@ export const MemoizedChatMessage = React.memo(
                     );
                   }
                   return null;
-                })
-              : null}
+                });
+            })()}
 
             {(() => {
               interface TelemetryData {

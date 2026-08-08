@@ -12,6 +12,7 @@ from typing import List, Dict, Any
 
 logger = get_core_logger(__name__)
 
+
 class GetFinancialHealthMetricsInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
 
@@ -32,11 +33,11 @@ def _calculate_health_data(user_uuid: str):
     overall_score = (runway_score + velocity_score + mpc_score + shock_score + drag_score) / 5.0
     
     metrics = [
-        {"Metric": "Liquidity Runway", "Score": round(runway_score, 1)},
-        {"Metric": "Net Worth Velocity", "Score": round(velocity_score, 1)},
-        {"Metric": "Savings Rate (MPC)", "Score": round(mpc_score, 1)},
-        {"Metric": "Shock Absorption", "Score": round(shock_score, 1)},
-        {"Metric": "Interest Drag", "Score": round(drag_score, 1)}
+        {"Metric": "Cash Reserves", "Score": round(runway_score, 1)},
+        {"Metric": "Growth Speed", "Score": round(velocity_score, 1)},
+        {"Metric": "Savings Rate", "Score": round(mpc_score, 1)},
+        {"Metric": "Emergency Readiness", "Score": round(shock_score, 1)},
+        {"Metric": "Debt Burden", "Score": round(drag_score, 1)}
     ]
     
     recommendations = []
@@ -50,21 +51,54 @@ def _calculate_health_data(user_uuid: str):
     if not recommendations:
         recommendations.append({"title": "Maintain Momentum", "desc": "Your health metrics are excellent. Continue your current allocation strategy.", "type": "success"})
         
-    return overall_score, metrics, recommendations
+    _res = overall_score, metrics, recommendations
+    logger.info(f"Tool returned: {str(_res)[:1000]}")
+    return _res
 
 @tool(args_schema=AnalyzeCriticalSurvivalMetricsInput)
 def analyze_critical_survival_metrics(user_uuid: str) -> str:
-    """Analyze the user's survival metrics like runway and emergency fund health."""
-    return "Your survival metrics are stable. You have 45 days of runway."
+    """
+    Analyze the user's survival metrics like runway and emergency fund health.
+    
+    Args:
+        user_uuid (str): The unique identifier of the user.
+        
+    Returns:
+        str: Analysis summary of survival metrics and runway.
+    """
+    logger.info(f"Executing MCP Tool: analyze_critical_survival_metrics")
+    _res = "Your survival metrics are stable. You have 45 days of runway."
+    logger.info(f"Tool returned: {str(_res)[:1000]}")
+    return _res
 
 @tool(args_schema=AnalyzeWealthAccelerationMetricsInput)
 def analyze_wealth_acceleration_metrics(user_uuid: str) -> str:
-    """Calculate the velocity of net worth growth and wealth accumulation metrics."""
-    return "Your wealth acceleration is increasing by 4.2% MoM."
+    """
+    Calculate the velocity of net worth growth and wealth accumulation metrics.
+    
+    Args:
+        user_uuid (str): The unique identifier of the user.
+        
+    Returns:
+        str: Summary of net worth acceleration trends.
+    """
+    logger.info(f"Executing MCP Tool: analyze_wealth_acceleration_metrics")
+    _res = "Your wealth acceleration is increasing by 4.2% MoM."
+    logger.info(f"Tool returned: {str(_res)[:1000]}")
+    return _res
 
 @tool(args_schema=PlotHealthRadarInput)
 def plot_health_radar(user_uuid: str) -> str:
-    """Generate a multi-dimensional health radar chart comparing different financial metrics."""
+    """
+    Generate a multi-dimensional health radar chart comparing different financial metrics.
+    
+    Args:
+        user_uuid (str): The unique identifier of the user.
+        
+    Returns:
+        str: The generated radar chart data summary and trigger.
+    """
+    logger.info(f"Executing MCP Tool: plot_health_radar")
     try:
         overall, metrics, recommendations = _calculate_health_data(user_uuid)
         payload = [{"bank_name": "Overall Health", "data": metrics}]
@@ -75,14 +109,27 @@ def plot_health_radar(user_uuid: str) -> str:
             summary_lines.append(f"- {m['Metric']}: {m['Score']}")
         
         summary_text = "\n".join(summary_lines)
-        return f"Financial health radar generated. [TRIGGER_HEALTH_RADAR_CHART:{cache_id}]\n\nDATA SUMMARY:\n{summary_text}"
+        _res = f"Financial health radar generated. [TRIGGER_HEALTH_RADAR_CHART:{cache_id}]\n\nDATA SUMMARY:\n{summary_text}"
+        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        return _res
     except Exception as e:
         logger.error(f"Health Radar Error: {e}")
-        return f"Health radar failed. [TRIGGER_HEALTH_RADAR_CHART:CACHE_HEALTH_1]"
+        _res = f"Health radar failed. [TRIGGER_HEALTH_RADAR_CHART:CACHE_HEALTH_1]"
+        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        return _res
 
 @tool(args_schema=GetFinancialHealthMetricsInput)
 def get_financial_health_metrics(user_uuid: str) -> str:
-    """Calculate and return comprehensive financial health scores and actionable recommendations."""
+    """
+    Calculate and return comprehensive financial health scores and actionable recommendations.
+    
+    Args:
+        user_uuid (str): The unique identifier of the user.
+        
+    Returns:
+        str: A JSON string containing overall scores, metric breakdowns, and top recommendations.
+    """
+    logger.info(f"Executing MCP Tool: get_financial_health_metrics")
     try:
         overall, metrics, recommendations = _calculate_health_data(user_uuid)
         data = {
@@ -90,7 +137,11 @@ def get_financial_health_metrics(user_uuid: str) -> str:
             "metrics": metrics,
             "recommendations": recommendations[:3]
         }
-        return json.dumps(data)
+        _res = json.dumps(data)
+        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        return _res
     except Exception as e:
         logger.error(f"Health metrics failed: {e}")
-        return json.dumps({"overall_score": 0, "metrics": [], "recommendations": []})
+        _res = json.dumps({"overall_score": 0, "metrics": [], "recommendations": []})
+        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        return _res

@@ -254,7 +254,7 @@ export const AdvisorSidebar = ({
                 <Button
                   slot="close"
                   onPress={saveEdit}
-                  className="bg-linear-to-r from-[#7000ff] to-[#00f2ff] text-white border-none font-black uppercase tracking-widest text-[11px] h-10 rounded-xl px-6 shadow-[0_0_15px_rgba(0,242,255,0.3)] hover:shadow-[0_0_25px_rgba(0,242,255,0.5)] transition-all border-none cursor-pointer"
+                  className="font-black uppercase tracking-widest text-[11px] h-10 rounded-xl px-6 transition-all cursor-pointer bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
                 >
                   Save Changes
                 </Button>
