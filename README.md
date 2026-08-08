@@ -15,6 +15,7 @@ Our goal is to serve students and working professionals by automating the most s
 
 ### 1.1 Native Orchestration & Messaging
 
+- **Modular REST Architecture:** Transitioned from monolithic controllers to explicit HTTP-method-based routing (e.g., `controllers/chat/get.py`) connected via FastAPI `APIRouter`.
 - **Direct Tool Execution:** The system has transitioned away from legacy distributed runtimes, now executing all MCP tools directly via a unified `MCPBridge`. Tools are routed locally inside the FastAPI worker, wrapping synchronous tool triggers in `asyncio.to_thread()` to ensure execution occurs without blocking the primary event loop.
 - **Vercel Data Stream Implementation:** The system implements the Vercel AI SDK protocol for streaming:
     - `0:`: Standard conversational text chunks.
@@ -25,6 +26,7 @@ Our goal is to serve students and working professionals by automating the most s
 The analytical logic is governed by a stateful directed acyclic graph (DAG) implemented via **LangGraph**, coordinating specialized sub-agents:
 - **Intent Router (Supervisor):** Utilizes `mlx-community/Qwen3.5-4B-4bit` served via **Rapid-MLX** for query classification and delegation.
 - **Specialized Worker Agents:** Includes domain-specific agents such as the `Analyser Agent` (data crunching), `Forecaster Agent` (predictive modeling), `Categorizer Agent` (transaction labeling), `Memory Agent` (FAISS interactions), `Market Agent` (macro-economic context), `Scenario Agent` (what-if analysis), and `Health Agent` (financial wellness).
+- **Global Inference Lock:** Implements a localized semaphore (`llm_manager.py`) to prevent concurrent FastAPI worker threads from crashing the local LLM with overlapping generation requests.
 - **State Schema:** The `BudAIState` manages session persistence, user UUIDs, active account IDs, and a buffer for raw data and chart metadata.
 - **Clarification Loop:** Proactively triggers an `ask_user` tool call for Human-in-the-Loop (HTIL) engagement when user intent is underspecified, pausing execution until the user provides clarification.
 
@@ -34,7 +36,7 @@ Projections are generated via a hybrid computational architecture:
 - **Stochastic Core:** The extracted parameters drive a **C++ shared object (.so)** implementing the Bates Model. It runs 1,000 parallel Monte Carlo simulations per account, incorporating recurring bill detection to clamp simulated paths to deterministic historical patterns.
 
 ### 1.4 Retrieval-Augmented Generation (RAG)
-- **Vector Core:** Uses **FAISS (Facebook AI Similarity Search)** with `IndexFlatL2` for sub-millisecond semantic retrieval.
+- **Vector Core:** Uses **FAISS (Facebook AI Similarity Search)** with `IndexFlatL2` for sub-millisecond semantic retrieval, with a planned migration to **pgvector** for strict relational integrity.
 - **Embedding Model:** Transactions are vectorized using the **`all-MiniLM-L6-v2`** SentenceTransformer (384-dimensional dense vectors).
 - **Contextual Financial Profile (CFP):** Compiles an 8k-token grounding block including:
     - Tier 1: Immediate Liquidity & Net Cash Flow.
@@ -53,20 +55,29 @@ Projections are generated via a hybrid computational architecture:
 
 ### 2.1 Ingestion and Deduplication
 - **Asynchronous Webhook Ingestion:** Syncing is offloaded to background threads. The system triggers TrueLayer data updates via the `/truelayer` webhook, processing massive payloads asynchronously without blocking the user interface.
-- **Database-First Caching & High-Water Marks:** To avoid rate limits, the system tracks the `last_synced_at` timestamp per account. It queries local PostgreSQL first and only hits the TrueLayer API for the exact missing time window.
-- **SHA-256 Hashing:** Every transaction is hashed using a composite key (UserUUID + AccountID + Date + Amount + Description) to ensure deduplication across redundant TrueLayer API syncs.
+- **Database-First Caching & High-Water Marks:** To avoid rate limits, the system tracks the `last_synced_at` timestamp per account. It queries local PostgreSQL first and only hits the TrueLayer API using a 3-day overlap window (`last_synced_at - timedelta(days=3)`) to ensure zero transaction dropping during sync increments.
+- **Composite Constraints:** Strict PostgreSQL unique constraints on `(account_id, provider_transaction_id)` mathematically reject redundant TrueLayer API duplicates.
 - **PostgreSQL Persistence:** All records are stored in a PostgreSQL 15 cluster with optimized pooling (SQLAlchemy `pool_size=20`, `max_overflow=40`).
+- **Lazy ML Categorization:** Incoming transactions are saved instantly during sync, while heavy ML classification is offloaded to a non-blocking background thread.
 
-### 2.2 Active Learning Feedback Loop
-- **Classification:** Transactions are initially labeled via a **HistGradientBoosting (XGBoost)** classifier trained on standardized financial taxonomies.
-- **Feedback Retraining:** Manual category overrides trigger an asynchronous background task. The system recalibrates the local model and performs a historical sweep to reconcile existing ledger labels with the new user-verified logic.
+### 2.2 Advanced Categorization ETL Pipeline
+To ensure high accuracy with zero third-party API costs, transactions are categorized via a 4-stage "waterfall" architecture:
+1. **SQL Cache:** Instant exact-match lookups against the localized `MerchantKnowledge` table.
+2. **Vector RAG:** Semantic similarity matching using `pgvector` to resolve merchant name variations.
+3. **Local LLM Zero-Shot:** Internal weight-based inference for identifying broad merchant categories.
+4. **Agentic Web Search MCP:** An automated Playwright/Node-based browser search acts as the ultimate fallback for obscure merchants, saving the summarized web context permanently to the database to prevent repeat searches.
+
+### 2.3 Subscription & Pattern Detection
+- **Mathematical Interval Grouping:** Groups transactions by `merchant_name` and computes interval statistics ($\Delta t$) to identify recurring payments.
+- **Variance Thresholds:** Flags subscriptions deterministically by analyzing the standard deviation of payment gaps ($\sigma_{\text{days}} \le 15$).
+- **Normalized Data Structure:** Stripped legacy denormalized columns (`bank_name`, `account_number`) from the `subscriptions` table, enforcing strict relational joins via `bank_uuid` to maintain 3NF (Third Normal Form) integrity.
 
 ---
 
 ## 3. Technology Stack
 
 ### 3.1 Backend & AI Infrastructure
-- **Python Framework:** FastAPI 0.110+ (Uvicorn worker model).
+- **Python Framework:** FastAPI 0.110+ (Uvicorn worker model) with modular REST routing and domain-separated controllers.
 - **AI Core:** LangChain 0.2+, LangGraph, Ollama, Rapid-MLX.
 - **Security:** AES-256 (Fernet) for at-rest encryption of bank tokens.
 - **Networking:** Docker-aware routing (Automatic `localhost` -> `budai-db` hostname rewrite inside containers).
@@ -83,7 +94,6 @@ Projections are generated via a hybrid computational architecture:
 
 ### 4.1 Prerequisites
 - **Docker Desktop** (mandatory for full cluster deployment).
-- **NVIDIA Container Toolkit** (required for GPU acceleration of PyTorch and local LLMs).
 - **Node.js 20+** (for independent frontend development).
 
 ### 4.2 Cluster Initialization
@@ -141,10 +151,22 @@ Interactive API documentation is automatically generated by FastAPI. Once the cl
 
 ## 7. Technical Roadmap & Scaling Strategy
 
-As BudAI prepares to scale to 20,000+ active users, the architecture is evolving from a localized Digital Twin to a distributed micro-services architecture:
+As BudAI prepares to scale to 20,000+ active users, the architecture is evolving from a localized monolithic application to a distributed micro-services architecture:
 
-- **Vector Database Migration:** Transitioning from in-memory FAISS to **pgvector** to support partitioned, hardware-accelerated metadata pre-filtering and prevent RAM exhaustion.
-- **Asynchronous Task Queues:** Migrating heavy ML workloads (PyTorch Monte Carlo simulations, XGBoost retraining) out of the FastAPI ASGI event loop into a dedicated **Celery** cluster using Redis as the message broker.
+- **4-Stage Categorization ETL:** Full deployment of the `MerchantKnowledge` pgvector cache combined with the Agentic Web Search MCP (Playwright/Node) to mathematically eliminate LLM hallucinations on obscure transactions.
+- **Asynchronous Task Queues:** Migrating heavy ML workloads (PyTorch Monte Carlo simulations) out of the FastAPI ASGI event loop into a dedicated **Celery** cluster using Redis as the message broker.
 - **Connection Pooling:** Implementing **PgBouncer** and transitioning to asynchronous database drivers (`asyncpg`) to prevent SQLAlchemy connection starvation under high concurrency.
 - **Multi-Node LLM Inference:** Scaling the current local inference (`host.docker.internal`) into a distributed **vLLM Kubernetes cluster** with continuous batching and HAProxy load balancing.
-- **Advanced Budgeting:** Implementing variance analytics, subscription detection, and cash flow prediction arrays to alert users to future overdrafts.
+- **API Resource Management:** Developing token quota systems and strict rate limiting to throttle local LLM consumption per user and prevent infrastructure overload.
+- **Advanced Budgeting & Forecasting:** Implementing variance analytics, deterministic 30-day cash flow arrays, and automated paycheck allocation rules.
+
+---
+
+## 8. Future Feature Horizons
+
+Beyond the foundational architecture, BudAI is laying the groundwork for advanced financial intelligence in upcoming releases:
+
+- **Proactive Cash Flow Modeling:** Anticipating future liquidity based on deterministic schedules and predictive modeling.
+- **External Market Context:** Integrating macroeconomic indicators and localized financial parameters for demographic benchmarking.
+- **Credit Health Optimization:** Simulating debt pay-down strategies and managing long-term liability costs.
+- **System Personalization:** Developing multi-category tagging and customized reporting logic tailored to individual user behaviors.

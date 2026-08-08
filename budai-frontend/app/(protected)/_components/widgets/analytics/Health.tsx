@@ -114,13 +114,14 @@ export function Health() {
                 </span>
                 <ProgressCircle 
                   size="lg" 
-                  classNames={{
-                    base: "max-w-md",
-                    track: "stroke-white/5",
-                    indicator: "stroke-primary",
-                  }}
+                  className="max-w-md"
                   value={isNaN(Number(healthData.metricsData.overall_score)) ? 0 : Number(healthData.metricsData.overall_score)} 
-                />
+                >
+                  <ProgressCircle.Track>
+                    <ProgressCircle.TrackCircle className="stroke-white/5" />
+                    <ProgressCircle.FillCircle className="stroke-primary" />
+                  </ProgressCircle.Track>
+                </ProgressCircle>
                 <span className="text-xl font-black font-mono text-primary mt-1">
                   {isNaN(Number(healthData.metricsData.overall_score)) ? 0 : Number(healthData.metricsData.overall_score)}
                 </span>
