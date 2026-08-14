@@ -1,3 +1,4 @@
+import json
 import csv
 import io
 import os
@@ -31,18 +32,18 @@ def export_advisory_state(user_uuid: str, chart_type: str, raw_data: dict, ai_an
     Returns:
         str: A success message indicating the export path or an error.
     """
-    logger.info(f"Executing MCP Tool: export_advisory_state")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: export_advisory_state", "status_code": 200}))
     from services.mcp_bridge import MCPBridge
     bridge = MCPBridge()
     try:
         file_path = bridge.write_advisory_file(user_uuid, chart_type, raw_data, ai_analysis)
         _res = f"Operational state successfully exported to {file_path}."
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Advisory Export Failed: {e}")
+        logger.error(json.dumps({"message": f"Advisory Export Failed: {e}", "status_code": 500}))
         _res = f"Export failed: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 @tool(args_schema=ExportAnalyzedStatementInput)
@@ -57,7 +58,7 @@ def export_custom_statement(user_uuid: str, ai_summary: str) -> str:
     Returns:
         str: A success message with the file download path or an error.
     """
-    logger.info(f"Executing MCP Tool: export_custom_statement")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: export_custom_statement", "status_code": 200}))
     from services.mcp_bridge import MCPBridge
     bridge = MCPBridge()
     try:
@@ -75,12 +76,12 @@ def export_custom_statement(user_uuid: str, ai_summary: str) -> str:
         file_path = os.path.join(bridge.workspace_dir, "exports", filename)
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         _res = bridge.generate_outbound_statement(file_path, output.getvalue())
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Statement Export Failed: {e}")
+        logger.error(json.dumps({"message": f"Statement Export Failed: {e}", "status_code": 500}))
         _res = f"Statement export failed: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 @tool(args_schema=MemorySearchInput)
@@ -94,18 +95,18 @@ def search_user_memory(query: str) -> str:
     Returns:
         str: The retrieved contextual memory or facts.
     """
-    logger.info(f"Executing MCP Tool: search_user_memory")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: search_user_memory", "status_code": 200}))
     from services.mcp_bridge import MCPBridge
     bridge = MCPBridge()
     try:
         result = bridge.call_tool_sync("memory", "search_financial_history_semantic", {"query": query})
         _res = result
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Memory Search Failed: {e}")
+        logger.error(json.dumps({"message": f"Memory Search Failed: {e}", "status_code": 500}))
         _res = f"Search failed: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 @tool(args_schema=MemoryExtractionInput)
@@ -119,7 +120,7 @@ def save_to_user_memory(entities: list) -> str:
     Returns:
         str: A success message indicating memory was updated.
     """
-    logger.info(f"Executing MCP Tool: save_to_user_memory")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: save_to_user_memory", "status_code": 200}))
     _res = "Memory successfully updated."
-    logger.info(f"Tool returned: {str(_res)[:1000]}")
+    logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
     return _res

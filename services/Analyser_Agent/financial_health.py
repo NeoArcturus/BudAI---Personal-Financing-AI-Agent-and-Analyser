@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import numpy as np
 import logging
@@ -26,7 +27,7 @@ class FinancialHealthAnalyzer:
                     df['date'] = df['timestamp']
                 return df
             except Exception:
-                logger.error("An error occurred in this block", exc_info=True)
+                logger.error(json.dumps({"message": f"An error occurred in this block", "status_code": 500}), exc_info=True)
                 return pd.DataFrame()
     def _fetch_total_liquidity(self):
         try:
@@ -41,11 +42,11 @@ class FinancialHealthAnalyzer:
                     if balance is not None:
                         total += float(balance)
                 except Exception:
-                    logger.error("An error occurred in this block", exc_info=True)
+                    logger.error(json.dumps({"message": f"An error occurred in this block", "status_code": 500}), exc_info=True)
                     pass
             return float(total)
         except Exception:
-            logger.error("An error occurred in this block", exc_info=True)
+            logger.error(json.dumps({"message": f"An error occurred in this block", "status_code": 500}), exc_info=True)
             return 0.0
     def calculate_subsistence_floor(self):
         df = self.df.copy()
@@ -75,7 +76,7 @@ class FinancialHealthAnalyzer:
                 debts = session.execute(
                     text("SELECT account_name, balance, interest_rate, min_payment FROM liabilities WHERE user_uuid = :user_uuid"), {"user_uuid": self.user_uuid}).fetchall()
         except Exception:
-            logger.error("An error occurred in this block", exc_info=True)
+            logger.error(json.dumps({"message": f"An error occurred in this block", "status_code": 500}), exc_info=True)
             return []
         sorted_debts = sorted(debts, key=lambda x: x[2], reverse=True)
         plan = []
@@ -142,7 +143,7 @@ class FinancialHealthAnalyzer:
                     text("SELECT SUM(balance * (interest_rate / 100) / 12) FROM liabilities WHERE user_uuid = :user_uuid"), {"user_uuid": self.user_uuid}).fetchone()
                 monthly_interest = float(res[0]) if res and res[0] else 0.0
         except Exception:
-            logger.error("An error occurred in this block", exc_info=True)
+            logger.error(json.dumps({"message": f"An error occurred in this block", "status_code": 500}), exc_info=True)
             monthly_interest = 0.0
         df = self.df.copy()
         if df.empty:

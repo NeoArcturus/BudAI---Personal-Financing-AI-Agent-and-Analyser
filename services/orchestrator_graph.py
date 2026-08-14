@@ -20,8 +20,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import interrupt
-from langchain.agents import create_agent
-from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langgraph.prebuilt import create_react_agent
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from typing import Literal, Optional, List, Any
@@ -105,7 +104,7 @@ def get_session_history(user_uuid: str, session_id: Optional[str] = None):
                 else:
                     history.append(AIMessage(content=r.content))
     except Exception as e:
-        logger.error(f"Failed to fetch session history: {e}")
+        logger.error(json.dumps({"message": f"Failed to fetch session history: {e}", "status_code": 500}))
     return history[-6:]
 
 def ensure_string(content: Any) -> str:
@@ -125,7 +124,7 @@ async def generate_session_title(session_id: str, first_msg: str):
     """Generates an automatic session title."""
     try:
         llm = ChatOpenAI(
-            model="mlx-community/Qwen3.5-4B-4bit",
+            model="lmstudio-community/Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit",
             base_url=OLLAMA_BASE_URL,
             api_key="budai-local",
             temperature=0
@@ -173,18 +172,18 @@ async def execute_chat_graph_async(initial_state: dict):
             session.add(new_msg)
             session.commit()
     except Exception as e:
-        logger.error(f"DB failed: {e}")
+        logger.error(json.dumps({"message": f"DB failed: {e}", "status_code": 500}))
 
 supervisor_llm = ChatOpenAI(
-    model="mlx-community/Qwen3.5-4B-4bit",
+    model="lmstudio-community/Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit",
     base_url=OLLAMA_BASE_URL,
     api_key="budai-local",
     temperature=0.1,
     streaming=True,
-    max_tokens=4096,
-    reasoning_effort="high",
+    max_tokens=20000,
+    
     timeout=600,
-    model_kwargs={"extra_body": {"chat_template_kwargs": {"enable_thinking": True}}}
+    
 )
 
 supervisor_tools = [
@@ -208,17 +207,17 @@ supervisor_tools = [
 current_date_str = datetime.now().strftime("%Y-%m-%d")
 current_year_str = str(datetime.now().year)
 
-budai_app = create_agent(
+budai_app = create_react_agent(
     model=supervisor_llm,
     tools=supervisor_tools,
     state_schema=BudAIState,
-    system_prompt=f"""### ROLE: Financial Advisor (BudAI)
+    prompt=f"""### ROLE: Financial Advisor (BudAI)
 You are BudAI, a personal finance advisor.
 - Date: {current_date_str}
 
 ### CRITICAL STRICT ANTI-HALLUCINATION PROTOCOL ###
 1. NO FABRICATION: You are strictly forbidden from fabricating data. Use ONLY data from tool DATA SUMMARY blocks.
-2. TOOL EXECUTION IS MANDATORY: You must emit a valid JSON tool call to fetch data. You CANNOT roleplay or pretend to execute a tool in your output.
+2. TOOL EXECUTION: You have access to specialized tools. You must use them to fetch data when required.
 3. ADMIT IGNORANCE: If a tool returns no data, state "I do not have the data." Do not guess.
 4. MULTI-CURRENCY: Respect the native currency returned by the tools (e.g., £, €, $). Do not force GBP. No emojis.
 5. FRESH DATA: Always execute tools for fresh data. Never copy-paste numbers from chat history.
@@ -235,8 +234,6 @@ ROUTING (Use these tools):
 - call_market_agent: real-time/historical market data (stocks, FX).
 - call_scenario_agent: complex 'What-If' scenarios.
 """,
-    middleware=[
-        HumanInTheLoopMiddleware(interrupt_on={"ask_user": True})
-    ],
+    
     checkpointer=InMemorySaver()
 )

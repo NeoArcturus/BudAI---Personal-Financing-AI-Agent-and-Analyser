@@ -1,3 +1,4 @@
+import json
 import logging
 import pandas as pd
 import yfinance as yf
@@ -23,13 +24,13 @@ def get_historical_market_data(ticker: str, period: str = "6mo", interval: str =
     Returns:
         str: Summary of the asset's historical performance.
     """
-    logger.info(f"Executing MCP Tool: get_historical_market_data")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: get_historical_market_data", "status_code": 200}))
     try:
         t = yf.Ticker(ticker)
         hist = t.history(period=period, interval=interval)
         if hist.empty:
             _res = f"No historical data found for ticker: {ticker}"
-            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
             return _res
         
         start_price = hist['Close'].iloc[0]
@@ -43,12 +44,12 @@ def get_historical_market_data(ticker: str, period: str = "6mo", interval: str =
         summary += f"- Volatility (StdDev): {hist['Close'].std():.2f}\n"
         
         _res = summary
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Market Tool Error: {e}")
+        logger.error(json.dumps({"message": f"Market Tool Error: {e}", "status_code": 500}))
         _res = f"Error fetching market history: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 @tool(args_schema=MarketComparisonInput)
@@ -66,21 +67,21 @@ def compare_spending_to_market(user_uuid: str, category: str, ticker: str, days:
     Returns:
         str: A statistical correlation and comparison summary.
     """
-    logger.info(f"Executing MCP Tool: compare_spending_to_market")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: compare_spending_to_market", "status_code": 200}))
     try:
         from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         to_date = datetime.now().strftime("%Y-%m-%d")
         
-        df_spending = _get_combined_categorized_data(["ALL"], "", user_uuid, from_date, to_date)
+        df_spending = _get_combined_categorized_data([], "", user_uuid, from_date, to_date)
         if df_spending.empty:
             _res = "No spending data found for comparison."
-            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
             return _res
         
         df_cat = df_spending[df_spending['Category'].str.lower() == category.lower()]
         if df_cat.empty:
             _res = f"No spending found in category '{category}' over the last {days} days."
-            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
             return _res
         
         df_cat['date'] = pd.to_datetime(df_cat['date'])
@@ -90,7 +91,7 @@ def compare_spending_to_market(user_uuid: str, category: str, ticker: str, days:
         hist = t.history(start=from_date, end=to_date)
         if hist.empty:
             _res = f"Could not fetch market data for {ticker}."
-            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
             return _res
         
         market_trend = hist['Close'].resample('W').mean()
@@ -122,11 +123,11 @@ def compare_spending_to_market(user_uuid: str, category: str, ticker: str, days:
             summary += f"Observation: Low correlation. Your {category} spending appears independent of {ticker} market fluctuations."
             
         _res = summary
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
         
     except Exception as e:
-        logger.error(f"Comparison Tool Error: {e}")
+        logger.error(json.dumps({"message": f"Comparison Tool Error: {e}", "status_code": 500}))
         _res = f"Error performing comparison: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res

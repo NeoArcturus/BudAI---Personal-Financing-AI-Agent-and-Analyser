@@ -45,8 +45,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
       - REDIS_URL=redis://budai-redis:6379/0
-      - OLLAMA_BASE_URL=http://host.docker.internal:8000/v1
-      - VLLM_SUMMARY_URL=http://host.docker.internal:8000/v1
+      - OLLAMA_BASE_URL=http://100.74.150.48:1234/v1
+      - VLLM_SUMMARY_URL=http://100.74.150.48:1234/v1
       - NEWSDATA_API_KEY=${NEWSDATA_API_KEY}
       - CLIENT_ID=${CLIENT_ID}
       - CLIENT_SECRET=${CLIENT_SECRET}
@@ -58,6 +58,8 @@ services:
       - WEBHOOK_BASE_URL=${WEBHOOK_BASE_URL}
     ports:
       - "8080:8080"
+    volumes:
+      - .:/app
     restart: always
 
 volumes:

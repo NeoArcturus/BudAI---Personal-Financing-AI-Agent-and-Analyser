@@ -38,11 +38,11 @@ export default function SpendingTrendWidgetClient({
   initialData,
 }: SpendingTrendWidgetProps) {
   const router = useRouter();
-  const { onRemove } = React.useContext(WidgetContext);
+  const { onRemove, instanceId } = React.useContext(WidgetContext);
   const { accounts, createNewSession } = useBudAI();
 
   const [selectedAccountId, setSelectedAccountId] = usePersistedState<string>(
-    "spending_trend_account",
+    `trends_account${instanceId ? `-${instanceId}` : ""}`,
     accounts[0]?.account_id || "",
   );
 
@@ -151,7 +151,7 @@ export default function SpendingTrendWidgetClient({
     return accounts.find((a) => a.account_id === selectedAccountId) || null;
   }, [selectedAccountId, accounts]);
 
-  const activeAccountName = activeAccount?.bank_name || "Select Account";
+  const activeAccountName = activeAccount?.bank_name ? `${activeAccount.bank_name} (${activeAccount.currency || "GBP"})` : "Select Account";
 
   const dropdownItems = useMemo(() => {
     return accounts.map(a => ({ ...a, id: a.account_id }));
@@ -345,7 +345,7 @@ export default function SpendingTrendWidgetClient({
                         <div className="flex flex-col w-full">
                           <Badge.Anchor className="w-full relative flex items-center justify-between">
                             <Label className="text-[11px] font-black text-foreground uppercase tracking-tight cursor-pointer pointer-events-none pr-4 italic">
-                              {acc.bank_name}
+                              {acc.bank_name} ({acc.currency || "GBP"})
                             </Label>
                             {selectedAccountId === acc.account_id && (
                               <Badge className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,242,255,0.6)]" />

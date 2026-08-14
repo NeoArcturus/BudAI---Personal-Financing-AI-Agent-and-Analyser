@@ -43,7 +43,7 @@ async def run_graph_task(task_id: str, state_input: dict):
             "result": "".join(full_response)
         }), ex=3600)
     except Exception as e:
-        logger.error(f"Task {task_id} failed: {e}")
+        logger.error(json.dumps({"message": f"Task {task_id} failed: {e}", "status_code": 500}))
         redis_client.set(f"task:{task_id}", json.dumps({
             "status": "failed", "error": str(e)
         }), ex=3600)
@@ -71,7 +71,7 @@ async def async_chat(request: ChatRequest, background_tasks: BackgroundTasks, cu
         "messages": chat_history + [HumanMessage(content=request.input)],
         "user_uuid": str(current_user.user_uuid),
         "session_id": request.session_id,
-        "active_account_id": request.active_account_id or "ALL",
+        "active_account_id": request.active_account_id or None,
         "is_explanation": False
     }
     task_id = str(uuid.uuid4())
@@ -126,7 +126,7 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
         "messages": chat_history + [HumanMessage(content=user_input)],
         "user_uuid": str(current_user.user_uuid),
         "session_id": thread_id,
-        "active_account_id": request.active_account_id or "ALL",
+        "active_account_id": request.active_account_id or None,
         "is_explanation": False
     }
 
@@ -208,7 +208,7 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                                 await queue.put(f'9:[{json.dumps(tool_call)}]\n')
 
             except Exception as e:
-                logger.error(f"Event processing failed: {e}")
+                logger.error(json.dumps({"message": f"Event processing failed: {e}", "status_code": 500}))
                 await queue.put(e)
 
         async def keep_alive():
@@ -319,7 +319,7 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                             session.commit()
                     await asyncio.to_thread(_save_history)
                 except Exception as e:
-                    logger.error(f"Failed to save assistant msg: {e}")
+                    logger.error(json.dumps({"message": f"Failed to save assistant msg: {e}", "status_code": 500}))
 
         except asyncio.CancelledError:
             logger.warning(
@@ -328,7 +328,7 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                 if not t.done():
                     t.cancel()
         except Exception as e:
-            logger.error(f"Stream error: {e}")
+            logger.error(json.dumps({"message": f"Stream error: {e}", "status_code": 500}))
         finally:
             from services.llm_manager import GlobalLLMManager
             GlobalLLMManager.release()
@@ -362,7 +362,7 @@ async def create_chat_session(current_user: User):
             session.commit()
             return {"session_id": session_id}
     except Exception as e:
-        logger.error(f"Failed to create chat session: {e}")
+        logger.error(json.dumps({"message": f"Failed to create chat session: {e}", "status_code": 500}))
         from fastapi import HTTPException
         raise HTTPException(
             status_code=500, detail="Failed to create new chat session.")
@@ -387,7 +387,7 @@ async def chat(request: ChatRequest, current_user: User):
         "messages": chat_history + [HumanMessage(content=request.input)],
         "user_uuid": str(current_user.user_uuid),
         "session_id": request.session_id,
-        "active_account_id": request.active_account_id or "ALL",
+        "active_account_id": request.active_account_id or None,
         "is_explanation": False
     }
     await execute_chat_graph_async({
@@ -509,7 +509,7 @@ async def chat(request: ChatRequest, current_user: User):
                     yield finish_item
                 yield 'data: [DONE]\n\n'
         except Exception as e:
-            logger.error(f"Generate error: {e}")
+            logger.error(json.dumps({"message": f"Generate error: {e}", "status_code": 500}))
         finally:
             from services.llm_manager import GlobalLLMManager
             GlobalLLMManager.release()

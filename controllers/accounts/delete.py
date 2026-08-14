@@ -1,3 +1,4 @@
+import json
 import asyncio
 from fastapi import HTTPException
 from services.api_integrator.access_token_generator import AccessTokenGenerator
@@ -30,5 +31,5 @@ async def revoke_connection(user_uuid: str, provider_id: str):
         
         return {"status": "success", "results": results}
     except Exception as e:
-        logger.error(f"Error revoking connection for user {user_uuid}, provider {provider_id}: {e}")
+        logger.error(json.dumps({"message": f"Error revoking connection for user {user_uuid}, provider {provider_id}: {e}", "status_code": 500}))
         raise HTTPException(status_code=500, detail=str(e))

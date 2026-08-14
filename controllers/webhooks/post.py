@@ -1,3 +1,4 @@
+import json
 from fastapi import BackgroundTasks
 import requests
 from services.logger_setup import get_core_logger
@@ -20,12 +21,12 @@ def background_fetch_async_results(results_uri: str, user_uuid: str, bank_uuid: 
         bank_uuid (str): The UUID of the bank connection.
         acc_id (str): The specific account ID being synced.
     """
-    logger.info(f"Background fetching async results from {results_uri} for account {acc_id}")
+    logger.info(json.dumps({"message": f"Background fetching async results from {results_uri} for account {acc_id}", "status_code": 200}))
     try:
         with SessionLocal() as session:
             bank = session.query(Bank).filter_by(bank_uuid=bank_uuid, user_uuid=user_uuid).first()
             if not bank:
-                logger.warning(f"Bank not found for UUID: {bank_uuid}")
+                logger.warning(json.dumps({"message": f"Bank not found for UUID: {bank_uuid}", "status_code": 400}))
                 return
             
             enc_token = bank.access_token
@@ -39,16 +40,16 @@ def background_fetch_async_results(results_uri: str, user_uuid: str, bank_uuid: 
             res = requests.get(results_uri, headers=headers)
             if res.status_code == 200:
                 tx_data = res.json().get("results", [])
-                logger.info(f"Successfully pulled {len(tx_data)} transactions from async results.")
+                logger.info(json.dumps({"message": f"Successfully pulled {len(tx_data)} transactions from async results.", "status_code": 200}))
                 
                 sync_service = TrueLayerSync(user_id=user_uuid)
                 sync_service.process_and_store_transactions(session, tx_data, user_uuid, bank_uuid, acc_id)
                 
             else:
-                logger.error(f"Failed to fetch results from {results_uri}. Status: {res.status_code}, Response: {res.text}")
+                logger.error(json.dumps({"message": f"Failed to fetch results from {results_uri}. Status: {res.status_code}, Response: {res.text}", "status_code": 500}))
                 
     except Exception as e:
-        logger.error(f"Error in background async fetch: {e}", exc_info=True)
+        logger.error(json.dumps({"message": f"Error in background async fetch: {e}", "status_code": 500}), exc_info=True)
 
 async def handle_truelayer_webhook(payload: dict, background_tasks: BackgroundTasks, user_uuid: str, bank_uuid: str, acc_id: str):
     """
@@ -68,7 +69,7 @@ async def handle_truelayer_webhook(payload: dict, background_tasks: BackgroundTa
     status = payload.get("status")
     task_id = payload.get("task_id")
     
-    logger.info(f"Received TrueLayer Async Webhook for task {task_id} with status: {status}")
+    logger.info(json.dumps({"message": f"Received TrueLayer Async Webhook for task {task_id} with status: {status}", "status_code": 200}))
     
     if status == "Succeeded":
         results_uri = payload.get("results_uri")
@@ -80,12 +81,27 @@ async def handle_truelayer_webhook(payload: dict, background_tasks: BackgroundTa
                 bank_uuid, 
                 acc_id
             )
-            logger.info(f"Offloaded results fetching for task {task_id} to background tasks.")
+            logger.info(json.dumps({"message": f"Offloaded results fetching for task {task_id} to background tasks.", "status_code": 200}))
         else:
-            logger.warning("Missing required query params (user_uuid, bank_uuid, acc_id) or results_uri.")
+            logger.warning(json.dumps({"message": f"Missing required query params (user_uuid, bank_uuid, acc_id) or results_uri.", "status_code": 400}))
             
     elif status == "Failed":
         error_desc = payload.get("error_description", "Unknown error")
-        logger.error(f"TrueLayer async task {task_id} failed: {error_desc}")
+        logger.error(json.dumps({"message": f"TrueLayer async task {task_id} failed: {error_desc}", "status_code": 500}))
         
+        # Self-Healing Fallback for strict SCA banks (e.g. Revolut)
+        if "sca" in error_desc.lower() or "psu authentication" in error_desc.lower():
+            from datetime import datetime, timedelta
+            fallback_from = (datetime.utcnow() - timedelta(days=89)).strftime("%Y-%m-%d")
+            logger.info(json.dumps({"message": f"SCA exemption expired for {acc_id}. Triggering self-healing fallback sync from {fallback_from}.", "status_code": 200}))
+            
+            def fallback_sync_task():
+                try:
+                    sync_service = TrueLayerSync(user_id=user_uuid)
+                    sync_service.trigger_sync(account_id=acc_id, user_uuid=user_uuid, from_date=fallback_from)
+                except Exception as e:
+                    logger.error(json.dumps({"message": f"Fallback sync failed: {e}", "status_code": 500}))
+                    
+            background_tasks.add_task(fallback_sync_task)
+            
     return {"status": "ok", "message": "Webhook processed"}

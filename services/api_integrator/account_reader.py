@@ -1,8 +1,11 @@
+import json
 import pandas as pd
 from typing import Any
+from datetime import datetime, timedelta
 from config import SessionLocal
 from models.database_models import Account, Bank, Transaction
 import requests
+from services.api_integrator.truelayer_sync import TrueLayerSync
 from services.logger_setup import get_core_logger
 
 logger = get_core_logger(__name__)
@@ -24,7 +27,7 @@ class AccountReader:
                     provider_names[p.get("provider_id")] = p.get(
                         "display_name")
         except Exception as e:
-            logger.error("Error fetching providers", exc_info=True)
+            logger.error(json.dumps({"message": f"Error fetching providers", "status_code": 500}), exc_info=True)
 
         try:
             with SessionLocal() as session:
@@ -44,11 +47,32 @@ class AccountReader:
                             "currency": "GBP",
                             "balance": 0.0,
                             "status": "revoked",
+                            "consent_status": b.consent_status,
+                            "bank_uuid": b.bank_uuid,
                             "provider_id": b.truelayer_provider_id,
                             "logo_url": logo_url
                         })
                         continue
                     for acc in b.accounts:
+                        if acc.last_synced_at is None or (datetime.utcnow() - acc.last_synced_at).total_seconds() > 300:
+                            try:
+                                sync = TrueLayerSync(self.user_id)
+                                enc_token = b.access_token
+                                if isinstance(enc_token, memoryview):
+                                    enc_token = enc_token.tobytes()
+                                access_token = sync.cipher_suite.decrypt(bytes(enc_token)).decode()
+                                bal_res = sync._make_request(f"{sync.base_url}/{acc.account_id}/balance", access_token, b.truelayer_provider_id)
+                                if bal_res:
+                                    if bal_res.status_code == 200:
+                                        bal_data = bal_res.json().get("results", [{}])[0]
+                                        acc.account_balance = float(bal_data.get("available", bal_data.get("current", 0.0)))
+                                        acc.last_synced_at = datetime.utcnow()
+                                        session.commit()
+                                    elif bal_res.status_code == 404:
+                                        logger.debug(json.dumps({"message": f"Balance not supported for {acc.account_id} (404)", "status_code": 100}))
+                            except Exception as e:
+                                logger.error(json.dumps({"message": f"Failed direct balance sync for {acc.account_id}: {e}", "status_code": 500}))
+
                         all_accounts.append({
                             "account_id": acc.account_id,
                             "bank_name": display_name,
@@ -58,12 +82,14 @@ class AccountReader:
                             "currency": acc.currency or "GBP",
                             "balance": acc.account_balance or 0.0,
                             "status": "active",
+                            "consent_status": b.consent_status,
+                            "bank_uuid": b.bank_uuid,
                             "provider_id": b.truelayer_provider_id,
                             "logo_url": logo_url
                         })
             return all_accounts
         except Exception:
-            logger.error("Error getting all accounts", exc_info=True)
+            logger.error(json.dumps({"message": f"Error getting all accounts", "status_code": 500}), exc_info=True)
             return []
 
     def get_account_balance(self, bank_name_or_id, user_uuid, account_type="TRANSACTION"):
@@ -77,16 +103,10 @@ class AccountReader:
             return float(acc.account_balance)
         return 0.0
 
-    def get_transactions(self, identifier, user_uuid, start_date=None, end_date=None, expense_only=False):
+    def get_transactions(self, account_id: str, user_uuid, start_date=None, end_date=None, expense_only=False):
         try:
             with SessionLocal() as session:
-                query = session.query(Transaction)
-                identifiers = [identifier] if isinstance(identifier, str) else identifier
-                if identifiers and "ALL" not in [str(i).upper() for i in identifiers]:
-                    query = query.join(Account).join(Bank).filter(
-                        (Bank.bank_name.in_(identifiers)) | (Account.account_id.in_(identifiers))
-                    )
-                query = query.filter(Transaction.user_uuid == user_uuid)
+                query = session.query(Transaction).filter_by(account_id=account_id, user_uuid=user_uuid)
 
                 if start_date:
                     query = query.filter(Transaction.date >= start_date)
@@ -109,12 +129,14 @@ class AccountReader:
                         "currency": tx.currency,
                         "description": tx.description,
                         "category": tx.category,
+                        "sub_category": tx.sub_category,
+                        "tags": tx.tags or [],
                         "bank_uuid": tx.bank_uuid,
                         "account_id": tx.account_id
                     })
                 return pd.DataFrame(transactions)
         except Exception:
-            logger.error("Error in get_transactions", exc_info=True)
+            logger.error(json.dumps({"message": f"Error in get_transactions", "status_code": 500}), exc_info=True)
             return pd.DataFrame()
 
     def get_transactions_by_account(self, account_id):
@@ -131,9 +153,11 @@ class AccountReader:
                         "timestamp": tx.date.isoformat() if tx.date else None,
                         "amount": tx.amount,
                         "description": tx.description,
-                        "category": tx.category
+                        "category": tx.category,
+                        "sub_category": tx.sub_category,
+                        "tags": tx.tags or []
                     })
                 return results
         except Exception:
-            logger.error("An error occurred in get_transactions_by_account", exc_info=True)
+            logger.error(json.dumps({"message": f"An error occurred in get_transactions_by_account", "status_code": 500}), exc_info=True)
             return []

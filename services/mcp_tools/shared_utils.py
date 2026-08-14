@@ -14,7 +14,7 @@ logger = get_core_logger(__name__)
 
 class GenerateFinancialForecastInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
-    account_ids: List[str] = Field(..., description="List of accounts.")
+    account_id: str = Field(..., description="List of accounts.")
     days: int = Field(default=30)
     discipline_multiplier: float = Field(default=1.0)
     drift_adjustment: float = Field(default=0.0)
@@ -27,40 +27,40 @@ class GetBudgetVarianceInput(BaseModel):
 
 class ForecastBudgetImpactInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
-    account_ids: List[str] = Field(..., description="List of accounts.")
+    account_id: str = Field(..., description="List of accounts.")
     days: int = Field(default=30)
 
 class FindTotalSpentInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
     category: str = Field(...)
-    account_ids: List[str] = Field(...)
+    account_id: str = Field(...)
     from_date: str | None = Field(default=None)
     to_date: str | None = Field(default=None)
 
 class FindHighestSpendingCategoryInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
-    account_ids: List[str] = Field(...)
+    account_id: str = Field(...)
     from_date: str | None = Field(default=None)
     to_date: str | None = Field(default=None)
 
 class CreateBargraphChartInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
-    account_ids: List[str] = Field(...)
+    account_id: str = Field(...)
 
 class CreatePieChartInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
-    account_ids: List[str] = Field(...)
+    account_id: str = Field(...)
 
 class PlotExpensesInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
     plot_time_type: str = Field(...)
     from_date: str = Field(...)
     to_date: str = Field(...)
-    account_ids: List[str] = Field(...)
+    account_id: str = Field(...)
 
 class GenerateExpenseForecastInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
-    account_ids: List[str] = Field(...)
+    account_id: str = Field(...)
     days: int = Field(default=30)
 
 class ScenarioInjection(BaseModel):
@@ -71,7 +71,7 @@ class ScenarioInjection(BaseModel):
 
 class GenerateHypotheticalScenarioInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
-    account_ids: List[str] = Field(..., description="List of account IDs or bank names.")
+    account_id: str = Field(..., description="List of account IDs or bank names.")
     days: int = Field(default=30, description="Forecast horizon in days.")
     injections: List[ScenarioInjection] = Field(..., description="List of hypothetical financial events to inject into the forecast.")
 
@@ -83,7 +83,7 @@ class AnalyzeWealthAccelerationMetricsInput(BaseModel):
 
 class PlotCashFlowMixedInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
-    account_ids: List[str] = Field(...)
+    account_id: str = Field(...)
     from_date: str = Field(...)
     to_date: str = Field(...)
 
@@ -105,22 +105,19 @@ def _cache_chart_data(data: Any) -> str:
             session.execute(text("INSERT INTO chart_cache (cache_id, chart_data) VALUES (:id, :data)"), {"id": cache_id, "data": json.dumps(data)})
             session.commit()
     except Exception as e:
-        logger.error(f"Cache failed: {e}")
+        logger.error(json.dumps({"message": f"Cache failed: {e}", "status_code": 500}))
         raise
     return cache_id
 
-def _parse_accounts(account_ids, user_uuid):
-    if not account_ids:
+def _parse_accounts(account_id, user_uuid):
+    if not account_id:
         return [], ""
-    
-    if isinstance(account_ids, str):
-        account_ids = [account_ids]
         
     resolved_names = []
     resolved_ids = []
     
     with SessionLocal() as session:
-        if any(str(i).strip().upper() == "ALL" for i in account_ids):
+        if not account_id:
             rows = session.execute(text("""
                 SELECT a.account_id, b.bank_name
                 FROM accounts a
@@ -131,7 +128,7 @@ def _parse_accounts(account_ids, user_uuid):
                 resolved_ids.append(r[0])
                 resolved_names.append(r[1])
         else:
-            for ident in account_ids:
+            for ident in [account_id]:
                 ident_clean = str(ident).strip()
                 row = session.execute(text("""
                     SELECT a.account_id, b.bank_name
@@ -147,7 +144,7 @@ def _parse_accounts(account_ids, user_uuid):
                     resolved_ids.append(ident_clean)
                     resolved_names.append(ident_clean)
 
-    return list(set(resolved_names)), ",".join(list(set(resolved_ids)))
+    return list(set(resolved_ids)), list(set(resolved_names))
 
 def _get_combined_categorized_data(accounts, suffix, user_uuid, from_date=None, to_date=None):
     combined_df = pd.DataFrame()
@@ -165,7 +162,7 @@ def _get_combined_categorized_data(accounts, suffix, user_uuid, from_date=None, 
             """
             params = {"user_uuid": user_uuid, "start_date": start_date, "end_date": end_date}
             
-            if accounts and "ALL" not in [str(acc).upper() for acc in accounts]:
+            if accounts:
                 query += " AND (b.bank_name = ANY(:accounts) OR a.account_id = ANY(:accounts))"
                 params["accounts"] = accounts
             
@@ -179,5 +176,5 @@ def _get_combined_categorized_data(accounts, suffix, user_uuid, from_date=None, 
                     combined_df.rename(columns={'timestamp': 'date'}, inplace=True)
                     combined_df['date'] = pd.to_datetime(combined_df['date'], errors='coerce')
     except Exception as e:
-        logger.error(f"DB query failed: {e}")
+        logger.error(json.dumps({"message": f"DB query failed: {e}", "status_code": 500}))
     return combined_df

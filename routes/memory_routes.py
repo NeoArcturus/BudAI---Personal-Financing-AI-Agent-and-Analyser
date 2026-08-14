@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, HTTPException
 from services.memory_service import MemoryService
 from services.logger_setup import get_core_logger
@@ -10,7 +11,7 @@ def dump_memory():
     """
     Returns the raw FAISS metadata containing all embedded transactions.
     """
-    logger.info("Memory dump endpoint called.")
+    logger.info(json.dumps({"message": f"Memory dump endpoint called.", "status_code": 200}))
     try:
         mem = MemoryService()
         metadata = getattr(mem, 'metadata', [])
@@ -20,5 +21,5 @@ def dump_memory():
             "data": metadata
         }
     except Exception as e:
-        logger.error(f"Error dumping memory: {e}")
+        logger.error(json.dumps({"message": f"Error dumping memory: {e}", "status_code": 500}))
         raise HTTPException(status_code=500, detail=str(e))

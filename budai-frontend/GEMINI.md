@@ -1,9 +1,9 @@
 # BudAI Engineering Context & UI Standards
 
 ## Project Identity
-**BudAI** is an institutional-grade financial intelligence platform. It provides a "Digital Twin" experience for personal finance, focusing on data precision, risk analysis, and asset growth. 
+**BudAI** is a financial analysis platform. It provides a comprehensive experience for personal finance, focusing on data precision, risk analysis, and asset growth. 
 
-The platform's goal is to present complex financial insights with the clarity and professional tone of a high-tier financial advisor, stripping away all technical jargon and marketing fluff to focus entirely on **Data Integrity**.
+The platform's goal is to present financial insights with the clarity and professional tone of a financial advisor, stripping away all technical jargon and marketing fluff to focus entirely on **Data Integrity**.
 
 ---
 
@@ -19,7 +19,7 @@ The following terms are strictly forbidden in all user-facing interfaces, compon
 | **Agent / Multi-Agent** | Intelligence, Analysis, Service | Implies external entities; keep focus on unified advisor experience. |
 | **Orchestration** | Analysis, Integration | Jargon; confusing for financial users. |
 | **Phase X (e.g., Phase 5)** | (Omit or use "Advanced") | Internal roadmap terminology; irrelevant to end-users. |
-| **LSTM / Bates / AI** | (Omit or use "Forecast / Insight") | Technical acronyms; maintain "Digital Twin" mystery and focus on data. |
+| **LSTM / Bates / AI** | (Omit or use "Forecast / Insight") | Technical acronyms; maintain focus on data. |
 | **Velocity** | Growth, Rate, Yield | Racing metaphor; violates financial sobriety. |
 | **Turbo / Nitro / Blazing** | (Omit or use "Instant / Real-time") | Competitive/Racing terminology; unprofessional. |
 | **Evolution / Evolutionized** | (Omit or use "Precision / Professional") | Marketing fluff; lacks technical precision. |
@@ -40,7 +40,7 @@ The following terms are strictly forbidden in all user-facing interfaces, compon
 - **"I do not have data on that":** Use this exact phrase (or equivalent professional tone) when data is missing. Do not guess.
 - **GBP Only:** All financial values must use the **£** symbol. No exceptions for UI placeholders.
 
-## 2. Liquid State Dashboard Architecture
+## 2. Dashboard Architecture
 - **Widget Independence:** Every widget is a self-sustaining entity that fetches its own data and handles its own errors.
 - **No Shared Mutable State:** Avoid coupling widgets to a central "Manager" for data; they should rely on isolated API calls.
 - **Clean De-cluttering:** If a component or text does not directly serve a financial insight or utility, it should be removed. No placeholders or "dummy stats".

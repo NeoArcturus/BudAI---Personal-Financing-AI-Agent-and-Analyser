@@ -1,3 +1,4 @@
+import json
 from fastapi import HTTPException, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -66,5 +67,5 @@ async def handle_truelayer_callback(code: str, state: str):
         clear_user_cache(str(user_uuid), namespace="accounts")
         return RedirectResponse(f"{target_frontend}/home")
     
-    logger.warning("TrueLayer callback validation failed")
+    logger.warning(json.dumps({"message": f"TrueLayer callback validation failed", "status_code": 400}))
     raise HTTPException(status_code=400, detail="Authentication failed or session expired")

@@ -69,7 +69,7 @@ const baseOptions = {
 
           const rawData = context.raw;
           const symbol = rawData?.currency === "USD" ? "$" :
-            rawData?.currency === "EUR" ? "€" : "£";
+            Intl.NumberFormat("en-GB", { style: "currency", currency: rawData?.currency || "GBP" }).formatToParts(1).find(x => x.type === "currency")?.value || "£";
           return `${context.dataset.label || ""}: ${symbol}${Number(value).toFixed(2)}`;
         },
         afterLabel: (context: any) => {
@@ -238,6 +238,12 @@ export const buildChartConfig = (
     payloadData = rawPayload;
   }
 
+  let currencySymbol = "£";
+  if (payloadData.length > 0 && payloadData[0].data && payloadData[0].data.length > 0) {
+    const currencyStr = payloadData[0].data[0].currency || "GBP";
+    currencySymbol = new Intl.NumberFormat("en-GB", { style: "currency", currency: currencyStr }).formatToParts(1).find(x => x.type === "currency")?.value || "£";
+  }
+
   if (type === "categorized") {
     const allLabels = Array.from(
       new Set(
@@ -253,7 +259,7 @@ export const buildChartConfig = (
           : getColorForMetric("expense", i);
 
       return {
-        label: `${b.bank_name} Spent (£)`,
+        label: `${b.bank_name} Spent (${currencySymbol})`,
         data: allLabels.map((l) => {
           const pt = (b.data || []).find((d) => String(d.Category) === l);
           return pt ? { ...pt, x: l, y: Number(pt.Total_Amount) } : { x: l, y: 0 };
@@ -363,7 +369,7 @@ export const buildChartConfig = (
         datasets: [
           {
             type: "line",
-            label: "Net Flow (£)",
+            label: `Net Flow (${currencySymbol})`,
             data: netBalance,
             borderColor: getColorForMetric("balance", 0),
             backgroundColor: `${getColorForMetric("balance", 0)}1A`,
@@ -376,14 +382,14 @@ export const buildChartConfig = (
           },
           {
             type: "bar",
-            label: "Income (£)",
+            label: `Income (${currencySymbol})`,
             data: income,
             backgroundColor: getColorForMetric("income", 1),
             borderRadius: 4,
           },
           {
             type: "bar",
-            label: "Expenses (£)",
+            label: `Expenses (${currencySymbol})`,
             data: expense,
             backgroundColor: getColorForMetric("expense", 2),
             borderRadius: 4,
@@ -559,7 +565,7 @@ export const buildChartConfig = (
               ...pt,
               x: label,
               y: Number(
-                pt?.["Projected Daily Spend (£)"] ||
+                pt?.[`Projected Daily Spend (${currencySymbol})`] ||
                 pt?.["Projected Spend"] ||
                 pt?.["spend"] ||
                 pt?.["Amount"] ||
@@ -610,7 +616,7 @@ export const buildChartConfig = (
                 const dayNum = Number(parts[1]);
                 const events = timeline.filter((e) => e.day === dayNum);
                 if (events.length > 0) {
-                  return events.map((e) => `Event: ${e.merchant} (${e.category}) £${e.amount}`).join("\n");
+                  return events.map((e) => `Event: ${e.merchant} (${e.category}) ${currencySymbol}${e.amount}`).join("\n");
                 }
                 return "";
               }
@@ -644,32 +650,62 @@ export const buildChartConfig = (
       });
 
     const datasets: ChartDataset<"line">[] = [];
+    let colorIndex = 0;
 
     payloadData.forEach((b, idx) => {
-      const metricColor =
-        payloadData.length > 1
-          ? colorPalette[idx % colorPalette.length]
-          : getColorForMetric("expense", idx);
+      const bankCategories = Array.from(
+        new Set((b.data || []).map((d) => String(d.Category || "Total")))
+      );
 
-      datasets.push({
-        label: b.bank_name,
-        data: allDates.map((date) => {
-          const pt = (b.data || []).find(
-            (d) => String(d.Date || d.Month || d.date || d.month || "") === date,
-          );
-          return pt ? {
-            ...pt,
-            x: date,
-            y: Number(pt.Amount || pt.Total_Amount || pt.amount || pt.total_amount || 0)
-          } : { x: date, y: 0 };
-        }) as any[],
-        borderColor: metricColor,
-        fill: false,
-        tension: 0.4,
-        pointRadius: 2,
-        pointBackgroundColor: metricColor,
-        pointHitRadius: 10,
-        pointHoverRadius: 6,
+      bankCategories.forEach((category) => {
+        const metricColor =
+          bankCategories.length === 1 && payloadData.length === 1
+            ? getColorForMetric("expense", idx)
+            : colorPalette[colorIndex % colorPalette.length];
+        colorIndex++;
+
+        const label =
+          category === "Total"
+            ? b.bank_name
+            : payloadData.length > 1
+              ? `${b.bank_name} - ${category}`
+              : category;
+
+        datasets.push({
+          label,
+          data: allDates.map((date) => {
+            const pts = (b.data || []).filter(
+              (d) =>
+                String(d.Date || d.Month || d.date || d.month || "") === date &&
+                String(d.Category || "Total") === category
+            );
+
+            if (pts.length > 0) {
+              const totalAmt = pts.reduce(
+                (sum, pt) =>
+                  sum +
+                  Number(pt.Amount || pt.Total_Amount || pt.amount || pt.total_amount || 0),
+                0
+              );
+              const descriptions = pts.flatMap((pt) => pt.description || pt.descriptions || []);
+              
+              return {
+                x: date,
+                y: totalAmt,
+                descriptions: descriptions.length > 0 ? descriptions : undefined,
+                currency: pts[0].currency || "GBP",
+              };
+            }
+            return { x: date, y: 0 };
+          }) as any[],
+          borderColor: metricColor,
+          fill: false,
+          tension: 0.4,
+          pointRadius: 2,
+          pointBackgroundColor: metricColor,
+          pointHitRadius: 10,
+          pointHoverRadius: 6,
+        });
       });
     });
 

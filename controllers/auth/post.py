@@ -1,3 +1,4 @@
+import json
 from fastapi import HTTPException, Response
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
@@ -71,7 +72,7 @@ async def login_user(request: LoginRequest, response: Response):
     try:
         user_uuid = user_service.authenticate_user(request.email, request.password)
     except ValueError as e:
-        logger.warning(f"Authentication failed for {request.email}: {e}")
+        logger.warning(json.dumps({"message": f"Authentication failed for {request.email}: {e}", "status_code": 400}))
         raise HTTPException(status_code=401, detail=str(e))
     
     username = request.email.split('@')[0]
@@ -145,7 +146,7 @@ async def refresh_user_token(response: Response, db: Session, refresh_token: str
             "username": username
         }
     except JWTError as e:
-        logger.error(f"JWT Error during token refresh: {e}")
+        logger.error(json.dumps({"message": f"JWT Error during token refresh: {e}", "status_code": 500}))
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
 async def register_user(request: RegisterRequest):
@@ -165,7 +166,7 @@ async def register_user(request: RegisterRequest):
     try:
         user_uuid = user_service.register_user(request.email, request.password)
     except ValueError as e:
-        logger.warning(f"Registration failed for {request.email}: {e}")
+        logger.warning(json.dumps({"message": f"Registration failed for {request.email}: {e}", "status_code": 400}))
         raise HTTPException(status_code=400, detail=str(e))
     return {"status": "success", "user_uuid": user_uuid}
 
@@ -198,3 +199,34 @@ async def revoke_access(provider_id: str, user_uuid: str):
     token_gen = AccessTokenGenerator()
     results = token_gen.revoke_provider(provider_id, user_uuid)
     return {"results": results}
+
+async def generate_reauth_link_controller(bank_uuid: str, user_uuid: str):
+    """
+    Generates a TrueLayer reauthentication link for a specific bank connection.
+    
+    Args:
+        bank_uuid (str): The UUID of the bank connection.
+        user_uuid (str): The UUID of the user.
+        
+    Returns:
+        dict: The reauthentication URI.
+    """
+    from config import SessionLocal
+    from models.database_models import Bank
+    token_gen = AccessTokenGenerator()
+    with SessionLocal() as session:
+        bank = session.query(Bank).filter_by(bank_uuid=bank_uuid, user_uuid=user_uuid).first()
+        if not bank:
+            raise HTTPException(status_code=404, detail="Bank not found")
+        
+        enc_refresh = bank.refresh_token
+        if isinstance(enc_refresh, memoryview):
+            enc_refresh = enc_refresh.tobytes()
+        
+        refresh_token = token_gen.cipher_suite.decrypt(enc_refresh).decode()
+        reauth_url = token_gen.get_reauth_link(refresh_token, user_uuid)
+        
+        if not reauth_url:
+            raise HTTPException(status_code=500, detail="Failed to generate reauth link")
+            
+        return {"reauth_url": reauth_url}

@@ -1,3 +1,4 @@
+import json
 import numpy as np
 from datetime import datetime, timedelta
 import uuid
@@ -15,22 +16,25 @@ class SubscriptionDetector:
         self.price_hike_threshold = price_hike_threshold
 
     def analyze_user_subscriptions(self, user_uuid: str):
-        logger.info(f"Starting subscription detection for user {user_uuid}")
+        logger.info(json.dumps({"message": f"Starting subscription detection for user {user_uuid}", "status_code": 200}))
         
         with SessionLocal() as session:
             txs = session.execute(
                 select(Transaction)
                 .where(Transaction.user_uuid == user_uuid)
                 .where(Transaction.amount < 0)
-                .where(Transaction.category == "Bills & Utilities")
+                .where(Transaction.category.in_([
+                    "Subscriptions & Digital Services", 
+                    "Utilities", 
+                    "Entertainment & Lifestyle",
+                    "Healthcare"
+                ]))
                 .order_by(Transaction.date.asc())
             ).scalars().all()
             
             if not txs:
-                logger.info(f"No bill-related transactions found for user {user_uuid}")
+                logger.info(json.dumps({"message": f"No bill-related transactions found for user {user_uuid}", "status_code": 200}))
                 return
-                
-                
 
             anti_grocery_keywords = [
                 "tesco", "sainsburys", "asda", "morrisons", "aldi", "lidl", 
@@ -57,13 +61,15 @@ class SubscriptionDetector:
                 if not clean_desc:
                     continue
                     
-                if clean_desc not in merchant_groups:
-                    merchant_groups[clean_desc] = []
-                merchant_groups[clean_desc].append(tx)
+                group_key = (tx.account_id, clean_desc)
+                if group_key not in merchant_groups:
+                    merchant_groups[group_key] = []
+                merchant_groups[group_key].append(tx)
 
             detected_subscriptions = []
             
-            for merchant_key, m_txs in merchant_groups.items():
+            for group_key, m_txs in merchant_groups.items():
+                account_id, merchant_key = group_key
                 if len(m_txs) < 3:
                     continue
                     
@@ -100,39 +106,63 @@ class SubscriptionDetector:
                     is_hike = latest_amount > (historical_avg * self.price_hike_threshold)
                     
                     pretty_merchant_name = merchant_key.title()
-                    
                     last_tx = m_txs[-1]
                     
-                    detected_subscriptions.append({
-                        "merchant_name": pretty_merchant_name,
-                        "bank_uuid": getattr(last_tx, "bank_uuid", None),
-                        "expected_amount": latest_amount,
-                        "last_payment_date": last_date,
-                        "last_payment_amount": latest_amount,
-                        "predicted_frequency": freq,
-                        "next_expected_date": next_date,
-                        "is_price_hike": is_hike
-                    })
+                    # 90-day expiration time check
+                    from models.status_codes import PipelineStatus
+                    now_utc = datetime.utcnow().replace(tzinfo=None)
+                    days_overdue = (now_utc - next_date.replace(tzinfo=None)).days
                     
-            session.query(Subscription).filter(Subscription.user_uuid == user_uuid).delete()
-            
+                    status_val = "303-410" if days_overdue > 90 else PipelineStatus.SUBSCRIPTION_DETECTED.value
+                    if is_hike and days_overdue <= 90:
+                        status_val = PipelineStatus.SUBSCRIPTION_PRICE_HIKE.value
+
+                    # Prevent Duplication & Overwriting (UPSERT logic)
+                    existing_sub = session.query(Subscription).filter_by(
+                        user_uuid=user_uuid, 
+                        merchant_name=pretty_merchant_name,
+                        account_id=account_id
+                    ).first()
+
+                    if existing_sub:
+                        existing_sub.last_payment_date = last_date.replace(tzinfo=None)
+                        existing_sub.last_payment_amount = float(latest_amount)
+                        existing_sub.next_expected_date = next_date.replace(tzinfo=None)
+                        existing_sub.is_price_hike = bool(is_hike)
+                        existing_sub.status = status_val
+                        existing_sub.last_updated = datetime.utcnow()
+                        detected_subscriptions.append(existing_sub)
+                    else:
+                        new_sub = Subscription(
+                            subscription_uuid=str(uuid.uuid4()),
+                            user_uuid=user_uuid,
+                            merchant_name=pretty_merchant_name,
+                            account_id=account_id,
+                            bank_uuid=getattr(last_tx, "bank_uuid", None),
+                            expected_amount=float(latest_amount),
+                            last_payment_date=last_date.replace(tzinfo=None),
+                            last_payment_amount=float(latest_amount),
+                            predicted_frequency=freq,
+                            next_expected_date=next_date.replace(tzinfo=None),
+                            is_price_hike=bool(is_hike),
+                            status=status_val
+                        )
+                        session.add(new_sub)
+                        detected_subscriptions.append(new_sub)
+                    
+                    # Update tags for these transactions
+                    for tx in m_txs:
+                        existing_tags = tx.tags or []
+                        if "#recurring" not in existing_tags:
+                            existing_tags.append("#recurring")
+                        if is_hike and tx.transaction_uuid == last_tx.transaction_uuid:
+                            if "#price-hike" not in existing_tags:
+                                existing_tags.append("#price-hike")
+                        tx.tags = existing_tags
+                        
             if detected_subscriptions:
-                for sub in detected_subscriptions:
-                    new_sub = Subscription(
-                        subscription_uuid=str(uuid.uuid4()),
-                        user_uuid=user_uuid,
-                        merchant_name=sub["merchant_name"],
-                        bank_uuid=sub["bank_uuid"],
-                        expected_amount=sub["expected_amount"],
-                        last_payment_date=sub["last_payment_date"],
-                        last_payment_amount=sub["last_payment_amount"],
-                        predicted_frequency=sub["predicted_frequency"],
-                        next_expected_date=sub["next_expected_date"],
-                        is_price_hike=sub["is_price_hike"]
-                    )
-                    session.add(new_sub)
                 session.commit()
-                logger.info(f"Detected and saved {len(detected_subscriptions)} subscriptions for user {user_uuid}")
+                logger.info(json.dumps({"message": f"Detected and saved {len(detected_subscriptions)} subscriptions for user {user_uuid}", "status_code": 200}))
             else:
                 session.commit()
-                logger.info(f"No valid subscriptions found for user {user_uuid}")
+                logger.info(json.dumps({"message": f"No valid subscriptions found for user {user_uuid}", "status_code": 200}))

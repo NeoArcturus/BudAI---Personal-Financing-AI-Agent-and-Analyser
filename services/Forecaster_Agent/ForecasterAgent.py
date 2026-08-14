@@ -1,3 +1,4 @@
+import json
 import os
 import pandas as pd
 import numpy as np
@@ -31,9 +32,9 @@ class ForecasterAgent:
             
         self.lstm = _global_lstm
 
-    def fetch_live_balance(self, identifier, user_uuid):
+    def fetch_live_balance(self, account_id, user_uuid):
         user_acc = AccountReader(user_id=user_uuid)
-        balance = user_acc.get_account_balance(identifier, user_uuid)
+        balance = user_acc.get_account_balance(account_id, user_uuid)
         return float(balance) if balance is not None else 0.0
 
     def get_user_params(self, user_uuid):
@@ -44,12 +45,12 @@ class ForecasterAgent:
                 return {'kappa': params.kappa, 'theta': params.theta, 'xi': params.xi, 'rho': params.rho, 'lambda': params.lambda_val, 'mu_J': params.mu_j, 'sigma_j': params.sigma_j}
         return {'kappa': 2.0, 'theta': 0.04, 'xi': 0.1, 'rho': -0.5, 'lambda': 0.1, 'mu_J': -0.05, 'sigma_J': 0.1}
 
-    def generate_dynamic_parameters(self, user_uuid):
+    def generate_dynamic_parameters(self, user_uuid, account_id):
         try:
             from services.memory_service import MemoryService
             mem = MemoryService()
             user_acc = AccountReader(user_id=user_uuid)
-            df = user_acc.get_transactions("ALL", user_uuid)
+            df = user_acc.get_transactions(account_id, user_uuid)
             if df.empty or len(df) < 30:
                 return
             df['Date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True)
@@ -78,7 +79,7 @@ class ForecasterAgent:
                     out[0]*5.0), float(out[1]*0.2), float(out[2]*0.5), float(out[3]*2.0-1.0), float(out[4]*0.5), float(out[5]*0.5-0.25), float(out[6]*0.3)
                 session.commit()
         except Exception as e:
-            logger.error(f"Dynamic params failed: {e}")
+            logger.error(json.dumps({"message": f"Dynamic params failed: {e}", "status_code": 500}))
 
     def fetch_and_calculate_parameters(self, account_id, current_balance, user_uuid, lookback_days=60):
         try:
@@ -88,7 +89,7 @@ class ForecasterAgent:
                 user = AccountReader(user_uuid)
                 bank_name = row[0] if row else account_id
                 df = user.get_transactions(
-                    identifier=bank_name, user_uuid=user_uuid)
+                    account_id, user_uuid=user_uuid)
         except Exception:
             df = pd.DataFrame()
         if df.empty:
@@ -120,7 +121,7 @@ class ForecasterAgent:
                 user = AccountReader(user_uuid)
                 bank_name = row[0] if row else account_id
                 df = user.get_transactions(
-                    identifier=bank_name, user_uuid=user_uuid)
+                    account_id, user_uuid=user_uuid)
         except Exception:
             df = pd.DataFrame()
         if df.empty:

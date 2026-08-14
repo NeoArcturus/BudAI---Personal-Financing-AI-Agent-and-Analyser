@@ -52,7 +52,7 @@ def _calculate_health_data(user_uuid: str):
         recommendations.append({"title": "Maintain Momentum", "desc": "Your health metrics are excellent. Continue your current allocation strategy.", "type": "success"})
         
     _res = overall_score, metrics, recommendations
-    logger.info(f"Tool returned: {str(_res)[:1000]}")
+    logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
     return _res
 
 @tool(args_schema=AnalyzeCriticalSurvivalMetricsInput)
@@ -66,9 +66,9 @@ def analyze_critical_survival_metrics(user_uuid: str) -> str:
     Returns:
         str: Analysis summary of survival metrics and runway.
     """
-    logger.info(f"Executing MCP Tool: analyze_critical_survival_metrics")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: analyze_critical_survival_metrics", "status_code": 200}))
     _res = "Your survival metrics are stable. You have 45 days of runway."
-    logger.info(f"Tool returned: {str(_res)[:1000]}")
+    logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
     return _res
 
 @tool(args_schema=AnalyzeWealthAccelerationMetricsInput)
@@ -82,9 +82,9 @@ def analyze_wealth_acceleration_metrics(user_uuid: str) -> str:
     Returns:
         str: Summary of net worth acceleration trends.
     """
-    logger.info(f"Executing MCP Tool: analyze_wealth_acceleration_metrics")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: analyze_wealth_acceleration_metrics", "status_code": 200}))
     _res = "Your wealth acceleration is increasing by 4.2% MoM."
-    logger.info(f"Tool returned: {str(_res)[:1000]}")
+    logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
     return _res
 
 @tool(args_schema=PlotHealthRadarInput)
@@ -98,7 +98,7 @@ def plot_health_radar(user_uuid: str) -> str:
     Returns:
         str: The generated radar chart data summary and trigger.
     """
-    logger.info(f"Executing MCP Tool: plot_health_radar")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: plot_health_radar", "status_code": 200}))
     try:
         overall, metrics, recommendations = _calculate_health_data(user_uuid)
         payload = [{"bank_name": "Overall Health", "data": metrics}]
@@ -110,12 +110,12 @@ def plot_health_radar(user_uuid: str) -> str:
         
         summary_text = "\n".join(summary_lines)
         _res = f"Financial health radar generated. [TRIGGER_HEALTH_RADAR_CHART:{cache_id}]\n\nDATA SUMMARY:\n{summary_text}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Health Radar Error: {e}")
+        logger.error(json.dumps({"message": f"Health Radar Error: {e}", "status_code": 500}))
         _res = f"Health radar failed. [TRIGGER_HEALTH_RADAR_CHART:CACHE_HEALTH_1]"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 @tool(args_schema=GetFinancialHealthMetricsInput)
@@ -129,7 +129,7 @@ def get_financial_health_metrics(user_uuid: str) -> str:
     Returns:
         str: A JSON string containing overall scores, metric breakdowns, and top recommendations.
     """
-    logger.info(f"Executing MCP Tool: get_financial_health_metrics")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: get_financial_health_metrics", "status_code": 200}))
     try:
         overall, metrics, recommendations = _calculate_health_data(user_uuid)
         data = {
@@ -138,10 +138,10 @@ def get_financial_health_metrics(user_uuid: str) -> str:
             "recommendations": recommendations[:3]
         }
         _res = json.dumps(data)
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Health metrics failed: {e}")
+        logger.error(json.dumps({"message": f"Health metrics failed: {e}", "status_code": 500}))
         _res = json.dumps({"overall_score": 0, "metrics": [], "recommendations": []})
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res

@@ -1,3 +1,4 @@
+import json
 import logging
 from langchain_core.tools import tool
 from services.mcp_tools.shared_utils import (
@@ -25,7 +26,7 @@ def generate_hypothetical_scenario(user_uuid: str, account_ids: list[str], days:
     Returns:
         str: The scenario outcome and chart trigger payload.
     """
-    logger.info(f"Executing MCP Tool: generate_hypothetical_scenario")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: generate_hypothetical_scenario", "status_code": 200}))
     try:
         if injections is None: injections = []
         accounts, suffix = _parse_accounts(account_ids, user_uuid)
@@ -76,12 +77,12 @@ def generate_hypothetical_scenario(user_uuid: str, account_ids: list[str], days:
                 summary_text += f"\n- Account {p['bank_name']} (Day {days}): Projected Balance £{last['Expected Balance']}"
 
         _res = f"Scenario simulation complete. Final projected balance at day {days}:{summary_text}\n\nINJECTED SCENARIO EVENTS:\n{events_str}\n\n[TRIGGER_BALANCE_FORECAST_CHART:{cache_id}]"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Scenario error: {e}")
+        logger.error(json.dumps({"message": f"Scenario error: {e}", "status_code": 500}))
         _res = f"Error: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 @tool(args_schema=GenerateFinancialForecastInput)
@@ -101,7 +102,7 @@ def generate_financial_forecast(user_uuid: str, account_ids: list[str], days: in
     Returns:
         str: The detailed financial forecast and chart trigger payload.
     """
-    logger.info(f"Executing MCP Tool: generate_financial_forecast")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: generate_financial_forecast", "status_code": 200}))
     try:
         accounts, suffix = _parse_accounts(account_ids, user_uuid)
         if not accounts: return "Error: No accounts found."
@@ -131,12 +132,12 @@ def generate_financial_forecast(user_uuid: str, account_ids: list[str], days: in
                 summary_text += f"\n- Account {p['bank_name']} (Day {days}): Expected £{last['Expected Balance']}, Careless £{last['careless_scenario']}, Optimal £{last['optimal_scenario']}"
 
         _res = f"Forecast generated with 1,000,000 paths. Final projections at day {days}:{summary_text}\n\nPROJECTED EVENTS:\n{events_str}\n\n[TRIGGER_BALANCE_FORECAST_CHART:{cache_id}]"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Forecast error: {e}")
+        logger.error(json.dumps({"message": f"Forecast error: {e}", "status_code": 500}))
         _res = f"Error: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 @tool(args_schema=GenerateExpenseForecastInput)
@@ -152,7 +153,7 @@ def generate_expense_forecast(user_uuid: str, account_ids: list[str], days: int 
     Returns:
         str: The projected cumulative spend at the end of the forecast period and chart trigger.
     """
-    logger.info(f"Executing MCP Tool: generate_expense_forecast")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: generate_expense_forecast", "status_code": 200}))
     try:
         accounts, suffix = _parse_accounts(account_ids, user_uuid)
         if not accounts: return "Error: No accounts found."
@@ -186,12 +187,12 @@ def generate_expense_forecast(user_uuid: str, account_ids: list[str], days: int 
             _res = f"Expense forecast generated. Final expected cumulative spend at day {days}: £{last['Projected Spend']}\n\n[TRIGGER_EXPENSE_FORECAST_CHART:{cache_id}]"
         else:
             _res = f"Expense forecast generated, but no projection data is available.\n\n[TRIGGER_EXPENSE_FORECAST_CHART:{cache_id}]"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Error generating expense forecast: {e}")
+        logger.error(json.dumps({"message": f"Error generating expense forecast: {e}", "status_code": 500}))
         _res = f"Error: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 @tool(args_schema=ForecastBudgetImpactInput)
@@ -207,7 +208,7 @@ def forecast_budget_impact(user_uuid: str, account_ids: list[str], days: int = 3
     Returns:
         str: The impact analysis and simulated forecast outcomes.
     """
-    logger.info(f"Executing MCP Tool: forecast_budget_impact")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: forecast_budget_impact", "status_code": 200}))
     try:
         from services.Analyser_Agent.budget_engine import BudgetEngine
         engine = BudgetEngine(user_uuid)
@@ -233,10 +234,10 @@ def forecast_budget_impact(user_uuid: str, account_ids: list[str], days: int = 3
             "days": days,
             "injections": injections
         })
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Error forecasting budget impact: {e}")
+        logger.error(json.dumps({"message": f"Error forecasting budget impact: {e}", "status_code": 500}))
         _res = f"Error: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res

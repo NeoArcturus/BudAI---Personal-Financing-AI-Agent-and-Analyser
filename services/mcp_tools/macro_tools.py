@@ -1,3 +1,4 @@
+import json
 import time
 import os
 from newsdataapi import NewsDataApiClient
@@ -48,12 +49,12 @@ def get_live_market_data(assets: list = None) -> str:
             except Exception as e:
                 results.append(f"Asset: {symbol} | Error fetching data: {str(e)}")
         _res = "\n".join(results)
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Macro Error: {e}")
+        logger.error(json.dumps({"message": f"Macro Error: {e}", "status_code": 500}))
         _res = f"Error fetching market data: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 def get_financial_news(query: str = "") -> str:
@@ -73,7 +74,7 @@ def get_financial_news(query: str = "") -> str:
         timestamp, cached_results = _news_cache[query]
         if current_time - timestamp < NEWS_CACHE_TTL:
             _res = cached_results
-            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
             return _res
 
     try:
@@ -84,7 +85,7 @@ def get_financial_news(query: str = "") -> str:
 
             if not results:
                 _res = f"No recent financial news found for '{query}'."
-                logger.info(f"Tool returned: {str(_res)[:1000]}")
+                logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
                 return _res
 
             formatted_news = []
@@ -97,12 +98,12 @@ def get_financial_news(query: str = "") -> str:
             final_results = f"Top financial headlines for '{query}':\n" + "\n\n".join(formatted_news)
             _news_cache[query] = (current_time, final_results)
             _res = final_results
-            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
             return _res
     except Exception as e:
-        logger.error(f"News Error: {e}")
+        logger.error(json.dumps({"message": f"News Error: {e}", "status_code": 500}))
         _res = "Financial news service is currently unavailable."
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 def perform_currency_conversion(amount: float, from_currency: str, to_currency: str) -> str:
@@ -129,14 +130,14 @@ def perform_currency_conversion(amount: float, from_currency: str, to_currency: 
         if rate:
             converted_amount = amount * rate
             _res = f"CONVERSION_RESULT: {amount} {from_currency} = {converted_amount:.2f} {to_currency} (Rate: {rate:.4f}). [RESULT_VALUE: {converted_amount:.2f}]"
-            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
             return _res
         else:
             _res = f"Could not find exchange rate for {ticker_symbol}. Ensure currency codes are valid."
-            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
             return _res
     except Exception as e:
-        logger.error(f"Currency Conversion Error: {e}")
+        logger.error(json.dumps({"message": f"Currency Conversion Error: {e}", "status_code": 500}))
         _res = f"Error performing currency conversion: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res

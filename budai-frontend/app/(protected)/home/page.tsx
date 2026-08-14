@@ -3,7 +3,6 @@ import CashFlowWidget from "@/app/(protected)/_components/widgets/Cashflow";
 import SpendingTrendWidget from "@/app/(protected)/_components/widgets/Trends";
 import ExpenseDistributionWidget from "@/app/(protected)/_components/widgets/Categories";
 import PortfolioCardWidget from "@/app/(protected)/_components/widgets/ConnectedAccounts";
-import LedgerTableWidget from "@/app/(protected)/_components/widgets/Transactions";
 import CommodityMarketWidget from "@/app/(protected)/_components/widgets/Markets";
 import FinancialNewsWidget from "@/app/(protected)/_components/widgets/News";
 import MarketTicker from "@/app/(protected)/_components/MarketTicker";
@@ -20,7 +19,6 @@ export default async function HomePage() {
     spendingTrend: <SpendingTrendWidget />,
     expenseDistribution: <ExpenseDistributionWidget />,
     portfolio: <PortfolioCardWidget />,
-    ledger: <LedgerTableWidget />,
     commodityMarket: <CommodityMarketWidget />,
     financialNews: <FinancialNewsWidget />,
     analyticsHabits: <Habits />,

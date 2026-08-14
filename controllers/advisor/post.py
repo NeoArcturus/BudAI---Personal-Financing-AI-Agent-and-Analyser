@@ -68,7 +68,7 @@ async def run_advisor_task(job_id: str, user_uuid: str, widget_id: str, context_
 
         base_url = os.getenv("VLLM_SUMMARY_URL", "http://host.docker.internal:8000/v1")
         llm = ChatOpenAI(
-            model="mlx-community/Qwen3.5-4B-4bit",
+            model="lmstudio-community/Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit",
             base_url=base_url,
             api_key="budai-local",
             temperature=0
@@ -113,7 +113,7 @@ async def run_advisor_task(job_id: str, user_uuid: str, widget_id: str, context_
 
         redis_client.set(f"job:{job_id}", json.dumps({"status": "completed", "insight": insight}), ex=3600)
     except Exception as e:
-        logger.error(f"Async advisor task failed for job {job_id}: {e}")
+        logger.error(json.dumps({"message": f"Async advisor task failed for job {job_id}: {e}", "status_code": 500}))
         redis_client.set(f"job:{job_id}", json.dumps({"status": "failed", "error": str(e)}), ex=3600)
     finally:
         from services.llm_manager import GlobalLLMManager

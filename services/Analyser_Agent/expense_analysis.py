@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import logging
 from services.api_integrator.account_reader import AccountReader
@@ -9,18 +10,18 @@ from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
 class ExpenseAnalysis:
-    def __init__(self, identifier=None, user_uuid=None):
-        if str(identifier).upper() == "ALL" or "," in str(identifier):
+    def __init__(self, account_id=None, user_uuid=None):
+        if not account_id or "," in str(account_id):
             raise ValueError(
                 "ExpenseAnalysis strictly handles a single account identifier.")
-        self.identifier = identifier
+        self.account_id = account_id
         self.user_uuid = user_uuid
         self.user_account = AccountReader(user_id=user_uuid)
         self.classified_data = None
     def fetch_data(self, from_date, to_date):
         try:
             df = self.user_account.get_transactions(
-                self.identifier, self.user_uuid, from_date, to_date, expense_only=True)
+                self.account_id, self.user_uuid, from_date, to_date, expense_only=True)
             if df.empty:
                 return False
             time_col = 'date' if 'date' in df.columns else 'timestamp'
@@ -44,16 +45,26 @@ class ExpenseAnalysis:
                     cols_to_keep.append('description')
                 if 'currency' in df.columns:
                     cols_to_keep.append('currency')
+                if 'category' in df.columns:
+                    cols_to_keep.append('category')
+                elif 'Category' in df.columns:
+                    cols_to_keep.append('Category')
+                    
                 self.classified_data = df[cols_to_keep].copy()
                 return True
             return False
         except Exception:
-            logger.error("An error occurred in this block", exc_info=True)
+            logger.error(json.dumps({"message": f"An error occurred in this block", "status_code": 500}), exc_info=True)
             return False
     def _get_pivoted_data(self, freq_str):
         df = self.classified_data.copy()
-        df.set_index('Date', inplace=True)
-        grouped = df.groupby(pd.Grouper(freq=freq_str))
+        
+        cat_col = 'category' if 'category' in df.columns else ('Category' if 'Category' in df.columns else None)
+        groupby_cols = [pd.Grouper(key='Date', freq=freq_str)]
+        if cat_col:
+            groupby_cols.append(cat_col)
+            
+        grouped = df.groupby(groupby_cols)
         
         agg_dict = {'Amount': 'sum'}
         if 'description' in df.columns:

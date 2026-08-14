@@ -78,7 +78,8 @@ export function Anomalies() {
             callbacks: {
               label: (context: any) => {
                 const pt = context.raw;
-                return `${pt.merchant}: £${pt.y.toFixed(2)}`;
+                const curr = new Intl.NumberFormat("en-GB", { style: "currency", currency: pt.currency || "GBP" }).formatToParts(1).find(x => x.type === "currency")?.value || "£";
+                return `${pt.merchant}: ${curr}${pt.y.toFixed(2)}`;
               },
             },
           },

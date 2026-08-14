@@ -33,11 +33,11 @@ export default function CashFlowWidgetClient({
   initialData,
 }: CashFlowWidgetProps) {
   const router = useRouter();
-  const { onRemove } = React.useContext(WidgetContext);
+  const { onRemove, instanceId } = React.useContext(WidgetContext);
   const { accounts, createNewSession } = useBudAI();
 
   const [selectedAccountId, setSelectedAccountId] = usePersistedState<string>(
-    "cashflow_account",
+    `cashflow-widget-account${instanceId ? `-${instanceId}` : ""}`,
     accounts[0]?.account_id || "",
   );
 
@@ -131,11 +131,13 @@ export default function CashFlowWidgetClient({
       });
     }
 
+    const activeCurrency = accounts.find((a) => a.account_id === selectedAccountId)?.currency || "GBP";
     const chartData = allMonths.map((m) => ({
       Month: m,
       Income: monthlyData[m].Income,
       Expense: monthlyData[m].Expense,
       Net_Balance: monthlyData[m].Income - monthlyData[m].Expense,
+      currency: activeCurrency
     }));
 
     const bankName =
@@ -180,7 +182,7 @@ export default function CashFlowWidgetClient({
 
   const selectedAccountName = useMemo(() => {
     const acc = accounts.find((a) => a.account_id === selectedAccountId);
-    return acc ? acc.bank_name : "Select Account";
+    return acc ? `${acc.bank_name} (${acc.currency || "GBP"})` : "Select Account";
   }, [selectedAccountId, accounts]);
 
   return (
@@ -362,9 +364,14 @@ export default function CashFlowWidgetClient({
                         textValue={acc.bank_name}
                         className="flex flex-col px-4 py-3 rounded-lg hover:bg-white/10 cursor-pointer outline-none transition-all"
                       >
-                        <span className="text-foreground font-black text-[11px] uppercase tracking-tight italic">
-                          {acc.bank_name}
-                        </span>
+                        <div className="w-full relative flex items-center justify-between">
+                            <span className="text-[11px] font-black text-foreground uppercase tracking-tight pr-4 italic">
+                              {acc.bank_name} ({acc.currency || "GBP"})
+                            </span>
+                            {selectedAccountId === acc.id && (
+                              <div className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,242,255,0.6)]" />
+                            )}
+                          </div>
                         <span className="text-foreground/20 text-[9px] font-mono tracking-widest mt-1.5 uppercase">
                           Account No: *{acc.account_number?.slice(-4)}
                         </span>

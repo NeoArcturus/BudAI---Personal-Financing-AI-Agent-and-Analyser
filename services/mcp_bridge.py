@@ -1,3 +1,4 @@
+import json
 from services.logger_setup import get_core_logger
 import inspect
 
@@ -27,5 +28,5 @@ class MCPBridge:
                 return tool_func(**arguments)
                 
         except Exception as e:
-            logger.error(f"Native Tool Execution Error [{server_name}.{tool_name}]: {e}")
+            logger.error(json.dumps({"message": f"Native Tool Execution Error [{server_name}.{tool_name}]: {e}", "status_code": 500}))
             return f"Error executing tool: {str(e)}"

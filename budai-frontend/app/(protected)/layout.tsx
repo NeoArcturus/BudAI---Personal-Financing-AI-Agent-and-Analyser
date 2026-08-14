@@ -6,6 +6,7 @@ import { TopNavbar } from "@/app/(protected)/_components/layout/Navbar";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Account } from "@/types";
+import ClearAuthAndRedirect from "./ClearAuthRedirect";
 
 export default async function ProtectedLayout({
   children,
@@ -25,6 +26,8 @@ export default async function ProtectedLayout({
   let initialAccounts: Account[] = [];
   let initialSessions: ChatSession[] = [];
 
+  let shouldRedirect = false;
+
   try {
     const [accountsRes, sessionsRes] = await Promise.all([
       fetch(`${baseUrl}/api/accounts`, {
@@ -36,28 +39,32 @@ export default async function ProtectedLayout({
     ]);
 
     if (accountsRes.status === 401 || sessionsRes.status === 401) {
-      redirect("/login");
-    }
+      shouldRedirect = true;
+    } else {
+      if (accountsRes.ok) {
+        const accountsData = (await accountsRes.json()) as any;
+        initialAccounts = accountsData.accounts || [];
+      }
 
-    if (accountsRes.ok) {
-      const accountsData = await accountsRes.json() as any;
-      initialAccounts = accountsData.accounts || [];
-    }
-
-    if (sessionsRes.ok) {
-      const sessionsData = await sessionsRes.json() as any;
-      if (Array.isArray(sessionsData)) {
-        initialSessions = sessionsData.map((s) => ({
-          id: s.session_id,
-          title: s.title,
-          messages: [],
-          lastUpdated: new Date(s.last_updated),
-          contextData: s.context_data,
-        }));
+      if (sessionsRes.ok) {
+        const sessionsData = (await sessionsRes.json()) as any;
+        if (Array.isArray(sessionsData)) {
+          initialSessions = sessionsData.map((s) => ({
+            id: s.session_id,
+            title: s.title,
+            messages: [],
+            lastUpdated: new Date(s.last_updated),
+            contextData: s.context_data,
+          }));
+        }
       }
     }
   } catch (e) {
     console.error("ProtectedLayout pre-fetch failed:", e);
+  }
+
+  if (shouldRedirect) {
+    return <ClearAuthAndRedirect />;
   }
 
   return (

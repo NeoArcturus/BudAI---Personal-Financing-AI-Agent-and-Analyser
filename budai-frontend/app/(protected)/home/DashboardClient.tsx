@@ -42,6 +42,8 @@ import {
 } from "lucide-react";
 import { useBudAI } from "@/app/context/AppContext";
 import { useTheme } from "next-themes";
+import { NLPDashboardController } from "@/components/dashboard/NLPDashboardController";
+import { ProactiveInsightsFeed } from "@/components/dashboard/ProactiveInsightsFeed";
 
 interface WidgetInstance {
   id: string;
@@ -60,13 +62,13 @@ interface SortableWidgetProps {
 
 export const WidgetContext = React.createContext<{
   onRemove?: () => void;
+  instanceId?: string;
 }>({});
 
 const AVAILABLE_WIDGET_TYPES = [
   { type: "cashFlow", label: "Cash Flow", icon: BarChart },
   { type: "spendingTrend", label: "Spending Trend", icon: LineChart },
   { type: "expenseDistribution", label: "Expense Distribution", icon: PieChart },
-  { type: "ledger", label: "Transactions", icon: Clock },
   { type: "commodityMarket", label: "Commodities Market", icon: Globe },
   { type: "financialNews", label: "Financial News", icon: MessageSquare },
   { type: "aiChat", label: "Chat Sessions", icon: MessageSquare },
@@ -256,7 +258,7 @@ export default function DashboardClient({
     if (widgetElement) {
       return (
         <WidgetContext.Provider
-          value={{ onRemove: () => handleRemoveWidget(widget.id) }}
+          value={{ onRemove: () => handleRemoveWidget(widget.id), instanceId: widget.id }}
         >
           {widgetElement}
         </WidgetContext.Provider>
@@ -288,15 +290,7 @@ export default function DashboardClient({
       <div className="flex-1 flex flex-col px-10 pt-10 overflow-hidden w-full max-w-screen-2xl mx-auto">
         <div className="flex items-center justify-between mb-10 shrink-0">
           <div className="flex flex-col gap-4">
-            <SearchField>
-              <SearchField.Group className="flex flex-row border-[0.5px] rounded-xl py-2 px-4 justify-center items-center bg-white/5 border-white/10 hover:border-primary/50 transition-all shadow-inner">
-                <SearchField.SearchIcon className="text-foreground/30" />
-                <SearchField.Input
-                  placeholder="Search records..."
-                  className="w-80 border-none outline-none ring-0 focus:outline-none focus:ring-0 px-3 text-[11px] font-medium tracking-wide placeholder:text-foreground/20"
-                />
-              </SearchField.Group>
-            </SearchField>
+            <NLPDashboardController />
           </div>
           <div className="flex items-center gap-6">
             <div className="flex items-center bg-white/5 backdrop-blur-xl border-[0.5px] border-white/10 rounded-full p-1 shadow-inner">
@@ -334,6 +328,7 @@ export default function DashboardClient({
         </div>
 
         <div className="flex-1 overflow-y-auto scrollbar-hide pb-24 relative">
+          <ProactiveInsightsFeed />
           {!loadedUser ? (
             <div className="w-full h-96 flex items-center justify-center">
               <span className="text-primary font-medium tracking-widest uppercase text-xs">

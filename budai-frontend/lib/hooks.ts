@@ -84,7 +84,10 @@ export function useTransactions(
     staleTime: 1000 * 60 * 5,
     refetchInterval: (query) => {
       const data = query.state.data;
-      return (!data || data.length === 0) ? 3000 : 1000 * 60 * 5;
+      if (!data || data.length === 0) return 3000;
+      
+      const hasUncategorized = data.some((tx) => !tx.category || tx.category === "Uncategorized" || tx.category === "Pending");
+      return hasUncategorized ? 3000 : 1000 * 60 * 5;
     },
     refetchOnWindowFocus: false,
   });
@@ -120,28 +123,40 @@ export function useSpendingTrends(
     queryKey: ["spending-trends", accountId, from, to, timeType],
     queryFn: async () => {
       const res = await apiFetch(
-        "/api/media/execute",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            tool_name: "plot_expenses",
-            parameters: {
-              plot_time_type: timeType,
-              from_date: from,
-              to_date: to,
-              bank_name_or_id: accountId,
-            },
-          }),
-        },
+        `/api/widgets/spending-trends?account_id=${accountId}&from_date=${from}&to_date=${to}&time_type=${timeType}`,
+        { method: "GET" },
         true,
       );
-      const result = await res.json() as { data?: BankChartData[] };
-      return result.data || [];
+      if (!res.ok) throw new Error("Failed to fetch spending trends");
+      const json = await res.json() as { data?: BankChartData[] };
+      return json.data || [];
     },
     initialData,
+    enabled: !!accountId && !accountId.startsWith("react-aria-") && !!from && !!to && isReady,
+    staleTime: 1000 * 60 * 5,
+    refetchInterval: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useExpenseCategories(
+  accountId: string,
+  from: string,
+  to: string,
+  isReady: boolean = true,
+) {
+  return useQuery({
+    queryKey: ["expense-categories", accountId, from, to],
+    queryFn: async () => {
+      const res = await apiFetch(
+        `/api/widgets/expense-distribution?account_id=${accountId}&from_date=${from}&to_date=${to}`,
+        { method: "GET" },
+        true,
+      );
+      if (!res.ok) throw new Error("Failed to fetch expense categories");
+      const json = await res.json() as { data?: BankChartData[] };
+      return json.data || [];
+    },
     enabled: !!accountId && !accountId.startsWith("react-aria-") && !!from && !!to && isReady,
     staleTime: 1000 * 60 * 5,
     refetchInterval: 1000 * 60 * 5,

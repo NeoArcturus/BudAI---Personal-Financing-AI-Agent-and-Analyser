@@ -1,3 +1,4 @@
+import json
 from fastapi import HTTPException, Query
 from sqlalchemy import text
 from models.database_models import User, BackgroundTask
@@ -68,5 +69,5 @@ async def get_review_candidates(account_id: str | None, limit: int, current_user
         data = await asyncio.to_thread(_fetch_candidates)
         return {"status": "success", "count": len(data), "items": data}
     except Exception as e:
-        logger.error(f"Error in get_review_candidates: {e}")
+        logger.error(json.dumps({"message": f"Error in get_review_candidates: {e}", "status_code": 500}))
         raise HTTPException(status_code=500, detail=str(e))

@@ -11,6 +11,8 @@ export interface Account {
   status?: string;
   provider_id?: string;
   logo_url?: string;
+  consent_status?: "active" | "expired" | "200-200" | "200-401" | "200-403";
+  bank_uuid?: string;
   
   truelayer_account_id?: string;
 }
@@ -20,6 +22,8 @@ export interface Transaction {
   date?: string;
   amount?: number;
   category?: string;
+  sub_category?: string;
+  tags?: string[];
   merchant_name?: string;
   description?: string;
   status?: string;

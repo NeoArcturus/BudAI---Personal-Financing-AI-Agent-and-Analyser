@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import os
 import asyncio
@@ -14,27 +15,27 @@ class ProfileBuilder:
         self.user_uuid = user_uuid
 
     async def build_profile(self) -> str:
-        logger.info(f"Building profile for user {self.user_uuid}")
+        logger.info(json.dumps({"message": f"Building profile for user {self.user_uuid}", "status_code": 200}))
         try:
             user_acc = AccountReader(user_id=self.user_uuid)
             
-            logger.debug("Fetching recent transactions (180d window)")
+            logger.debug(json.dumps({"message": f"Fetching recent transactions (180d window)", "status_code": 100}))
             now_dt = datetime.now()
             from_date = (now_dt - timedelta(days=180)).strftime("%Y-%m-%d")
             to_date = now_dt.strftime("%Y-%m-%d")
             
-            df = await asyncio.to_thread(user_acc.get_transactions, "ALL", self.user_uuid, from_date, to_date)
+            df = await asyncio.to_thread(user_acc.get_transactions, None, self.user_uuid, from_date, to_date)
             
-            logger.debug("Fetching all accounts for balance")
+            logger.debug(json.dumps({"message": f"Fetching all accounts for balance", "status_code": 100}))
             accounts = await asyncio.to_thread(user_acc.get_all_accounts, skip_sync=True)
             active_accounts = [acc for acc in accounts if acc.get('status') == 'active']
             total_balance = sum(acc.get('balance', 0.0) for acc in active_accounts)
 
             if df.empty:
-                logger.info("No transaction data found for user")
+                logger.info(json.dumps({"message": f"No transaction data found for user", "status_code": 200}))
                 return f"[Live Balance: £{total_balance:.2f} | No historical data]"
 
-            logger.debug("Processing transaction data")
+            logger.debug(json.dumps({"message": f"Processing transaction data", "status_code": 100}))
             df['Date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True).dt.date
             df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0)
 
@@ -45,7 +46,7 @@ class ProfileBuilder:
             outflow = df_90[df_90['amount'] < 0]['amount'].sum()
             net_cash_flow = inflow + outflow
 
-            logger.debug("Detecting upcoming expenses (Zero DB hit)")
+            logger.debug(json.dumps({"message": f"Detecting upcoming expenses (Zero DB hit)", "status_code": 100}))
             forecaster = ForecasterAgent()
             _, timeline = forecaster.detect_upcoming_expenses(self.user_uuid, df_input=df)
             upcoming_str = ", ".join(
@@ -60,7 +61,7 @@ class ProfileBuilder:
             vol_str = ", ".join([f"{k}: £{v:.2f}" for k, v in top_merchants_vol.items()])
             cat_str = ", ".join([f"{k}: £{v:.2f}" for k, v in top_categories.items()])
 
-            logger.debug("Offloading semantic memory lookup to microservice")
+            logger.debug(json.dumps({"message": f"Offloading semantic memory lookup to microservice", "status_code": 100}))
             bridge = MCPBridge()
             try:
                 rag_str = await bridge.call_tool(
@@ -69,7 +70,7 @@ class ProfileBuilder:
                     {"user_uuid": self.user_uuid}
                 )
             except Exception as e:
-                logger.warning(f"Microservice Memory access failed: {e}")
+                logger.warning(json.dumps({"message": f"Microservice Memory access failed: {e}", "status_code": 400}))
                 rag_str = "Behavioral context temporarily unavailable."
             profile = f"""
             [Tier 1 - Liquidity]
@@ -89,5 +90,5 @@ class ProfileBuilder:
             return profile.strip()
 
         except Exception as e:
-            logger.error(f"Failed to build profile for {self.user_uuid}: {e}", exc_info=True)
+            logger.error(json.dumps({"message": f"Failed to build profile for {self.user_uuid}: {e}", "status_code": 500}), exc_info=True)
             return f"Error building profile: {str(e)}"

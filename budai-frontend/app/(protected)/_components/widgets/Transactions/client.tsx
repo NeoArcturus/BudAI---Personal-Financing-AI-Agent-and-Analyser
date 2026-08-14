@@ -20,6 +20,7 @@ import {
   CloseButton,
   Spinner,
   ProgressBar,
+  Switch,
 } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { apiFetch } from "@/lib/api";
@@ -53,12 +54,12 @@ export default function LedgerTableWidgetClient({
   initialData,
 }: LedgerTableWidgetProps) {
   const router = useRouter();
-  const { onRemove } = React.useContext(WidgetContext);
+  const { onRemove, instanceId } = React.useContext(WidgetContext);
   const queryClient = useQueryClient();
   const { accounts, createNewSession } = useBudAI();
 
   const [selectedAccountId, setSelectedAccountId] = usePersistedState<string>(
-    "ledger_account",
+    `ledger_account${instanceId ? `-${instanceId}` : ""}`,
     accounts[0]?.account_id || "",
   );
 
@@ -84,6 +85,7 @@ export default function LedgerTableWidgetClient({
   const [selectedTx, setSelectedTx] = useState<ExtendedTx | null>(null);
   const [editCategory, setEditCategory] = useState<string>("");
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [isSurvivalMode, setIsSurvivalMode] = useState<boolean>(false);
 
   const { data: transactions = [], isLoading, isFetching } = useTransactions(
     selectedAccountId,
@@ -91,6 +93,17 @@ export default function LedgerTableWidgetClient({
     toDate?.toString(),
     initialData,
   );
+
+  const filteredTransactions = React.useMemo(() => {
+    let list = Array.isArray(transactions) ? transactions : [];
+    if (isSurvivalMode) {
+      list = list.filter((tx) => {
+        const tags = tx.tags || [];
+        return tags.includes("#essential") || tags.includes("#housing") || tags.includes("#recurring");
+      });
+    }
+    return list;
+  }, [transactions, isSurvivalMode]);
 
   const handleUpdateCategory = async () => {
     if (!selectedTx || !editCategory) return;
@@ -170,7 +183,7 @@ export default function LedgerTableWidgetClient({
     return accounts.find((a) => a.account_id === selectedAccountId) || null;
   }, [selectedAccountId, accounts]);
 
-  const activeAccountName = activeAccount?.bank_name || "Select Account";
+  const activeAccountName = activeAccount?.bank_name ? `${activeAccount.bank_name} (${activeAccount.currency || "GBP"})` : "Select Account";
 
   const dropdownItems = useMemo(() => {
     return accounts.map(a => ({ ...a, id: a.account_id }));
@@ -392,7 +405,7 @@ export default function LedgerTableWidgetClient({
                         <div className="flex flex-col w-full">
                           <Badge.Anchor className="w-full relative flex items-center justify-between">
                             <Label className="text-[11px] font-black text-foreground uppercase tracking-tight cursor-pointer pointer-events-none pr-4 italic">
-                              {acc.bank_name}
+                              {acc.bank_name} ({acc.currency || "GBP"})
                             </Label>
                             {selectedAccountId === acc.account_id && (
                               <Badge className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,242,255,0.6)]" />
@@ -496,7 +509,7 @@ export default function LedgerTableWidgetClient({
                     </Table.Column>
                   </Table.Header>
                   <Table.Body className="w-full divide-y-[0.5px] divide-white/5">
-                    {(Array.isArray(transactions) ? transactions : []).map((tx, i) => {
+                    {filteredTransactions.map((tx, i) => {
                       const displayDesc = tx.merchant_name || tx.description || "UNDEFINED_ENTITY";
                       const amount = tx.amount ?? 0;
                       const cat = tx.category || "UNCATEGORIZED";
@@ -561,13 +574,36 @@ export default function LedgerTableWidgetClient({
                             })}
                           </Table.Cell>
                           <Table.Cell className="py-5 px-8 w-[25%] sm:w-[20%]">
-                            <div
-                              className={cn(
-                                "px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border-[0.5px] w-fit shadow-sm",
-                                getCategoryTheme(cat),
+                            <div className="flex flex-col gap-1.5 items-start">
+                              <div
+                                className={cn(
+                                  "px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border-[0.5px] w-fit shadow-sm",
+                                  getCategoryTheme(cat),
+                                )}
+                              >
+                                {cat}
+                              </div>
+                              {tx.sub_category && (
+                                <span className="text-[9px] text-foreground/40 uppercase tracking-widest font-mono">
+                                  {tx.sub_category}
+                                </span>
                               )}
-                            >
-                              {cat}
+                              {tx.tags && tx.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {tx.tags.map((tag: string, idx: number) => {
+                                    let tagClass = "bg-white/5 text-foreground/50 border-white/10";
+                                    if (tag === "#recurring") tagClass = "bg-purple-500/20 text-purple-400 border-purple-500/40";
+                                    if (tag === "#essential" || tag === "#housing") tagClass = "bg-green-500/20 text-green-400 border-green-500/40";
+                                    if (tag === "#price-hike") tagClass = "bg-red-500/20 text-red-500 border-red-500/40 animate-pulse";
+                                    
+                                    return (
+                                      <span key={idx} className={cn("px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border-[0.5px]", tagClass)}>
+                                        {tag}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                           </Table.Cell>
                         </Table.Row>

@@ -204,7 +204,7 @@ export default function GlobalSearchModal() {
                                   </span>
                                 )}
                                 <span className={`text-[12px] font-black uppercase tracking-tight ${item.isPositive ? "text-green-500" : "text-foreground"}`}>
-                                  {item.isPositive ? "+" : ""}£{Math.abs(item.amount || 0).toFixed(2)}
+                                  {item.isPositive ? "+" : ""}{new Intl.NumberFormat("en-GB", { style: "currency", currency: item.currency || "GBP" }).format(Math.abs(item.amount || 0))}
                                 </span>
                               </div>
                             )}

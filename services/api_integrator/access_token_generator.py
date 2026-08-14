@@ -1,3 +1,4 @@
+import json
 import requests
 import uuid
 import logging
@@ -17,6 +18,7 @@ from config import (
 import datetime
 import pandas as pd
 from models.database_models import Bank
+from models.status_codes import OpenBankingStatus
 from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
@@ -44,7 +46,8 @@ class AccessTokenGenerator:
         payload = {
             "refresh_token": refresh_token,
             "response_type": "code",
-            "redirect_uri": self.redirect_uri
+            "redirect_uri": self.redirect_uri,
+            "state": user_uuid
         }
         try:
             response = requests.post(url, json=payload)
@@ -58,8 +61,73 @@ class AccessTokenGenerator:
                 logger.error(
                     f"[ERROR] TrueLayer reauthuri returned {response.status_code}: {response.text}")
         except Exception as e:
-            logger.error(f"[ERROR] TrueLayer reauthuri generation failed: {e}", exc_info=True)
+            logger.error(json.dumps({"message": f"[ERROR] TrueLayer reauthuri generation failed: {e}", "status_code": 500}), exc_info=True)
         return None
+
+    def extend_connection(self, bank_uuid, user_uuid):
+        try:
+            with SessionLocal() as session:
+                bank = session.query(Bank).filter_by(bank_uuid=bank_uuid, user_uuid=user_uuid).first()
+                if not bank or not bank.access_token:
+                    return {"status": "error", "message": "Bank not found"}
+
+                raw_access = self.cipher_suite.decrypt(bytes(bank.access_token)).decode()
+                headers = {"Authorization": f"Bearer {raw_access}"}
+                
+                url = "https://api.truelayer.com/data/v1/connections/extend"
+                res = requests.post(url, headers=headers)
+                
+                if res.status_code == 200:
+                    data = res.json()
+                    status = data.get("status")
+                    if status == "no_action_needed":
+                        # The token is silently extended
+                        bank.consent_status = OpenBankingStatus.CONNECTION_ACTIVE.value
+                        session.commit()
+                        logger.info(json.dumps({"message": f"Connection {bank_uuid} silently extended.", "status_code": 200}))
+                        
+                        # Trigger a background /me sync to update the expiration dates in DB
+                        import threading
+                        def sync_me():
+                            try:
+                                me_res = requests.get("https://api.truelayer.com/data/v1/me", headers=headers)
+                                if me_res.status_code == 200:
+                                    me_data = me_res.json()
+                                    expires_at = me_data['results'][0].get('consent_expires_at')
+                                    if expires_at:
+                                        with SessionLocal() as s2:
+                                            b2 = s2.query(Bank).filter_by(bank_uuid=bank_uuid).first()
+                                            b2.consent_expires_at = pd.to_datetime(expires_at, format='ISO8601').to_pydatetime()
+                                            s2.commit()
+                            except Exception:
+                                pass
+                        threading.Thread(target=sync_me, daemon=True).start()
+                        
+                        return {"status": "extended"}
+                    elif status in ["authentication_needed", "reconfirmation_of_consent_needed"]:
+                        bank.consent_status = OpenBankingStatus.CONNECTION_EXPIRED.value
+                        session.commit()
+                        
+                        auth_uri = data.get("authorization_uri")
+                        # If TrueLayer didn't return one directly, fallback to reauthuri generator
+                        if not auth_uri and bank.refresh_token:
+                            raw_refresh = self.cipher_suite.decrypt(bytes(bank.refresh_token)).decode()
+                            auth_uri = self.get_reauth_link(raw_refresh, user_uuid)
+                            
+                        logger.warning(json.dumps({"message": f"Connection {bank_uuid} requires manual re-auth.", "status_code": 401}))
+                        return {"status": "reauth_required", "auth_uri": auth_uri}
+                        
+                elif res.status_code in [401, 403]:
+                    bank.consent_status = OpenBankingStatus.BANK_REVOKED_CONSENT.value
+                    session.commit()
+                    logger.warning(json.dumps({"message": f"Connection {bank_uuid} revoked by bank (403/401).", "status_code": 403}))
+                    return {"status": "revoked"}
+                else:
+                    logger.error(json.dumps({"message": f"Extend failed for {bank_uuid}: {res.text}", "status_code": 500}))
+                    return {"status": "error", "message": res.text}
+        except Exception as e:
+            logger.error(json.dumps({"message": f"Failed to extend connection: {e}", "status_code": 500}), exc_info=True)
+            return {"status": "error"}
     async def generate_token_from_code(self, code, state):
         payload = {
             "grant_type": "authorization_code",
@@ -84,7 +152,7 @@ class AccessTokenGenerator:
                 try:
                     return pd.to_datetime(date_str, format='ISO8601').to_pydatetime()
                 except Exception as e:
-                    logger.error(f"Failed to parse TL date '{date_str}': {e}", exc_info=True)
+                    logger.error(json.dumps({"message": f"Failed to parse TL date '{date_str}': {e}", "status_code": 500}), exc_info=True)
                     return datetime.now()
             updated_at = parse_tl_date(
                 me_res['results'][0].get('consent_status_updated_at'))
@@ -149,8 +217,10 @@ class AccessTokenGenerator:
             logger.error(
                 f"[AUTH ERROR] TrueLayer token exchange failed: {res}")
         return False
+
     async def validate_callback(self, code, state):
         return await self.generate_token_from_code(code, state)
+
     def refresh_token(self, provider_id, user_uuid):
         with SessionLocal() as session:
             row = session.execute(
@@ -182,6 +252,8 @@ class AccessTokenGenerator:
                 session.commit()
             return res["access_token"]
         return None
+
+        
     def revoke_provider(self, provider_id, user_uuid):
         results = []
         with SessionLocal() as session:
@@ -226,6 +298,6 @@ class AccessTokenGenerator:
                     results.append(
                         {"status": "failed", "truelayer_error": response.text})
             except Exception as e:
-                logger.error(f"Revoke provider failed: {e}", exc_info=True)
+                logger.error(json.dumps({"message": f"Revoke provider failed: {e}", "status_code": 500}), exc_info=True)
                 results.append({"status": "error", "message": str(e)})
         return results

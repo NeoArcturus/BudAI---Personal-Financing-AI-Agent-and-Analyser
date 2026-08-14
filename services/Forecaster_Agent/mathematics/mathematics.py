@@ -1,3 +1,4 @@
+import json
 import ctypes
 import os
 import subprocess
@@ -19,11 +20,11 @@ def _ensure_compiled():
             ctypes.CDLL(output_so)
             return output_so
         except Exception:
-            logger.warning(f"Existing C++ engine at {output_so} is corrupt. Recompiling...")
+            logger.warning(json.dumps({"message": f"Existing C++ engine at {output_so} is corrupt. Recompiling...", "status_code": 400}))
             try: os.remove(output_so)
             except: pass
 
-    logger.info(f"Compiling C++ forecaster engine to {output_so}...")
+    logger.info(json.dumps({"message": f"Compiling C++ forecaster engine to {output_so}...", "status_code": 200}))
     subprocess.run([
         "g++", "-O3", "-shared", "-fPIC", "-std=c++17",
         f"-I{algorithm_dir}", "-o", output_so, algo_cpp, hybrid_cpp

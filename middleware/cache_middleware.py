@@ -1,3 +1,4 @@
+import json
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import Request
 from services.logger_setup import get_core_logger
@@ -10,7 +11,7 @@ class StripCacheControlMiddleware(BaseHTTPMiddleware):
     This prevents fastapi-cache from bypassing the cache when a user performs a hard refresh.
     """
     async def dispatch(self, request: Request, call_next):
-        logger.debug(f"Intercepting request: {request.url.path}")
+        logger.debug(json.dumps({"message": f"Intercepting request: {request.url.path}", "status_code": 100}))
         
         headers = request.scope.get("headers", [])
         new_headers = [
@@ -19,7 +20,7 @@ class StripCacheControlMiddleware(BaseHTTPMiddleware):
         ]
         
         if len(new_headers) < len(headers):
-            logger.debug(f"Stripped cache-bypass headers from request to {request.url.path}")
+            logger.debug(json.dumps({"message": f"Stripped cache-bypass headers from request to {request.url.path}", "status_code": 100}))
             request.scope["headers"] = new_headers
             
         response = await call_next(request)

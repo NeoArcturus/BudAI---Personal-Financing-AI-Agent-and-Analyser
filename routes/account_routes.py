@@ -5,7 +5,7 @@ from fastapi_cache.decorator import cache
 from utils.cache_utils import user_cache_key_builder
 
 from controllers.accounts.get import fetch_user_accounts, fetch_transactions, search_user_transactions
-from controllers.accounts.post import sync_accounts
+from controllers.accounts.post import sync_accounts, extend_bank_connection
 from controllers.accounts.delete import revoke_connection
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -32,7 +32,7 @@ async def get_transactions_route(
     # Background task to sync with TrueLayer
     background_tasks.add_task(
         sync_service.trigger_sync,
-        identifier=account_id,
+        account_id=account_id,
         user_uuid=current_user.user_uuid,
         from_date=from_date,
         to_date=to_date
@@ -42,6 +42,10 @@ async def get_transactions_route(
 @router.post("/sync")
 async def sync_accounts_route(background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user)):
     return await sync_accounts(current_user.user_uuid, background_tasks)
+
+@router.post("/banks/{bank_uuid}/extend")
+async def extend_bank_connection_route(bank_uuid: str, current_user: User = Depends(get_current_user)):
+    return await extend_bank_connection(bank_uuid, current_user.user_uuid)
 
 @router.delete("/{provider_id}")
 async def revoke_connection_route(provider_id: str, current_user: User = Depends(get_current_user)):

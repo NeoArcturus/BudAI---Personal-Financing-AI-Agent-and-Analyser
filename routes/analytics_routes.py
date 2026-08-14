@@ -129,7 +129,8 @@ def get_upcoming_subscriptions(user_uuid: str, db: SessionLocal = Depends(get_db
             "last_payment_amount": s.last_payment_amount,
             "bank_name": bank_name,
             "account_number": account_number,
-            "sort_code": sort_code
+            "sort_code": sort_code,
+            "status": s.status
         })
         
     return {"subscriptions": output}

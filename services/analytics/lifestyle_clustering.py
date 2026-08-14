@@ -26,7 +26,7 @@ class LifestyleAnalysisOutput(BaseModel):
 
 class LifestyleClusteringService:
     def __init__(self):
-        base_url = os.getenv("LLM_BASE_URL", "http://host.docker.internal:8000/v1")
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
         if not base_url.endswith("/v1"): 
             base_url = f"{base_url}/v1"
             
@@ -35,15 +35,15 @@ class LifestyleClusteringService:
         )
         
         self.llm = ChatOpenAI(
-            model="mlx-community/Qwen3.5-4B-4bit", 
+            model="lmstudio-community/Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit", 
             base_url=base_url, 
             api_key="budai-local", 
             temperature=0,
-            max_tokens=1000
+            max_tokens=20000
         )
         
     def analyze_user_lifestyle(self, user_uuid: str):
-        logger.info(f"Starting HDBSCAN lifestyle analysis for user {user_uuid}")
+        logger.info(json.dumps({"message": f"Starting HDBSCAN lifestyle analysis for user {user_uuid}", "status_code": 200}))
         
         with SessionLocal() as session:
             txs = session.execute(
@@ -51,7 +51,7 @@ class LifestyleClusteringService:
             ).scalars().all()
             
             if not txs or len(txs) < 10:
-                logger.warning(f"Not enough transactions to cluster for {user_uuid}")
+                logger.warning(json.dumps({"message": f"Not enough transactions to cluster for {user_uuid}", "status_code": 400}))
                 return
                 
             # Extract strings to embed (Prefer sub_category, fallback to semi_cleaned, fallback to raw)
@@ -70,9 +70,9 @@ class LifestyleClusteringService:
                 return
                 
             # 1. Vector Extraction
-            logger.info(f"Unique clustering strings count: {len(unique_descriptions)}")
+            logger.info(json.dumps({"message": f"Unique clustering strings count: {len(unique_descriptions)}", "status_code": 200}))
             desc_vectors = self.embeddings.embed_documents(unique_descriptions)
-            logger.info(f"Vectors returned: {len(desc_vectors)}")
+            logger.info(json.dumps({"message": f"Vectors returned: {len(desc_vectors)}", "status_code": 200}))
             desc_to_vec = {desc: vec for desc, vec in zip(unique_descriptions, desc_vectors)}
             
             # Map back to transactions
@@ -86,11 +86,11 @@ class LifestyleClusteringService:
                         valid_txs.append(tx)
                     
             if not tx_vectors:
-                logger.warning(f"All generated vectors were invalid (NaNs) for user {user_uuid}")
+                logger.warning(json.dumps({"message": f"All generated vectors were invalid (NaNs) for user {user_uuid}", "status_code": 400}))
                 return
                 
             X = np.array(tx_vectors)
-            logger.info(f"X shape constructed: {X.shape}")
+            logger.info(json.dumps({"message": f"X shape constructed: {X.shape}", "status_code": 200}))
         
         # 2. Cluster Generation
         clusterer = hdbscan.HDBSCAN(min_cluster_size=3, metric='euclidean')
@@ -223,7 +223,7 @@ class LifestyleClusteringService:
             finally:
                 GlobalLLMManager.release()
         except Exception as e:
-            logger.error(f"LLM failed to generate lifestyle analysis: {e}")
+            logger.error(json.dumps({"message": f"LLM failed to generate lifestyle analysis: {e}", "status_code": 500}))
             return
             
         # 6. Persistence
@@ -260,4 +260,4 @@ class LifestyleClusteringService:
             
             session.commit()
             
-        logger.info(f"Successfully completed lifestyle clustering for user {user_uuid}")
+        logger.info(json.dumps({"message": f"Successfully completed lifestyle clustering for user {user_uuid}", "status_code": 200}))

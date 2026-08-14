@@ -1,3 +1,4 @@
+import json
 from fastapi import HTTPException
 from models.database_models import User, ChatSession
 from schemas.api_schema import ChatSessionRenameRequest
@@ -35,5 +36,5 @@ async def rename_chat_session(session_id: str, request: ChatSessionRenameRequest
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error renaming session {session_id}: {e}")
+        logger.error(json.dumps({"message": f"Error renaming session {session_id}: {e}", "status_code": 500}))
         raise HTTPException(status_code=500, detail="Internal server error")

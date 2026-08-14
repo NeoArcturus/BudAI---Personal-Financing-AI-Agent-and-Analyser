@@ -22,7 +22,7 @@ import { useBudAI } from "@/app/context/AppContext";
 import { Account, BankChartData, Transaction } from "@/types";
 import { today, getLocalTimeZone, DateValue } from "@internationalized/date";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
-import { useTransactions, usePersistedState } from "@/lib/hooks";
+import { useExpenseCategories, usePersistedState } from "@/lib/hooks";
 import WidgetFlipCard from "../../internal/FlipCard";
 import { useRouter } from "next/navigation";
 import { WidgetContext } from "../../../home/DashboardClient";
@@ -46,11 +46,11 @@ export default function ExpenseDistributionWidgetClient({
   initialData,
 }: ExpenseDistributionWidgetProps) {
   const router = useRouter();
-  const { onRemove } = React.useContext(WidgetContext);
+  const { onRemove, instanceId } = React.useContext(WidgetContext);
   const { accounts, createNewSession } = useBudAI();
 
   const [selectedAccountId, setSelectedAccountId] = usePersistedState<string>(
-    "expense_dist_account",
+    `expense_dist_account${instanceId ? `-${instanceId}` : ""}`,
     accounts[0]?.account_id || "",
   );
 
@@ -78,35 +78,22 @@ export default function ExpenseDistributionWidgetClient({
     : "";
 
   const {
-    data: transactions = [],
+    data: chartData = [],
     isLoading: isInitialLoading,
     isFetching,
-  } = useTransactions(selectedAccountId, fromStr, toStr, initialData);
+  } = useExpenseCategories(selectedAccountId, fromStr, toStr, true);
 
   const aggregatedData = useMemo(() => {
-    const categories: Record<string, number> = {};
-
-    if (Array.isArray(transactions)) {
-      transactions.forEach((tx) => {
-        const amount = tx.amount || tx.Amount || 0;
-        if (
-          amount > 0 &&
-          tx.category?.toLowerCase() !== "expense" &&
-          tx.Category?.toLowerCase() !== "expense"
-        ) {
-          return;
-        }
-
-        const cat = tx.category || tx.Category || "Other";
-        if (!categories[cat]) categories[cat] = 0;
-        categories[cat] += Math.abs(amount);
-      });
-    }
-
-    return Object.entries(categories)
-      .map(([name, value]) => ({ name, value }))
+    if (!chartData || chartData.length === 0 || !chartData[0].data) return [];
+    
+    return chartData[0].data
+      .map((item: any) => ({
+        name: item.Category || item.category || item.Date || item.date || "Other",
+        value: item.Total_Amount || item.total_amount || item.Amount || item.amount || 0,
+      }))
+      .filter((item) => item.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [transactions]);
+  }, [chartData]);
 
   const totalExpenses = useMemo(() => {
     return aggregatedData.reduce((acc, curr) => acc + curr.value, 0);
@@ -162,7 +149,7 @@ export default function ExpenseDistributionWidgetClient({
     return accounts.find((a) => a.account_id === selectedAccountId) || null;
   }, [selectedAccountId, accounts]);
 
-  const activeAccountName = activeAccount?.bank_name || "Select Account";
+  const activeAccountName = activeAccount?.bank_name ? `${activeAccount.bank_name} (${activeAccount.currency || "GBP"})` : "Select Account";
 
   return (
     <WidgetFlipCard
@@ -349,7 +336,7 @@ export default function ExpenseDistributionWidgetClient({
                         <div className="flex flex-col w-full">
                           <Badge.Anchor className="w-full relative flex items-center justify-between">
                             <Label className="text-[11px] font-black text-foreground uppercase tracking-tight cursor-pointer pointer-events-none pr-4 italic">
-                              {acc.bank_name}
+                              {acc.bank_name} ({acc.currency || "GBP"})
                             </Label>
                             {selectedAccountId === acc.account_id && (
                               <Badge className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,242,255,0.6)]" />

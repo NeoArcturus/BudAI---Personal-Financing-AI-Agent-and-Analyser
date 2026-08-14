@@ -1,8 +1,7 @@
 from datetime import datetime
 import re
 import os
-from langchain.agents import create_agent
-from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
@@ -26,42 +25,42 @@ if not base_url.endswith("/v1"):
     base_url = f"{base_url}/v1"
 
 llm = ChatOpenAI(
-    model="mlx-community/Qwen3.5-4B-4bit",
+    model="lmstudio-community/Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit",
     base_url=base_url,
     api_key="budai-local",
     temperature=0,
     streaming=False,
-    reasoning_effort="high",
+    
     timeout=600,
-    model_kwargs={"extra_body": {"chat_template_kwargs": {"enable_thinking": True}}}
+    
 )
 bridge = MCPBridge()
 
 from services.mcp_tools.external_tools import export_advisory_state, export_custom_statement
 
 @tool
-async def plot_expenses_wrapper(plot_time_type: str, from_date: str, to_date: str, account_ids: list[str], state: Annotated[BudAIState, InjectedState]) -> str:
-    """Show user's expenditure between dates for selected accounts."""
+async def plot_expenses_wrapper(plot_time_type: str, from_date: str, to_date: str, account_id: str, state: Annotated[BudAIState, InjectedState]) -> str:
+    """Show user's expenditure between dates for a specific account."""
     user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("analyser", "plot_expenses", {"plot_time_type": plot_time_type, "from_date": from_date, "to_date": to_date, "account_ids": account_ids, "user_uuid": user_uuid})
+    return await bridge.call_tool("analyser", "plot_expenses", {"plot_time_type": plot_time_type, "from_date": from_date, "to_date": to_date, "account_id": account_id, "user_uuid": user_uuid})
 
 @tool
-async def find_total_spent_wrapper(category: str, account_ids: list[str], from_date: str, to_date: str, state: Annotated[BudAIState, InjectedState]) -> str:
-    """Find total spent on a specific category for selected accounts."""
+async def find_total_spent_wrapper(category: str, account_id: str, from_date: str, to_date: str, state: Annotated[BudAIState, InjectedState]) -> str:
+    """Find total spent on a specific category for a specific account."""
     user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("analyser", "find_total_spent_for_given_category", {"category": category, "account_ids": account_ids, "from_date": from_date, "to_date": to_date, "user_uuid": user_uuid})
+    return await bridge.call_tool("analyser", "find_total_spent_for_given_category", {"category": category, "account_id": account_id, "from_date": from_date, "to_date": to_date, "user_uuid": user_uuid})
 
 @tool
-async def find_highest_spending_wrapper(account_ids: list[str], from_date: str, to_date: str, state: Annotated[BudAIState, InjectedState]) -> str:
-    """Find the category with highest spending for selected accounts."""
+async def find_highest_spending_wrapper(account_id: str, from_date: str, to_date: str, state: Annotated[BudAIState, InjectedState]) -> str:
+    """Find the category with highest spending for a specific account."""
     user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("analyser", "find_highest_spending_category", {"account_ids": account_ids, "from_date": from_date, "to_date": to_date, "user_uuid": user_uuid})
+    return await bridge.call_tool("analyser", "find_highest_spending_category", {"account_id": account_id, "from_date": from_date, "to_date": to_date, "user_uuid": user_uuid})
 
 @tool
-async def plot_cash_flow_mixed_wrapper(from_date: str, to_date: str, account_ids: list[str], state: Annotated[BudAIState, InjectedState]) -> str:
-    """Generates a Cash Flow Mixed Chart for selected accounts."""
+async def plot_cash_flow_mixed_wrapper(from_date: str, to_date: str, account_id: str, state: Annotated[BudAIState, InjectedState]) -> str:
+    """Generates a Cash Flow Mixed Chart for a specific account."""
     user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("analyser", "plot_cash_flow_mixed", {"from_date": from_date, "to_date": to_date, "account_ids": account_ids, "user_uuid": user_uuid})
+    return await bridge.call_tool("analyser", "plot_cash_flow_mixed", {"from_date": from_date, "to_date": to_date, "account_id": account_id, "user_uuid": user_uuid})
 
 @tool
 async def get_budget_variance_wrapper(category: str, state: Annotated[BudAIState, InjectedState]) -> str:
@@ -105,17 +104,17 @@ tools = [
     ask_user
 ]
 
-analyser_agent_compiled = create_agent(
+analyser_agent_compiled = create_react_agent(
     model=llm,
     tools=tools,
     state_schema=BudAIState,
-    system_prompt=f"""### ROLE: Specialist Financial Analyser
+    prompt=f"""### ROLE: Specialist Financial Analyser
 You analyze historical data.
 - Date: {current_date_str}
 
 ### CRITICAL STRICT ANTI-HALLUCINATION PROTOCOL ###
 1. NO FABRICATION: You are strictly forbidden from fabricating data. Use ONLY data from tool DATA SUMMARY blocks.
-2. TOOL EXECUTION IS MANDATORY: You must emit a valid JSON tool call to fetch data. You CANNOT roleplay or pretend to execute a tool in your output.
+2. TOOL EXECUTION: You have access to specialized tools. You must use them to fetch data when required.
 3. ADMIT IGNORANCE: If a tool returns no data, state "I do not have the data." Do not guess.
 4. MULTI-CURRENCY: Respect the native currency returned by the tools (e.g., £, €, $). Do not force GBP. No emojis.
 5. FRESH DATA: Always execute tools for fresh data. Never copy-paste numbers from chat history.
@@ -132,10 +131,7 @@ ROUTING (Use these tools):
 - get_connected_accounts_wrapper: Get account IDs.
 - ask_user: Ask- return_analyser_findings: Final step to return data.
 """,
-    middleware=[
-        HumanInTheLoopMiddleware(interrupt_on={"ask_user": True})
-    ]
-)
+    )
 
 @tool("call_analyser", description="Use this tool ONLY for historical user transaction data analysis, past user spending totals, past user cash flow trends, and past user transaction comparisons.")
 async def call_analyser_agent(
@@ -146,7 +142,7 @@ async def call_analyser_agent(
 ):
     """Refined subagent tool for financial analysis."""
     user_uuid = state.get("user_uuid", "ea0e5c07-ab5b-4c14-9ad9-95a036b24637")
-    result = await analyser_agent_compiled.ainvoke({"messages": [{"role": "user", "content": query}], "user_uuid": user_uuid}, config=config)
+    result = await analyser_agent_compiled.ainvoke({"messages": [{"role": "user", "content": query}], "user_uuid": user_uuid})
 
     raw_output = result["messages"][-1].content
     output = raw_output if isinstance(raw_output, str) else "".join([b if isinstance(

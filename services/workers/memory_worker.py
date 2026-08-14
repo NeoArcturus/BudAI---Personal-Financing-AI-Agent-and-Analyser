@@ -3,8 +3,7 @@ from datetime import datetime
 import os
 import re
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.agents import create_agent
-from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
@@ -29,14 +28,14 @@ if not base_url.endswith("/v1"):
     base_url = f"{base_url}/v1"
 
 llm = ChatOpenAI(
-    model="mlx-community/Qwen3.5-4B-4bit",
+    model="lmstudio-community/Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit",
     base_url=base_url,
     api_key="budai-local",
     temperature=0,
     streaming=False,
-    reasoning_effort="high",
+    
     timeout=600,
-    model_kwargs={"extra_body": {"chat_template_kwargs": {"enable_thinking": True}}}
+    
 )
 bridge = MCPBridge()
 
@@ -87,17 +86,17 @@ tools = [
     ask_user
 ]
 
-memory_agent_compiled = create_agent(
-    state_schema=BudAIState,
+memory_agent_compiled = create_react_agent(
     model=llm,
     tools=tools,
-    system_prompt=f"""### ROLE: Specialist Knowledge & History Agent
+    state_schema=BudAIState,
+    prompt=f"""### ROLE: Specialist Knowledge & History Agent
 You retrieve qualitative facts and search multi-year history.
 - Date: {current_date_str}
 
 ### CRITICAL STRICT ANTI-HALLUCINATION PROTOCOL ###
 1. NO FABRICATION: You are strictly forbidden from fabricating data. Use ONLY data from tool DATA SUMMARY blocks.
-2. TOOL EXECUTION IS MANDATORY: You must emit a valid JSON tool call to fetch data. You CANNOT roleplay or pretend to execute a tool in your output.
+2. TOOL EXECUTION: You have access to specialized tools. You must use them to fetch data when required.
 3. ADMIT IGNORANCE: If a tool returns no data, state "I do not have the data." Do not guess.
 4. MULTI-CURRENCY: Respect the native currency returned by the tools (e.g., £, €, $). Do not force GBP. No emojis.
 
@@ -111,10 +110,7 @@ ROUTING (Use these tools):
 - get_connected_accounts_wrapper: Get account IDs.
 - ask_user: Ask clarifying questions.
 """,
-    middleware=[
-        HumanInTheLoopMiddleware(interrupt_on={"ask_user": True})
-    ]
-)
+    )
 
 @tool("call_memory_specialist", description="Use this tool ONLY for retrieving specific qualitative facts, past preferences, or seasonal historical behavior from the user long-term memory store.")
 async def call_memory_agent(
@@ -125,7 +121,7 @@ async def call_memory_agent(
 ):
     """Refined subagent tool for financial knowledge and history."""
     user_uuid = state.get("user_uuid", "ea0e5c07-ab5b-4c14-9ad9-95a036b24637")
-    result = await memory_agent_compiled.ainvoke({"messages": [{"role": "user", "content": query}], "user_uuid": user_uuid}, config=config)
+    result = await memory_agent_compiled.ainvoke({"messages": [{"role": "user", "content": query}], "user_uuid": user_uuid})
     raw_output = result["messages"][-1].content
     output = raw_output if isinstance(raw_output, str) else "".join([b if isinstance(
         b, str) else b.get("text", "") for b in raw_output if isinstance(b, (str, dict))])

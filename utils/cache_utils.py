@@ -14,7 +14,7 @@ def user_cache_key_builder(
     """
     Constructs a unique cache key incorporating user UUID, endpoint, and specific query parameters.
     """
-    logger.info("Entering user_cache_key_builder")
+    logger.info({"message": f"Entering user_cache_key_builder", "status_code": 200})
 
     endpoint_kwargs = kwargs.get("kwargs", {})
     user = endpoint_kwargs.get("current_user")
@@ -37,7 +37,7 @@ def global_cache_key_builder(
     """
     Constructs a global cache key, ignoring user-specific data to create a shared cache.
     """
-    logger.info("Entering global_cache_key_builder")
+    logger.info({"message": f"Entering global_cache_key_builder", "status_code": 200})
     req_url = str(request.url.path)
     if request.url.query:
         req_url += f"?{request.url.query}"
@@ -54,7 +54,7 @@ def clear_user_cache(user_uuid: str, namespace: str = None):
         
         if keys_to_delete:
             redis_client.delete(*keys_to_delete)
-            logger.info(f"Cleared {len(keys_to_delete)} cache keys for user {user_uuid} (namespace: {namespace})")
+            logger.info({"message": f"Cleared {len(keys_to_delete)} cache keys for user {user_uuid} (namespace: {namespace})", "status_code": 200})
     except Exception as e:
-        logger.error(f"Failed to clear Redis cache for user {user_uuid}: {e}")
+        logger.error({"message": f"Failed to clear Redis cache for user {user_uuid}: {e}", "status_code": 500})
 

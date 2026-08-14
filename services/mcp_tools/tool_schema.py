@@ -34,35 +34,35 @@ class GenerateFinancialForecastInput(BaseToolInput):
 class ClassifyFinancialDataInput(BaseToolInput):
     from_date: str = Field(..., description="Start date YYYY-MM-DD.")
     to_date: str = Field(..., description="End date YYYY-MM-DD.")
-    account_ids: List[str] = Field(..., description="List of account UUIDs or names.")
+    account_id: str = Field(..., description="The exact account ID (UUID) to analyze. CRITICAL: NEVER leak or mention the raw UUID to the user in chat. Always refer to the account by its Bank Name and Currency.")
     user_uuid: str = Field(..., description="The exact user_uuid string.")
 
 class FindTotalSpentInput(BaseToolInput):
     category: str = Field(..., description="Category name or 'all'.")
-    account_ids: List[str] = Field(..., description="List of account UUIDs or names.")
+    account_id: str = Field(..., description="The exact account ID (UUID) to analyze. CRITICAL: NEVER leak or mention the raw UUID to the user in chat. Always refer to the account by its Bank Name and Currency.")
     user_uuid: str = Field(..., description="The exact user_uuid string.")
 
 class FindHighestSpendingCategoryInput(BaseToolInput):
-    account_ids: List[str] = Field(..., description="List of account UUIDs or names.")
+    account_id: str = Field(..., description="The exact account ID (UUID) to analyze. CRITICAL: NEVER leak or mention the raw UUID to the user in chat. Always refer to the account by its Bank Name and Currency.")
     user_uuid: str = Field(..., description="The exact user_uuid string.")
 
 class CreateBargraphChartInput(BaseToolInput):
-    account_ids: List[str] = Field(..., description="List of account UUIDs or names.")
+    account_id: str = Field(..., description="The exact account ID (UUID) to analyze. CRITICAL: NEVER leak or mention the raw UUID to the user in chat. Always refer to the account by its Bank Name and Currency.")
     user_uuid: str = Field(..., description="The exact user_uuid string.")
 
 class CreatePieChartInput(BaseToolInput):
-    account_ids: List[str] = Field(..., description="List of account UUIDs or names.")
+    account_id: str = Field(..., description="The exact account ID (UUID) to analyze. CRITICAL: NEVER leak or mention the raw UUID to the user in chat. Always refer to the account by its Bank Name and Currency.")
     user_uuid: str = Field(..., description="The exact user_uuid string.")
 
 class PlotExpensesInput(BaseToolInput):
     plot_time_type: str = Field(..., description="'Daily', 'Weekly', or 'Monthly'.")
     from_date: str = Field(..., description="Start date YYYY-MM-DD.")
     to_date: str = Field(..., description="End date YYYY-MM-DD.")
-    account_ids: List[str] = Field(..., description="List of account UUIDs or names.")
+    account_id: str = Field(..., description="The exact account ID (UUID) to analyze. CRITICAL: NEVER leak or mention the raw UUID to the user in chat. Always refer to the account by its Bank Name and Currency.")
     user_uuid: str = Field(..., description="The exact user_uuid string.")
 
 class GenerateExpenseForecastInput(BaseToolInput):
-    account_ids: List[str] = Field(..., description="List of account UUIDs or names.")
+    account_id: str = Field(..., description="The exact account ID (UUID) to analyze. CRITICAL: NEVER leak or mention the raw UUID to the user in chat. Always refer to the account by its Bank Name and Currency.")
     user_uuid: str = Field(..., description="The exact user_uuid string.")
     days: int = Field(30, description="Days to forecast.")
     discipline_multiplier: float = Field(1.0, description="Discipline multiplier.")
@@ -77,7 +77,7 @@ class AnalyzeWealthAccelerationMetricsInput(BaseToolInput):
     user_uuid: str = Field(..., description="The exact user_uuid string.")
 
 class PlotCashFlowMixedInput(BaseToolInput):
-    account_ids: List[str] = Field(..., description="List of account UUIDs or names.")
+    account_id: str = Field(..., description="The exact account ID (UUID) to analyze. CRITICAL: NEVER leak or mention the raw UUID to the user in chat. Always refer to the account by its Bank Name and Currency.")
     user_uuid: str = Field(..., description="The exact user_uuid string.")
     from_date: str = Field(...)
     to_date: str = Field(...)
@@ -122,7 +122,7 @@ def _cache_chart_data(data: Any) -> str:
             )
             session.commit()
     except Exception as e:
-        logger.error(f"Cache failed: {e}")
+        logger.error(json.dumps({"message": f"Cache failed: {e}", "status_code": 500}))
         raise
     return cache_id
 

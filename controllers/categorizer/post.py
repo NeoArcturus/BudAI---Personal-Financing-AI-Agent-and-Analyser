@@ -1,3 +1,4 @@
+import json
 from fastapi import HTTPException, BackgroundTasks
 from sqlalchemy import text
 from models.database_models import User, BackgroundTask, Transaction
@@ -53,7 +54,7 @@ def background_retrain_and_recategorize(user_uuid: str, task_id: str):
                 final_df = agent.categorizer.predict(clean_df, embeddings, xgb_model_path, enc_path)
                 category_map = final_df.set_index("transaction_uuid")["Category"].to_dict()
             else:
-                logger.warning("Model files not found, skipping prediction")
+                logger.warning(json.dumps({"message": f"Model files not found, skipping prediction", "status_code": 400}))
                 category_map = {}
             feedback_rows = session.execute(text("""
                 SELECT transaction_uuid, corrected_label
@@ -76,19 +77,21 @@ def background_retrain_and_recategorize(user_uuid: str, task_id: str):
                     "date": t.date
                 } for t in txs], user_uuid)
             except Exception as e:
-                logger.error(f"Failed to update memory index: {e}")
+                logger.error(json.dumps({"message": f"Failed to update memory index: {e}", "status_code": 500}))
             try:
                 from services.Forecaster_Agent.ForecasterAgent import ForecasterAgent
                 forecaster = ForecasterAgent()
-                forecaster.generate_dynamic_parameters(user_uuid)
+                accounts = session.execute(text("SELECT account_id FROM accounts WHERE user_uuid = :user_uuid"), {"user_uuid": user_uuid}).fetchall()
+                for (acc_id,) in accounts:
+                    forecaster.generate_dynamic_parameters(user_uuid, acc_id)
             except Exception as e:
-                logger.error(f"Failed to regenerate dynamic parameters: {e}")
+                logger.error(json.dumps({"message": f"Failed to regenerate dynamic parameters: {e}", "status_code": 500}))
             task = session.query(BackgroundTask).filter_by(task_id=task_id).first()
             if task:
                 task.status = "completed"
                 session.commit()
     except Exception as e:
-        logger.error(f"Task {task_id} failed with critical error: {e}")
+        logger.error(json.dumps({"message": f"Task {task_id} failed with critical error: {e}", "status_code": 500}))
         with SessionLocal() as session:
             task = session.query(BackgroundTask).filter_by(task_id=task_id).first()
             if task:
@@ -160,7 +163,7 @@ async def save_manual_label(payload: TransactionLabelCorrectionRequest, backgrou
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in save_manual_label: {e}")
+        logger.error(json.dumps({"message": f"Error in save_manual_label: {e}", "status_code": 500}))
         raise HTTPException(status_code=500, detail=str(e))
 
 async def retrain_categorizer(payload: RetrainCategorizerRequest, background_tasks: BackgroundTasks, current_user: User):
@@ -202,5 +205,5 @@ async def retrain_categorizer(payload: RetrainCategorizerRequest, background_tas
             "message": "Retraining and re-categorization queued."
         }
     except Exception as e:
-        logger.error(f"Error in retrain_categorizer: {e}")
+        logger.error(json.dumps({"message": f"Error in retrain_categorizer: {e}", "status_code": 500}))
         raise HTTPException(status_code=500, detail=str(e))

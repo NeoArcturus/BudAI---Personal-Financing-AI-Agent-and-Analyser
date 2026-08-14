@@ -1,3 +1,4 @@
+import json
 from fastapi import HTTPException
 from models.database_models import User
 import yfinance as yf
@@ -42,10 +43,10 @@ async def get_market_ticker(current_user: User):
                         "change": round(change_pct, 2)
                     })
             except Exception as e:
-                logger.warning(f"Failed to fetch ticker {symbol}: {e}")
+                logger.warning(json.dumps({"message": f"Failed to fetch ticker {symbol}: {e}", "status_code": 400}))
         return {"tickers": results}
     except Exception as e:
-        logger.error(f"Market ticker failed: {e}")
+        logger.error(json.dumps({"message": f"Market ticker failed: {e}", "status_code": 500}))
         raise HTTPException(
             status_code=500, detail="Failed to fetch market data")
 
@@ -96,7 +97,7 @@ async def get_market_history(range: str, current_user: User):
                     f"Failed to fetch history for {symbol} ({period}): {e}")
         return {"history": results}
     except Exception as e:
-        logger.error(f"Market history failed: {e}")
+        logger.error(json.dumps({"message": f"Market history failed: {e}", "status_code": 500}))
         raise HTTPException(
             status_code=500, detail="Failed to fetch market history")
 
@@ -144,5 +145,5 @@ async def get_market_news(current_user: User):
                 "market": format_news(market_results)
             }
     except Exception as e:
-        logger.error(f"Market news failed: {e}")
+        logger.error(json.dumps({"message": f"Market news failed: {e}", "status_code": 500}))
         raise HTTPException(status_code=500, detail="Failed to fetch news")

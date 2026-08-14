@@ -1,3 +1,4 @@
+import json
 import logging
 import asyncio
 import os
@@ -54,20 +55,20 @@ def refresh_all_tokens():
             try:
                 success = token_gen.refresh_token(provider_id, user_uuid)
                 if success:
-                    logger.debug(f"Successfully refreshed tokens for {bank_name}.")
+                    logger.debug(json.dumps({"message": f"Successfully refreshed tokens for {bank_name}.", "status_code": 100}))
                 else:
-                    logger.warning(f"Failed to refresh tokens for {bank_name}.")
+                    logger.warning({"message": f"Failed to refresh tokens for {bank_name}.", "status_code": 400})
             except Exception as e:
-                logger.error(f"Error refreshing {bank_name}: {e}")
+                logger.error({"message": f"Error refreshing {bank_name}: {e}", "status_code": 500})
     except Exception as e:
-        logger.error(f"Critical error in token refresh scheduler: {e}")
+        logger.error({"message": f"Critical error in token refresh scheduler: {e}", "status_code": 500})
 
 def run_global_lifestyle_analytics():
     try:
         from models.database_models import User
         from services.analytics.lifestyle_clustering import LifestyleClusteringService
         from services.analytics.subscription_detector import SubscriptionDetector
-        logger.info("Starting global background job: Analytics & Subscriptions")
+        logger.info({"message": f"Starting global background job: Analytics & Subscriptions", "status_code": 200})
         
         with SessionLocal() as session:
             users = session.query(User).all()
@@ -83,15 +84,15 @@ def run_global_lifestyle_analytics():
                 cluster_service.analyze_user_lifestyle(user.user_uuid)
                 sub_detector.analyze_user_subscriptions(user.user_uuid)
             except Exception as e:
-                logger.error(f"Failed analytics for user {user.user_uuid}: {e}")
+                logger.error({"message": f"Failed analytics for user {user.user_uuid}: {e}", "status_code": 500})
                 
-        logger.info("Global background job completed: Analytics & Subscriptions")
+        logger.info({"message": f"Global background job completed: Analytics & Subscriptions", "status_code": 200})
     except Exception as e:
-        logger.error(f"Critical error in lifestyle analytics scheduler: {e}")
+        logger.error({"message": f"Critical error in lifestyle analytics scheduler: {e}", "status_code": 500})
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("INITIALIZING BUDAI CORE ENGINE")
+    logger.info({"message": f"INITIALIZING BUDAI CORE ENGINE", "status_code": 200})
     bridge = MCPBridge()
     FastAPICache.init(InMemoryBackend(), prefix="budai-cache")
     scheduler = BackgroundScheduler()
@@ -100,33 +101,39 @@ async def lifespan(app: FastAPI):
     # Run HDBSCAN analytics every 10 minutes for testing
     scheduler.add_job(func=run_global_lifestyle_analytics, trigger="interval", minutes=10)
     
+    from services.analytics.proactive_insights import generate_proactive_insights_for_all_users
+    scheduler.add_job(func=generate_proactive_insights_for_all_users, trigger="interval", hours=12)
+    
+    from services.analytics.subscription_sweeper import expire_stale_subscriptions
+    scheduler.add_job(func=expire_stale_subscriptions, trigger="interval", minutes=5)
+    
     scheduler.start()
-    logger.info("Background scheduler started: Token Refresh (45m) & Lifestyle Analytics (10m)")
+    logger.info({"message": f"Background scheduler started: Token Refresh (45m), Lifestyle Analytics (10m), Proactive Insights (12h), Sub Sweeper (5m)", "status_code": 200})
     def _run_global_training():
         try:
             from services.memory_service import MemoryService
-            logger.info("Pre-warming local ML embedding model...")
+            logger.info({"message": f"Pre-warming local ML embedding model...", "status_code": 200})
             MemoryService() # Initialize singleton to pre-load embedding model
-            logger.info("ML embedding model initialized.")
+            logger.info({"message": f"ML embedding model initialized.", "status_code": 200})
         except Exception as e:
-            logger.error(f"Failed to initialize MemoryService: {e}")
+            logger.error({"message": f"Failed to initialize MemoryService: {e}", "status_code": 500})
             
         try:
             from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
             agent = CategorizerAgent()
             res = agent.train_global()
             if res.get("trained"):
-                logger.debug(f"Global categorization model trained on {res.get('samples', 0)} samples.")
+                logger.debug(json.dumps({"message": f"Global categorization model trained on {res.get('samples', 0)} samples.", "status_code": 100}))
             else:
-                logger.debug(f"Global categorization model initialization: {res.get('reason')}")
+                logger.debug(json.dumps({"message": f"Global categorization model initialization: {res.get('reason')}", "status_code": 100}))
         except Exception as e:
-            logger.error(f"Failed to initialize global categorizer: {e}")
+            logger.error({"message": f"Failed to initialize global categorizer: {e}", "status_code": 500})
             
     asyncio.create_task(asyncio.to_thread(_run_global_training))
     
     yield
     scheduler.shutdown()
-    logger.info("Shutting down background scheduler")
+    logger.info({"message": f"Shutting down background scheduler", "status_code": 200})
 
 app = FastAPI(title="BudAI API Core", version="2.0.0", lifespan=lifespan)
 
@@ -142,6 +149,8 @@ app.add_middleware(
 )
 
 from routes.webhook_routes import router as webhook_router
+from routes.widget_routes import router as widget_router
+from routes.intent_routes import router as intent_router
 
 app.include_router(auth_router)
 app.include_router(callback_router)
@@ -154,6 +163,9 @@ app.include_router(market_router)
 app.include_router(webhook_router)
 app.include_router(memory_router)
 app.include_router(analytics_router)
+app.include_router(widget_router)
+app.include_router(intent_router)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)

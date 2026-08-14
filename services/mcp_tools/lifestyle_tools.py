@@ -1,3 +1,4 @@
+import json
 from langchain_core.tools import tool
 from config import SessionLocal
 from sqlmodel import select
@@ -25,7 +26,7 @@ def get_user_lifestyle_profile(user_uuid: str) -> str:
     Returns:
         str: A formatted string detailing the user's Macro-Persona and top Lifestyle Clusters, or an error message if missing.
     """
-    logger.info("Executing MCP Tool: get_user_lifestyle_profile")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: get_user_lifestyle_profile", "status_code": 200}))
     try:
         with SessionLocal() as session:
             profile = session.execute(select(UserLifestyleProfile).where(UserLifestyleProfile.user_uuid == user_uuid)).scalars().first()
@@ -54,7 +55,7 @@ def get_semantic_anomalies(user_uuid: str) -> str:
     Returns:
         str: A formatted list of anomalous transactions within the last 30 days, or a message if none are found.
     """
-    logger.info("Executing MCP Tool: get_semantic_anomalies")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: get_semantic_anomalies", "status_code": 200}))
     try:
         with SessionLocal() as session:
             thirty_days_ago = datetime.utcnow() - timedelta(days=30)
@@ -86,7 +87,7 @@ def get_lifestyle_trajectory(user_uuid: str) -> str:
     Returns:
         str: A text analysis detailing the stability or shift of the user's behavioral clusters.
     """
-    logger.info("Executing MCP Tool: get_lifestyle_trajectory")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: get_lifestyle_trajectory", "status_code": 200}))
     try:
         with SessionLocal() as session:
             profile = session.execute(select(UserLifestyleProfile).where(UserLifestyleProfile.user_uuid == user_uuid)).scalars().first()
@@ -108,7 +109,7 @@ def benchmark_persona_budget(user_uuid: str) -> str:
     Returns:
         str: A benchmark statement indicating how the user's spending compares to their demographic peers.
     """
-    logger.info("Executing MCP Tool: benchmark_persona_budget")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: benchmark_persona_budget", "status_code": 200}))
     try:
         with SessionLocal() as session:
             profile = session.execute(select(UserLifestyleProfile).where(UserLifestyleProfile.user_uuid == user_uuid)).scalars().first()
@@ -139,7 +140,7 @@ def predict_impulse_vulnerability(user_uuid: str) -> str:
     Returns:
         str: An advisory string detailing the day of the week with highest aggregate negative spending, or a fallback message if data is insufficient.
     """
-    logger.info("Executing MCP Tool: predict_impulse_vulnerability")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: predict_impulse_vulnerability", "status_code": 200}))
     try:
         with SessionLocal() as session:
             txs = session.execute(
@@ -175,7 +176,7 @@ def get_upcoming_subscriptions(user_uuid: str) -> str:
     Returns:
         str: A formatted markdown list of upcoming subscriptions, their dates, amounts, and any price hike warnings.
     """
-    logger.info("Executing MCP Tool: get_upcoming_subscriptions")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: get_upcoming_subscriptions", "status_code": 200}))
     try:
         from models.database_models import Subscription
         with SessionLocal() as session:

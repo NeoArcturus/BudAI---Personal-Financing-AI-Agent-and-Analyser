@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Request, BackgroundTasks
 from controllers.webhooks.post import handle_truelayer_webhook
 from services.logger_setup import get_core_logger
@@ -18,5 +19,5 @@ async def truelayer_webhook_route(
         payload = await request.json()
         return await handle_truelayer_webhook(payload, background_tasks, user_uuid, bank_uuid, acc_id)
     except Exception as e:
-        logger.error(f"Failed to process TrueLayer webhook: {e}")
+        logger.error(json.dumps({"message": f"Failed to process TrueLayer webhook: {e}", "status_code": 500}))
         return {"status": "error", "message": "Failed to parse webhook"}

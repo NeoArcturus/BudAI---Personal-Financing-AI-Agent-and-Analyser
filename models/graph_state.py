@@ -1,5 +1,6 @@
 from typing import TypedDict, Dict, Any, List, Optional, Annotated
 from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
 from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
@@ -7,9 +8,11 @@ def update_latest(old: Optional[str], new: Optional[str]) -> Optional[str]:
     return new if new is not None else old
 
 class BudAIState(TypedDict, total=False):
+    messages: Annotated[list[BaseMessage], add_messages]
+    remaining_steps: int
     user_uuid: str
     session_id: Optional[str]
-    active_account_id: str
+    active_account_id: Optional[str] = None
     user_input: str
     chat_history: List[BaseMessage]
     selected_worker: Optional[str]
@@ -20,4 +23,3 @@ class BudAIState(TypedDict, total=False):
     final_response: str
     raw_data: Optional[Any]
     is_explanation: Optional[bool]
-

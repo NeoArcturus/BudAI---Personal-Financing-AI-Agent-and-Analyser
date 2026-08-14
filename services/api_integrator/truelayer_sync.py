@@ -1,3 +1,4 @@
+import json
 import requests
 import time
 import hashlib
@@ -40,12 +41,15 @@ class TrueLayerSync:
                 res = requests.get(url, headers=headers, params=params)
         if res is not None and res.status_code == 403:
             err_data = res.json()
-            logger.error(f"Access forbidden (403) for {url}: {err_data}")
+            logger.error(json.dumps({"message": f"Access forbidden (403) for {url}: {err_data}", "status_code": 500}))
             if isinstance(err_data, dict) and (err_data.get("error") == "sca_exceeded" or "PSU" in str(err_data)):
                 raise PermissionError("SECURITY LOCK")
         if res is not None:
-            logger.info(
-                f"Request to {url} completed with status {res.status_code}")
+            if res.status_code == 404 and url.endswith("/balance"):
+                pass # Suppress noisy 404 logs for unsupported balance endpoints
+            else:
+                logger.info(
+                    f"Request to {url} completed with status {res.status_code}")
         return res
 
     def initialise_accounts(self, bank_uuid, user_uuid):
@@ -56,7 +60,7 @@ class TrueLayerSync:
                 bank = session.query(Bank).filter_by(
                     bank_uuid=bank_uuid, user_uuid=user_uuid).first()
                 if not bank:
-                    logger.warning(f"Bank connection not found: {bank_uuid}")
+                    logger.warning(json.dumps({"message": f"Bank connection not found: {bank_uuid}", "status_code": 400}))
                     return False
                 logger.info(
                     f"Decrypting tokens for bank: {bank.bank_name or bank.truelayer_provider_id}")
@@ -104,10 +108,12 @@ class TrueLayerSync:
                         acc_balance = 0.0
                         bal_res = self._make_request(
                             f"{self.base_url}/{acc_id}/balance", access_token, provider_id)
-                        if bal_res is not None and bal_res.status_code == 200:
-                            bal_data = bal_res.json().get("results", [{}])[0]
-                            acc_balance = bal_data.get(
-                                "available", bal_data.get("current", 0.0))
+                        if bal_res is not None:
+                            if bal_res.status_code == 200:
+                                bal_data = bal_res.json().get("results", [{}])[0]
+                                acc_balance = bal_data.get("available", bal_data.get("current", 0.0))
+                            elif bal_res.status_code == 404:
+                                logger.debug(json.dumps({"message": f"Balance not supported for account {acc_id} (404). Defaulting to 0.0", "status_code": 100}))
                         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
                         stmt = pg_insert(Account).values(
@@ -168,6 +174,8 @@ class TrueLayerSync:
                         from utils.cache_utils import clear_user_cache
                         async def _clear_cache():
                             clear_user_cache(str(user_uuid), namespace="accounts")
+                            clear_user_cache(str(user_uuid), namespace="transactions")
+                            clear_user_cache(str(user_uuid), namespace="categorizer")
                         
                         try:
                             loop = asyncio.get_running_loop()
@@ -175,69 +183,62 @@ class TrueLayerSync:
                         except RuntimeError:
                             asyncio.run(_clear_cache())
                     except Exception as ce:
-                        logger.error(f"Failed to clear cache: {ce}")
+                        logger.error(json.dumps({"message": f"Failed to clear cache: {ce}", "status_code": 500}))
                     return True
                 return False
         except Exception as e:
-            logger.error(f"Error initializing accounts: {e}", exc_info=True)
+            logger.error(json.dumps({"message": f"Error initializing accounts: {e}", "status_code": 500}), exc_info=True)
             return False
 
-    def trigger_sync(self, identifier: Any, user_uuid: str, from_date: str = None, to_date: str = None):
+    def trigger_sync(self, account_id: str, user_uuid: str, from_date: str = None, to_date: str = None):
         try:
             with SessionLocal() as session:
-                identifiers = [identifier] if isinstance(identifier, str) else identifier
-                query_base = session.query(Account.account_id, Bank.access_token, Bank.bank_uuid, Bank.truelayer_provider_id, Account.last_synced_at).join(Bank)
-                
-                if identifiers and "ALL" not in [str(i).upper() for i in identifiers]:
-                    query_base = query_base.filter(
-                        (Bank.bank_name.in_(identifiers)) | (Account.account_id.in_(identifiers))
-                    )
-                
-                rows = query_base.filter(Account.user_uuid == user_uuid).all()
-                if not rows:
+                row = session.query(Account.account_id, Bank.access_token, Bank.bank_uuid, Bank.truelayer_provider_id, Account.last_synced_at)\
+                             .join(Bank)\
+                             .filter(Account.account_id == account_id, Account.user_uuid == user_uuid).first()
+                if not row:
                     return
 
-            for row in rows:
-                acc_id, enc_token, b_uuid, p_id, last_synced = row
+            acc_id, enc_token, b_uuid, p_id, last_synced = row
                 
-                is_deep_sync = False
-                if from_date:
-                    try:
-                        req_start = pd.to_datetime(from_date, utc=True)
-                        with SessionLocal() as s2:
-                            oldest = s2.query(Transaction.date).filter_by(account_id=acc_id).order_by(Transaction.date.asc()).first()
-                            if not oldest or oldest[0].replace(tzinfo=None) > req_start.replace(tzinfo=None) + timedelta(days=3):
-                                is_deep_sync = True
-                    except:
-                        pass
-                
-                if not is_deep_sync and last_synced and (datetime.utcnow() - last_synced).total_seconds() < 3600:
-                    continue
-                    
+            is_deep_sync = False
+            if from_date:
                 try:
-                    access_token = self.cipher_suite.decrypt(bytes(enc_token)).decode()
-                    url = f"{self.base_url}/{acc_id}/transactions"
-                    params = {}
-                    
-                    if is_deep_sync:
-                        params["from"] = pd.to_datetime(from_date, utc=True).strftime('%Y-%m-%d')
-                        if to_date:
-                            params["to"] = pd.to_datetime(to_date, utc=True).strftime('%Y-%m-%d')
-                    elif last_synced:
-                        overlap_start = last_synced - pd.Timedelta(days=3)
-                        params["from"] = overlap_start.strftime('%Y-%m-%d')
-                    else:
-                        pass
-                    import os
-                    webhook_base = os.getenv("WEBHOOK_BASE_URL", "https://api.budai.app")
-                    params["async"] = "true"
-                    params["webhook_uri"] = f"{webhook_base}/api/webhooks/truelayer?user_uuid={user_uuid}&bank_uuid={b_uuid}&acc_id={acc_id}"
+                    req_start = pd.to_datetime(from_date, utc=True)
+                    with SessionLocal() as s2:
+                        oldest = s2.query(Transaction.date).filter_by(account_id=acc_id).order_by(Transaction.date.asc()).first()
+                        if not oldest or oldest[0].replace(tzinfo=None) > req_start.replace(tzinfo=None) + timedelta(days=3):
+                            is_deep_sync = True
+                except:
+                    pass
+            
+            if not is_deep_sync and last_synced and (datetime.utcnow() - last_synced).total_seconds() < 3600:
+                return
+                
+            try:
+                access_token = self.cipher_suite.decrypt(bytes(enc_token)).decode()
+                url = f"{self.base_url}/{acc_id}/transactions"
+                params = {}
+                
+                if is_deep_sync:
+                    params["from"] = pd.to_datetime(from_date, utc=True).strftime('%Y-%m-%d')
+                    if to_date:
+                        params["to"] = pd.to_datetime(to_date, utc=True).strftime('%Y-%m-%d')
+                elif last_synced:
+                    overlap_start = last_synced - pd.Timedelta(days=3)
+                    params["from"] = overlap_start.strftime('%Y-%m-%d')
+                else:
+                    pass
+                import os
+                webhook_base = os.getenv("WEBHOOK_BASE_URL", "https://api.budai.app")
+                params["async"] = "true"
+                params["webhook_uri"] = f"{webhook_base}/api/webhooks/truelayer?user_uuid={user_uuid}&bank_uuid={b_uuid}&acc_id={acc_id}"
 
-                    res = self._make_request(url, access_token, p_id, params=params)
-                except Exception as e:
-                    logger.error(f"Failed to fetch API transactions for {acc_id}: {e}")
+                res = self._make_request(url, access_token, p_id, params=params)
+            except Exception as e:
+                logger.error(json.dumps({"message": f"Failed to fetch API transactions for {acc_id}: {e}", "status_code": 500}))
         except Exception:
-            logger.error("Error in trigger_sync", exc_info=True)
+            logger.error(json.dumps({"message": f"Error in trigger_sync", "status_code": 500}), exc_info=True)
 
     def process_and_store_transactions(self, session, tx_data, user_uuid, bank_uuid, account_id):
         from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
@@ -345,8 +346,9 @@ class TrueLayerSync:
                 asyncio.run(categorize_specific_transactions_bg(tx_uuids, user_uuid))
                 from utils.cache_utils import clear_user_cache
                 clear_user_cache(str(user_uuid), namespace="transactions")
+                clear_user_cache(str(user_uuid), namespace="categorizer")
             except Exception as e:
-                logger.error(f"Failed in trigger_categorization: {e}", exc_info=True)
+                logger.error(json.dumps({"message": f"Failed in trigger_categorization: {e}", "status_code": 500}), exc_info=True)
         
         import threading
         threading.Thread(target=trigger_categorization, daemon=True).start()

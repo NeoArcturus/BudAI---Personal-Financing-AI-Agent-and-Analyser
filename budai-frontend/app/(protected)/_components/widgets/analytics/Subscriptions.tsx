@@ -111,9 +111,11 @@ export function Subscriptions() {
               </span>
               <span className="text-sm font-black font-mono text-primary tracking-widest">
                 {formatCurrency(
-                  subscriptionsData.subscriptions.reduce(
-                    (acc, sub) => acc + (sub.expected_amount / parseFrequencyToDays(sub.predicted_frequency)) * 30.4, 0
-                  )
+                  subscriptionsData.subscriptions
+                    .filter(sub => sub.status !== "expired")
+                    .reduce(
+                      (acc, sub) => acc + (sub.expected_amount / parseFrequencyToDays(sub.predicted_frequency)) * 30.4, 0
+                    )
                 )}
               </span>
             </div>
@@ -139,8 +141,13 @@ export function Subscriptions() {
               </div>
             ) : (
               [...subscriptionsData.subscriptions]
-                .sort((a, b) => b.expected_amount - a.expected_amount)
+                .sort((a, b) => {
+                  if (a.status === "expired" && b.status !== "expired") return 1;
+                  if (a.status !== "expired" && b.status === "expired") return -1;
+                  return b.expected_amount - a.expected_amount;
+                })
                 .map((sub, idx) => {
+                  const isExpired = sub.status === "expired";
                   const freqDays = parseFrequencyToDays(sub.predicted_frequency);
                   const annualizedCost = (sub.expected_amount / freqDays) * 365.25;
 
@@ -182,14 +189,19 @@ export function Subscriptions() {
                   console.log(sub.account_number, sub.bank_name, sub.sort_code)
 
                   return (
-                    <div key={idx} className="flex flex-col gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:border-primary/20 transition-colors">
+                    <div key={idx} className={`flex flex-col gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/5 transition-colors ${isExpired ? "border-white/10" : "hover:border-primary/20"}`}>
                       <div className="flex justify-between items-start">
                         <div className="flex flex-col">
                           <span className="text-foreground font-bold tracking-wide text-sm uppercase">
                             {sub.merchant_name}
                           </span>
-                          <span className="text-[10px] font-mono tracking-[0.2em] text-foreground/40 mt-0.5">
-                            Account: {sub.bank_name || "Unknown"} {bankDetails}
+                          <span className="text-[10px] font-mono tracking-[0.2em] mt-0.5 flex items-center gap-2">
+                            <span className="text-foreground/40">Account: {sub.bank_name || "Unknown"} {bankDetails}</span>
+                            {isExpired ? (
+                              <span className="bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded text-[8px] font-black tracking-widest uppercase border border-red-500/30">Expired</span>
+                            ) : (
+                              <span className="bg-green-500/10 text-green-500 px-1.5 py-0.5 rounded text-[8px] font-black tracking-widest uppercase border border-green-500/30">Active</span>
+                            )}
                           </span>
                         </div>
                         <div className="flex flex-col items-end gap-1 text-right">

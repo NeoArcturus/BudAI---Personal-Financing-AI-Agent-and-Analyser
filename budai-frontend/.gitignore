@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 # heroui-agents-md
 .heroui-docs/
+
+# Custom AI rules
+GEMINI.md

@@ -1,3 +1,4 @@
+import json
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from urllib.parse import urlparse
@@ -11,7 +12,7 @@ def ensure_db_exists():
     if "postgresql" not in DATABASE_URL:
         return
         
-    logger.debug("Ensuring PostgreSQL database exists")
+    logger.debug(json.dumps({"message": f"Ensuring PostgreSQL database exists", "status_code": 100}))
     result = urlparse(DATABASE_URL)
     username = result.username
     password = result.password
@@ -34,16 +35,16 @@ def ensure_db_exists():
         exists = cur.fetchone()
         
         if not exists:
-            logger.info(f"Database {database} does not exist. Creating it.")
+            logger.info(json.dumps({"message": f"Database {database} does not exist. Creating it.", "status_code": 200}))
             cur.execute(f'CREATE DATABASE {database}')
-            logger.info(f"Database {database} created successfully.")
+            logger.info(json.dumps({"message": f"Database {database} created successfully.", "status_code": 200}))
         else:
-            logger.debug(f"Database {database} already exists.")
+            logger.debug(json.dumps({"message": f"Database {database} already exists.", "status_code": 100}))
             
         cur.close()
         conn.close()
     except Exception as e:
-        logger.error(f"Error ensuring database exists: {e}")
+        logger.error(json.dumps({"message": f"Error ensuring database exists: {e}", "status_code": 500}))
 
 def init_db(db_path=None):
     try:
@@ -55,7 +56,7 @@ def init_db(db_path=None):
             conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_category VARCHAR;"))
             conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_semantic_anomaly BOOLEAN DEFAULT FALSE;"))
 
-        logger.debug("Database initialized successfully")
+        logger.debug(json.dumps({"message": f"Database initialized successfully", "status_code": 100}))
     except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
+        logger.error(json.dumps({"message": f"Failed to initialize database: {e}", "status_code": 500}))
         raise

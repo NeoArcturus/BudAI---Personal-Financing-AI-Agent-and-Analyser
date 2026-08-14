@@ -179,51 +179,6 @@ export const BudAIProvider = ({
     return fetchedAccounts.reduce((sum, acc) => sum + (acc.balance ?? 0), 0);
   }, [fetchedAccounts]);
 
-  const fetchCachedChart = useCallback(
-    async (type: string, cacheId: string) => {
-      let toolName = "";
-      if (type.includes("categorized")) toolName = "classify_financial_data";
-      else if (type.includes("expense_forecast"))
-        toolName = "generate_expense_forecast";
-      else if (type.includes("balance_forecast"))
-        toolName = "generate_financial_forecast";
-      else if (type.includes("health")) toolName = "plot_health_radar";
-      else if (type.includes("cash_flow")) toolName = "plot_cash_flow_mixed";
-      else if (type.includes("historical")) toolName = "plot_expenses";
-
-      try {
-        setIsGenerating(true);
-        const res = await apiFetch(
-          "/api/media/execute",
-          {
-            method: "POST",
-            body: JSON.stringify({
-              tool_name: toolName,
-              parameters: { bank_name_or_id: cacheId },
-            }),
-          },
-          true,
-        );
-        const jsonRes = (await res.json()) as { data?: BankChartData[] };
-        const newConfig = buildChartConfig(
-          type,
-          jsonRes.data || [],
-          { bank_name_or_id: cacheId },
-          "Targeted Analysis View",
-        );
-        if (newConfig) {
-          setChartConfig(newConfig);
-          router.push("/home");
-        }
-      } catch (e: unknown) {
-        console.error(e);
-      } finally {
-        setIsGenerating(false);
-      }
-    },
-    [router],
-  );
-
   const activeAccount = fetchedAccounts.find(
     (a) => a.account_id === activeAccountId,
   );
@@ -264,14 +219,6 @@ export const BudAIProvider = ({
       },
     }),
     async onToolCall({ toolCall }) {
-      if (toolCall.toolName === "render_ui_chart") {
-        const payload = toolCall as typeof toolCall & {
-          args: { chart_type: string; cache_id: string };
-        };
-        if (payload.args && payload.args.chart_type && payload.args.cache_id) {
-          fetchCachedChart(payload.args.chart_type, payload.args.cache_id);
-        }
-      }
       if (toolCall.toolName === "render_account_selector") {
         setIsAccountSelectorOpen(true);
       }

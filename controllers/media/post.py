@@ -97,7 +97,7 @@ async def execute_tool(request: MediaExecuteRequest, current_user: User):
             if bank_name_or_id:
                 params["account_ids"] = [bank_name_or_id]
             else:
-                params["account_ids"] = ["ALL"]
+                params["account_ids"] = []
         
         tool_obj = TOOL_MAPPING[tool_name]
         
@@ -140,5 +140,5 @@ async def execute_tool(request: MediaExecuteRequest, current_user: User):
             "data": result_str
         }
     except Exception as e:
-        logger.error(f"Error executing tool {tool_name} for user {user_uuid}: {e}")
+        logger.error(json.dumps({"message": f"Error executing tool {tool_name} for user {user_uuid}: {e}", "status_code": 500}))
         raise HTTPException(status_code=500, detail=str(e))

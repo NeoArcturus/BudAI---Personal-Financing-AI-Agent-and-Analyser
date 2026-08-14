@@ -1,3 +1,4 @@
+import json
 import asyncio
 import pandas as pd
 from fastapi import HTTPException
@@ -24,7 +25,7 @@ async def fetch_user_accounts(user_uuid: str):
         all_accounts = await asyncio.to_thread(user_acc.get_all_accounts)
         return {"accounts": all_accounts}
     except Exception as e:
-        logger.error(f"Failed to fetch accounts for user {user_uuid}: {e}")
+        logger.error(json.dumps({"message": f"Failed to fetch accounts for user {user_uuid}: {e}", "status_code": 500}))
         raise HTTPException(status_code=500, detail="Failed to fetch accounts.")
 
 async def fetch_transactions(user_uuid: str, account_id: str, from_date: str = None, to_date: str = None):
@@ -67,7 +68,7 @@ async def fetch_transactions(user_uuid: str, account_id: str, from_date: str = N
         txs = df.to_dict('records')
         return {"transactions": txs}
     except Exception as e:
-        logger.error(f"Failed to fetch transactions for user {user_uuid}, account {account_id}: {e}")
+        logger.error(json.dumps({"message": f"Failed to fetch transactions for user {user_uuid}, account {account_id}: {e}", "status_code": 500}))
         raise HTTPException(status_code=500, detail="Failed to fetch transactions.")
 
 async def search_user_transactions(user_uuid: str, query: str):
@@ -88,8 +89,7 @@ async def search_user_transactions(user_uuid: str, query: str):
     try:
         user_acc = AccountReader(user_id=user_uuid)
         df = await asyncio.to_thread(
-            user_acc.get_transactions,
-            "ALL", user_uuid, None, None
+            user_acc.get_transactions, None, user_uuid, None, None
         )
         if df is None or df.empty:
             return {"transactions": []}
@@ -117,5 +117,5 @@ async def search_user_transactions(user_uuid: str, query: str):
         txs = df_filtered.to_dict('records')
         return {"transactions": txs}
     except Exception as e:
-        logger.error(f"Failed to search transactions for user {user_uuid}: {e}")
+        logger.error(json.dumps({"message": f"Failed to search transactions for user {user_uuid}: {e}", "status_code": 500}))
         raise HTTPException(status_code=500, detail="Failed to search transactions.")

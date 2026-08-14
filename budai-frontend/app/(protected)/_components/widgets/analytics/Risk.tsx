@@ -93,7 +93,7 @@ export function Risk() {
             ticks: {
               color: "rgba(255,255,255,0.4)",
               font: { family: "monospace", size: 9 },
-              callback: (value: any) => "£" + value,
+              callback: (value: any) => (new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).formatToParts(1).find(x => x.type === "currency")?.value || "£") + value,
             },
           },
           y: {

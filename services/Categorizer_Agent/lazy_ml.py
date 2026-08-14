@@ -1,3 +1,4 @@
+import json
 import asyncio
 from tqdm import tqdm
 from sqlalchemy import text
@@ -21,7 +22,7 @@ async def categorize_specific_transactions_bg(tx_uuids, user_uuid):
             ).all()
             
             if not txs:
-                logger.info("No uncategorized transactions found for the given UUIDs.")
+                logger.info(json.dumps({"message": f"No uncategorized transactions found for the given UUIDs.", "status_code": 200}))
                 return
                 
             transactions = []
@@ -35,7 +36,7 @@ async def categorize_specific_transactions_bg(tx_uuids, user_uuid):
                     "amount": float(tx.amount) if tx.amount else 0.0,
                 })
                 
-        logger.info(f"Lazy ML Categorization started for {len(transactions)} transactions.")
+        logger.info(json.dumps({"message": f"Lazy ML Categorization started for {len(transactions)} transactions.", "status_code": 200}))
         
         agent = CategorizerAgent()
         batch_size = 10 # Matches Qwen-4B limits
@@ -67,7 +68,7 @@ async def categorize_specific_transactions_bg(tx_uuids, user_uuid):
                     updated_count += 1
             session.commit()
             
-        logger.info(f"Lazy ML Categorization completed. {updated_count} transactions categorized and saved.")
+        logger.info(json.dumps({"message": f"Lazy ML Categorization completed. {updated_count} transactions categorized and saved.", "status_code": 200}))
         
     except Exception as e:
-        logger.error(f"Error in categorize_specific_transactions_bg: {e}", exc_info=True)
+        logger.error(json.dumps({"message": f"Error in categorize_specific_transactions_bg: {e}", "status_code": 500}), exc_info=True)

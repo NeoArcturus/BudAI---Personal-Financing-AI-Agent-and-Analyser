@@ -1,3 +1,4 @@
+import json
 import logging
 import pandas as pd
 from langchain_core.tools import tool
@@ -23,13 +24,13 @@ def create_bargraph_chart_and_save(user_uuid: str, account_ids: list[str]) -> st
     Returns:
         str: A summary of the categorical spending and a chart trigger.
     """
-    logger.info(f"Executing MCP Tool: create_bargraph_chart_and_save")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: create_bargraph_chart_and_save", "status_code": 200}))
     try:
         accounts, suffix = _parse_accounts(account_ids, user_uuid)
         df = _get_combined_categorized_data(accounts, suffix, user_uuid)
         if df.empty:
             _res = "No data to chart."
-            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
             return _res
         payload = []
         data_summary = []
@@ -67,12 +68,12 @@ def create_bargraph_chart_and_save(user_uuid: str, account_ids: list[str]) -> st
         cache_id = _cache_chart_data(payload)
         summary_text = "\n\n".join(data_summary)
         _res = f"Chart generated. [TRIGGER_CATEGORIZED_CHART:{cache_id}]\n\nDATA SUMMARY:\n{summary_text}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(json.dumps({"message": f"Error: {e}", "status_code": 500}))
         _res = f"Error: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 @tool(args_schema=CreatePieChartInput)
@@ -87,13 +88,13 @@ def create_pie_chart_and_save(user_uuid: str, account_ids: list[str]) -> str:
     Returns:
         str: A summary of the proportional spending and a chart trigger.
     """
-    logger.info(f"Executing MCP Tool: create_pie_chart_and_save")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: create_pie_chart_and_save", "status_code": 200}))
     try:
         accounts, suffix = _parse_accounts(account_ids, user_uuid)
         df = _get_combined_categorized_data(accounts, suffix, user_uuid)
         if df.empty:
             _res = "No data to chart."
-            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
             return _res
         payload = []
         data_summary = []
@@ -131,12 +132,12 @@ def create_pie_chart_and_save(user_uuid: str, account_ids: list[str]) -> str:
         cache_id = _cache_chart_data(payload)
         summary_text = "\n\n".join(data_summary)
         _res = f"Chart generated. [TRIGGER_CATEGORIZED_DOUGHNUT_CHART:{cache_id}]\n\nDATA SUMMARY:\n{summary_text}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(json.dumps({"message": f"Error: {e}", "status_code": 500}))
         _res = f"Error: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 @tool(args_schema=UpdateTransactionCategoryInput)
@@ -152,18 +153,18 @@ def update_transaction_category(user_uuid: str, transaction_uuid: str, corrected
     Returns:
         str: A success or error message for the update operation.
     """
-    logger.info(f"Executing MCP Tool: update_transaction_category")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: update_transaction_category", "status_code": 200}))
     try:
         from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
         agent.save_manual_label(user_uuid, transaction_uuid, corrected_category)
         _res = f"Successfully updated transaction {transaction_uuid} to {corrected_category}."
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(json.dumps({"message": f"Error: {e}", "status_code": 500}))
         _res = f"Error updating: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 
 @tool(args_schema=RetrainCategorizerInput)
@@ -177,21 +178,21 @@ def retrain_categorization_model(user_uuid: str) -> str:
     Returns:
         str: A status message detailing the success or failure of the retraining.
     """
-    logger.info(f"Executing MCP Tool: retrain_categorization_model")
+    logger.info(json.dumps({"message": f"Executing MCP Tool: retrain_categorization_model", "status_code": 200}))
     try:
         from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
         result = agent.retrain_from_feedback(user_uuid)
         if result.get("trained"):
             _res = f"Model successfully retrained using {result.get('samples')} samples."
-            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
             return _res
         else:
             _res = f"Model retraining failed: {result.get('reason')}"
-            logger.info(f"Tool returned: {str(_res)[:1000]}")
+            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
             return _res
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(json.dumps({"message": f"Error: {e}", "status_code": 500}))
         _res = f"Error: {str(e)}"
-        logger.info(f"Tool returned: {str(_res)[:1000]}")
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res

@@ -3,6 +3,7 @@ from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import UniqueConstraint, Column, JSON
 from datetime import datetime
 from services.logger_setup import get_core_logger
+from models.status_codes import OpenBankingStatus, PipelineStatus, TaskStatus
 
 logger = get_core_logger(__name__)
 
@@ -74,6 +75,7 @@ class Transaction(SQLModel, table=True):
     semi_cleaned_description: Optional[str] = None
     fully_cleaned_description: Optional[str] = None
     is_semantic_anomaly: Optional[bool] = Field(default=False)
+    tags: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
     
     user: Optional["User"] = Relationship(back_populates="transactions")
     account: Optional["Account"] = Relationship(back_populates="transactions")
@@ -120,7 +122,7 @@ class BackgroundTask(SQLModel, table=True):
     task_id: str = Field(primary_key=True, index=True)
     user_uuid: Optional[str] = Field(default=None, foreign_key="users.user_uuid", index=True)
     type: Optional[str] = None
-    status: str = Field(default="pending")
+    status: str = Field(default="600-102") # 600-102 denotes a pending/processing task
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -191,6 +193,7 @@ class Subscription(SQLModel, table=True):
     subscription_uuid: str = Field(primary_key=True, index=True)
     user_uuid: Optional[str] = Field(default=None, foreign_key="users.user_uuid", index=True)
     bank_uuid: Optional[str] = Field(default=None, foreign_key="banks.bank_uuid", index=True)
+    account_id: Optional[str] = Field(default=None, foreign_key="accounts.account_id", index=True)
     merchant_name: str
     expected_amount: float
     last_payment_date: Optional[datetime] = None
@@ -198,6 +201,26 @@ class Subscription(SQLModel, table=True):
     predicted_frequency: str
     next_expected_date: datetime
     is_price_hike: bool = Field(default=False)
+    status: str = Field(default=PipelineStatus.SUBSCRIPTION_DETECTED.value)
     last_updated: datetime = Field(default_factory=datetime.utcnow)
     
     user: Optional["User"] = Relationship(back_populates="subscriptions")
+
+class ProactiveInsight(SQLModel, table=True):
+    __tablename__ = "proactive_insights"
+    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    user_uuid: str = Field(foreign_key="users.user_uuid", index=True)
+    insight_text: str
+    insight_type: str = Field(default="opportunity") # "warning", "opportunity", "info"
+    urgency_level: int = Field(default=1) # 1=low, 5=high
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class MerchantRule(SQLModel, table=True):
+    __tablename__ = "merchant_rules"
+    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    user_uuid: str = Field(foreign_key="users.user_uuid", index=True)
+    merchant_name: str = Field(index=True)
+    category: Optional[str] = None
+    sub_category: Optional[str] = None
+    tags: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=datetime.utcnow)

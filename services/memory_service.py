@@ -1,3 +1,4 @@
+import json
 import os
 import faiss
 import pickle
@@ -29,40 +30,40 @@ class MemoryService:
         self.index_file = os.path.join(self.db_path, "transactions.index")
         self.metadata_file = os.path.join(self.db_path, "metadata.pkl")
         
-        base_url = os.getenv("LLM_BASE_URL", "http://host.docker.internal:8000/v1")
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
         if not base_url.endswith("/v1"):
             base_url = f"{base_url}/v1"
             
-        logger.debug("Initializing HuggingFaceEmbeddings locally")
+        logger.debug(json.dumps({"message": f"Initializing HuggingFaceEmbeddings locally", "status_code": 100}))
         self._model = HuggingFaceEmbeddings(
             model_name=os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
         )
         
         dummy_emb = self._model.embed_query("init")
         self.embedding_dim = len(dummy_emb)
-        logger.debug(f"Dynamically determined embedding dimension: {self.embedding_dim}")
+        logger.debug(json.dumps({"message": f"Dynamically determined embedding dimension: {self.embedding_dim}", "status_code": 100}))
         
         if os.path.exists(self.index_file):
-            logger.debug(f"Loading existing FAISS index from {self.index_file}")
+            logger.debug(json.dumps({"message": f"Loading existing FAISS index from {self.index_file}", "status_code": 100}))
             self.index = faiss.read_index(self.index_file)
             if self.index.d != self.embedding_dim:
-                logger.warning(f"Existing FAISS index dimension ({self.index.d}) mismatch with model ({self.embedding_dim}). Creating new index.")
+                logger.warning(json.dumps({"message": f"Existing FAISS index dimension ({self.index.d}) mismatch with model ({self.embedding_dim}). Creating new index.", "status_code": 400}))
                 self.index = faiss.IndexFlatL2(self.embedding_dim)
                 self.metadata = []
         else:
-            logger.debug("Creating new FAISS IndexFlatL2")
+            logger.debug(json.dumps({"message": f"Creating new FAISS IndexFlatL2", "status_code": 100}))
             self.index = faiss.IndexFlatL2(self.embedding_dim)
             
         if os.path.exists(self.metadata_file) and (getattr(self.index, 'ntotal', 0) > 0 or not os.path.exists(self.index_file)):
-            logger.debug(f"Loading metadata from {self.metadata_file}")
+            logger.debug(json.dumps({"message": f"Loading metadata from {self.metadata_file}", "status_code": 100}))
             with open(self.metadata_file, 'rb') as f:
                 self.metadata = pickle.load(f)
         elif not hasattr(self, 'metadata'):
-            logger.debug("Creating new metadata store")
+            logger.debug(json.dumps({"message": f"Creating new metadata store", "status_code": 100}))
             self.metadata = []
 
         self._initialized = True
-        logger.debug("MemoryService initialization complete")
+        logger.debug(json.dumps({"message": f"MemoryService initialization complete", "status_code": 100}))
 
     def _save(self):
         try:
@@ -70,12 +71,12 @@ class MemoryService:
             with open(self.metadata_file, 'wb') as f:
                 pickle.dump(self.metadata, f)
         except Exception as e:
-            logger.error(f"Failed to save MemoryService state: {e}")
+            logger.error(json.dumps({"message": f"Failed to save MemoryService state: {e}", "status_code": 500}))
 
     def index_transactions(self, transactions, user_uuid):
-        logger.debug(f"Indexing {len(transactions) if transactions else 0} transactions for user {user_uuid}")
+        logger.debug(json.dumps({"message": f"Indexing {len(transactions) if transactions else 0} transactions for user {user_uuid}", "status_code": 100}))
         if not transactions:
-            logger.debug("No transactions to index")
+            logger.debug(json.dumps({"message": f"No transactions to index", "status_code": 100}))
             return
             
         new_docs = []
@@ -107,12 +108,12 @@ class MemoryService:
                 self.index.add(embs)
                 self.metadata.extend(new_metas)
                 self._save()
-                logger.debug(f"Successfully indexed {len(new_docs)} transactions")
+                logger.debug(json.dumps({"message": f"Successfully indexed {len(new_docs)} transactions", "status_code": 100}))
             except Exception as e:
-                logger.error(f"FAISS indexing failed: {e}")
+                logger.error(json.dumps({"message": f"FAISS indexing failed: {e}", "status_code": 500}))
 
     def semantic_search(self, query, user_uuid, limit=10):
-        logger.debug(f"Performing semantic search for user {user_uuid}")
+        logger.debug(json.dumps({"message": f"Performing semantic search for user {user_uuid}", "status_code": 100}))
         try:
             query_emb_list = self._model.embed_query(query)
             query_emb = np.array([query_emb_list]).astype('float32')
@@ -123,7 +124,7 @@ class MemoryService:
             for idx in indices[0]:
                 if idx == -1: continue
                 if idx >= len(self.metadata):
-                    logger.warning(f"Index {idx} out of metadata range")
+                    logger.warning(json.dumps({"message": f"Index {idx} out of metadata range", "status_code": 400}))
                     continue
                     
                 meta = self.metadata[idx]
@@ -134,18 +135,18 @@ class MemoryService:
                 if count >= limit:
                     break
             
-            logger.debug(f"Search complete. Found {count} relevant results")
+            logger.debug(json.dumps({"message": f"Search complete. Found {count} relevant results", "status_code": 100}))
             return results
         except Exception as e:
-            logger.error(f"FAISS semantic search failed: {e}")
+            logger.error(json.dumps({"message": f"FAISS semantic search failed: {e}", "status_code": 500}))
             return {"documents": [[]], "metadatas": [[]]}
 
     def get_seasonal_context(self, user_uuid, limit=5):
-        logger.debug(f"Getting seasonal context for user {user_uuid}")
+        logger.debug(json.dumps({"message": f"Getting seasonal context for user {user_uuid}", "status_code": 100}))
         from datetime import datetime
         now = datetime.now()
         month_name = now.strftime('%B')
         
         query = f"Spending patterns in {month_name}"
-        logger.debug(f"Seasonal query generated: {query}")
+        logger.debug(json.dumps({"message": f"Seasonal query generated: {query}", "status_code": 100}))
         return self.semantic_search(query, user_uuid, limit=limit)

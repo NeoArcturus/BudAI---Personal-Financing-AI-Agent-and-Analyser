@@ -1,3 +1,4 @@
+import json
 import asyncio
 from fastapi import HTTPException, BackgroundTasks
 from services.api_integrator.truelayer_sync import TrueLayerSync
@@ -22,7 +23,7 @@ def background_sync_all_accounts(user_uuid: str):
             try:
                 sync.initialise_accounts(bank.bank_uuid, user_uuid)
             except Exception as e:
-                logger.error(f"Sync failed for bank {bank.bank_uuid}: {e}")
+                logger.error(json.dumps({"message": f"Sync failed for bank {bank.bank_uuid}: {e}", "status_code": 500}))
 
 async def sync_accounts(user_uuid: str, background_tasks: BackgroundTasks):
     """
@@ -37,3 +38,13 @@ async def sync_accounts(user_uuid: str, background_tasks: BackgroundTasks):
     """
     background_tasks.add_task(background_sync_all_accounts, user_uuid)
     return {"status": "Accepted", "message": "Account sync initiated in background."}
+
+async def extend_bank_connection(bank_uuid: str, user_uuid: str):
+    from services.api_integrator.access_token_generator import AccessTokenGenerator
+    token_gen = AccessTokenGenerator()
+    result = await asyncio.to_thread(token_gen.extend_connection, bank_uuid, user_uuid)
+    
+    if result.get("status") == "error":
+        raise HTTPException(status_code=500, detail=result.get("message", "Internal server error during extension"))
+    
+    return result
