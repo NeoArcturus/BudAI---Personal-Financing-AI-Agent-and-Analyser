@@ -21,6 +21,7 @@ export interface Transaction {
   transaction_id: string;
   date?: string;
   amount?: number;
+  currency?: string;
   category?: string;
   sub_category?: string;
   tags?: string[];
