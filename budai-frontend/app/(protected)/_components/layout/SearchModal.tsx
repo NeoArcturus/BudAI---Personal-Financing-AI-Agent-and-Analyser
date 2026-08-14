@@ -20,6 +20,7 @@ interface SearchOption {
   isPositive?: boolean;
   date?: string;
   category?: string;
+  currency?: string;
   txData?: Transaction;
 }
 
@@ -110,6 +111,7 @@ export default function GlobalSearchModal() {
       isPositive,
       date: tx.date || tx.timestamp ? new Date(tx.date || tx.timestamp || "").toLocaleDateString() : "",
       category: tx.category || tx.Category || "",
+      currency: tx.currency || "GBP",
       txData: tx,
     };
   });
