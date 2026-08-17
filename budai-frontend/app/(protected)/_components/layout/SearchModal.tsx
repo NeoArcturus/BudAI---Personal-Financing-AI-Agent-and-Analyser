@@ -140,7 +140,7 @@ export default function GlobalSearchModal() {
     } else if ((item.type === "nav" || item.type === "account") && item.path) {
       router.push(item.path);
     } else if (item.type === "transaction") {
-      router.push("/transactions");
+      // Transactions page removed
     }
   };
 

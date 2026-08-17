@@ -19,11 +19,15 @@ async def get_user_profile(current_user: User):
     Returns:
         dict: The user's UUID, username, and email.
     """
-    username = current_user.email.split('@')[0] if hasattr(current_user, 'email') else "User"
     return {
         "user_uuid": current_user.user_uuid,
-        "username": username,
-        "email": getattr(current_user, 'email', '')
+        "name": getattr(current_user, 'name', 'User'),
+        "email": getattr(current_user, 'email', ''),
+        "date_of_birth": current_user.date_of_birth.isoformat() if current_user.date_of_birth else None,
+        "employment_status": current_user.employment_status,
+        "country_of_tax_residence": current_user.country_of_tax_residence,
+        "persona": current_user.persona,
+        "is_onboarded": current_user.is_onboarded
     }
 
 async def get_truelayer_status(current_user: User, origin: str):

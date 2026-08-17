@@ -152,7 +152,10 @@ export const BudAIProvider = ({
     const handleUnauthorized = () => {
       queryClient.clear();
       sessionStorage.clear();
-      router.push("/login");
+      document.cookie = "budai_token=; path=/; max-age=0";
+      localStorage.removeItem("budai_token");
+      localStorage.removeItem("budai_user_name");
+
     };
     window.addEventListener("budai-unauthorized", handleUnauthorized);
     return () => window.removeEventListener("budai-unauthorized", handleUnauthorized);

@@ -6,7 +6,7 @@ import { TopNavbar } from "@/app/(protected)/_components/layout/Navbar";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Account } from "@/types";
-import ClearAuthAndRedirect from "./ClearAuthRedirect";
+
 
 export default async function ProtectedLayout({
   children,
@@ -16,37 +16,37 @@ export default async function ProtectedLayout({
   const cookieStore = await cookies();
   const token = cookieStore.get("budai_token")?.value;
 
-  if (!token) {
-    redirect("/login");
-  }
-
   const baseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
   let initialAccounts: Account[] = [];
   let initialSessions: ChatSession[] = [];
 
-  let shouldRedirect = false;
-
   try {
     const [accountsRes, sessionsRes] = await Promise.all([
       fetch(`${baseUrl}/api/accounts`, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      }).catch((e) => {
+        console.warn("Failed to fetch accounts:", e.message);
+        return null;
       }),
       fetch(`${baseUrl}/api/chat/sessions`, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      }).catch((e) => {
+        console.warn("Failed to fetch sessions:", e.message);
+        return null;
       }),
     ]);
 
-    if (accountsRes.status === 401 || sessionsRes.status === 401) {
-      shouldRedirect = true;
-    } else {
-      if (accountsRes.ok) {
+    if (accountsRes?.status !== 401 && sessionsRes?.status !== 401) {
+      if (accountsRes && accountsRes.ok) {
         const accountsData = (await accountsRes.json()) as any;
         initialAccounts = accountsData.accounts || [];
       }
 
-      if (sessionsRes.ok) {
+      if (sessionsRes && sessionsRes.ok) {
         const sessionsData = (await sessionsRes.json()) as any;
         if (Array.isArray(sessionsData)) {
           initialSessions = sessionsData.map((s) => ({
@@ -61,10 +61,6 @@ export default async function ProtectedLayout({
     }
   } catch (e) {
     console.error("ProtectedLayout pre-fetch failed:", e);
-  }
-
-  if (shouldRedirect) {
-    return <ClearAuthAndRedirect />;
   }
 
   return (

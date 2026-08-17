@@ -30,37 +30,42 @@ llm = ChatOpenAI(
     api_key="budai-local",
     temperature=0,
     streaming=False,
-    
+    max_tokens=1000,
     timeout=600,
     
 )
 bridge = MCPBridge()
 
 from services.mcp_tools.external_tools import export_advisory_state, export_custom_statement
+from services.mcp_tools.ui_tools import generate_ui_chart
 
 @tool
-async def plot_expenses_wrapper(plot_time_type: str, from_date: str, to_date: str, account_id: str, state: Annotated[BudAIState, InjectedState]) -> str:
-    """Show user's expenditure between dates for a specific account."""
+async def query_transactions_wrapper(
+    account_id: str = None, start_date: str = None, end_date: str = None,
+    categories: list[str] = None, min_amount: float = None, max_amount: float = None,
+    transaction_type: str = None, state: Annotated[BudAIState, InjectedState] = None
+) -> str:
+    """Dynamically filter and read transaction records. Returns a JSON string of transactions."""
     user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("analyser", "plot_expenses", {"plot_time_type": plot_time_type, "from_date": from_date, "to_date": to_date, "account_id": account_id, "user_uuid": user_uuid})
+    return await bridge.call_tool("analyser", "query_transactions", {
+        "user_uuid": user_uuid, "account_id": account_id, "start_date": start_date,
+        "end_date": end_date, "categories": categories, "min_amount": min_amount,
+        "max_amount": max_amount, "transaction_type": transaction_type
+    })
 
 @tool
-async def find_total_spent_wrapper(category: str, account_id: str, from_date: str, to_date: str, state: Annotated[BudAIState, InjectedState]) -> str:
-    """Find total spent on a specific category for a specific account."""
+async def aggregate_financial_data_wrapper(
+    group_by: str, metric: str = "sum", account_id: str = None,
+    start_date: str = None, end_date: str = None, transaction_type: str = None,
+    categories: list[str] = None, state: Annotated[BudAIState, InjectedState] = None
+) -> str:
+    """Aggregate transaction data (e.g., sum by category, average by month). Returns JSON grouping."""
     user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("analyser", "find_total_spent_for_given_category", {"category": category, "account_id": account_id, "from_date": from_date, "to_date": to_date, "user_uuid": user_uuid})
-
-@tool
-async def find_highest_spending_wrapper(account_id: str, from_date: str, to_date: str, state: Annotated[BudAIState, InjectedState]) -> str:
-    """Find the category with highest spending for a specific account."""
-    user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("analyser", "find_highest_spending_category", {"account_id": account_id, "from_date": from_date, "to_date": to_date, "user_uuid": user_uuid})
-
-@tool
-async def plot_cash_flow_mixed_wrapper(from_date: str, to_date: str, account_id: str, state: Annotated[BudAIState, InjectedState]) -> str:
-    """Generates a Cash Flow Mixed Chart for a specific account."""
-    user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("analyser", "plot_cash_flow_mixed", {"from_date": from_date, "to_date": to_date, "account_id": account_id, "user_uuid": user_uuid})
+    return await bridge.call_tool("analyser", "aggregate_financial_data", {
+        "user_uuid": user_uuid, "group_by": group_by, "metric": metric, "account_id": account_id,
+        "start_date": start_date, "end_date": end_date, "transaction_type": transaction_type,
+        "categories": categories
+    })
 
 @tool
 async def get_budget_variance_wrapper(category: str, state: Annotated[BudAIState, InjectedState]) -> str:
@@ -93,10 +98,9 @@ async def ask_user(question: str) -> str:
     return "Thinking..."
 
 tools = [
-    plot_expenses_wrapper,
-    find_total_spent_wrapper,
-    find_highest_spending_wrapper,
-    plot_cash_flow_mixed_wrapper,
+    query_transactions_wrapper,
+    aggregate_financial_data_wrapper,
+    generate_ui_chart,
     export_advisory_state_wrapper,
     export_custom_statement_wrapper,
     get_connected_accounts_wrapper,
@@ -122,10 +126,9 @@ You analyze historical data.
 - YOUR SCOPE: Only data where Year <= {current_year_str}.
 
 ROUTING (Use these tools):
-- plot_expenses_wrapper: Show expenditure.
-- find_total_spent_wrapper: Category total spent.
-- find_highest_spending_wrapper: Highest spending category.
-- plot_cash_flow_mixed_wrapper: Cash flow chart.
+- query_transactions_wrapper: Filter and fetch raw transactions matching specific criteria.
+- aggregate_financial_data_wrapper: Group and aggregate data (e.g., sum spending by category or month). Use this instead of fetching raw rows if you just need totals!
+- generate_ui_chart: Render a dynamic chart to the user's chat interface (ONLY use this when explicitly visualizing data).
 - export_advisory_state_wrapper: Save state.
 - export_custom_statement_wrapper: Generate CSV.
 - get_connected_accounts_wrapper: Get account IDs.
@@ -147,16 +150,8 @@ async def call_analyser_agent(
     raw_output = result["messages"][-1].content
     output = raw_output if isinstance(raw_output, str) else "".join([b if isinstance(
         b, str) else b.get("text", "") for b in raw_output if isinstance(b, (str, dict))])
-    cache_id, chart_type = None, None
-    match = re.search(r'\[TRIGGER_([A-Z_]+):([^\]]+)\]', output)
-    if match:
-        chart_type = match.group(1)
-        cache_id = match.group(2).split(':')[0]
-        output = re.sub(r'\[TRIGGER_[A-Z_]+:[^\]]+\]', '', output).strip()
 
     return Command(update={
-        "cache_id": cache_id,
-        "chart_type": chart_type,
         "messages": [
             ToolMessage(content=output, tool_call_id=tool_call_id)
         ]

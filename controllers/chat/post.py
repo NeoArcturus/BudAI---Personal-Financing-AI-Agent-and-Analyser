@@ -182,20 +182,16 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                 
                     elif kind == "on_tool_start":
                         tool_name = event.get("name")
-                        if tool_name == "render_ui_chart":
+                        if tool_name == "generate_ui_chart":
                             tool_input = event.get("data", {}).get("input", {})
-                            chart_type = tool_input.get("chart_type")
-                            cache_id = tool_input.get("cache_id")
-                            if cache_id and chart_type and cache_id not in sent_cache_ids:
-                                tool_call = {
-                                    "toolCallId": f"call_{str(uuid.uuid4())[:8]}",
-                                    "toolName": "render_ui_chart",
-                                    "args": {"chart_type": chart_type, "cache_id": cache_id}
-                                }
-                                await queue.put(f'9:[{json.dumps(tool_call)}]\n')
-                                await queue.put(f'8:[{json.dumps({"type": "global_refresh_signal", "chart_type": chart_type})}]\n')
-                                await queue.put(f'8:[{json.dumps({"type": "thinking_context", "status": "Drawing"})}]\n')
-                                sent_cache_ids.add(cache_id)
+                            # Pass the entire tool_input to the frontend as the tool arguments
+                            tool_call = {
+                                "toolCallId": f"call_{str(uuid.uuid4())[:8]}",
+                                "toolName": "generate_ui_chart",
+                                "args": tool_input
+                            }
+                            await queue.put(f'9:[{json.dumps(tool_call)}]\n')
+                            await queue.put(f'8:[{json.dumps({"type": "thinking_context", "status": "Drawing Chart"})}]\n')
                         elif tool_name == "ask_user":
                             tool_input = event.get("data", {}).get("input", {})
                             question = tool_input.get("question")

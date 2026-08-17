@@ -63,7 +63,7 @@ export function useTransactions(
 ) {
   return useQuery({
     queryKey: ["transactions", accountId, from, to],
-    queryFn: async () => {
+    queryFn: async (): Promise<Transaction[]> => {
       const queryParams = new URLSearchParams();
       if (from) queryParams.append("from", from);
       if (to) queryParams.append("to", to);
@@ -76,13 +76,18 @@ export function useTransactions(
         {},
         true,
       );
+
+      if (res.status === 202) {
+        return [];
+      }
+
       const data = await res.json() as { transactions?: Transaction[] };
       return data.transactions || [];
     },
     initialData,
     enabled: !!accountId && !accountId.startsWith("react-aria-"),
     staleTime: 1000 * 60 * 5,
-    refetchInterval: (query) => {
+    refetchInterval: (query: { state: { data?: Transaction[] } }) => {
       const data = query.state.data;
       if (!data || data.length === 0) return 3000;
       
@@ -223,5 +228,20 @@ export function useAdvisorInsight(widgetId: string, contextData: unknown) {
         if (error.message === "STILL_PENDING") return true;
         return failureCount < 2;
     },
+  });
+}
+
+export function useUserProfile() {
+  return useQuery({
+    queryKey: ["user-profile"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/auth/me", {}, true);
+      const data = await res.json() as { is_onboarded?: boolean };
+      return data;
+    },
+    refetchInterval: (query) => {
+      return query.state.data?.is_onboarded ? false : 2000;
+    },
+    staleTime: 1000 * 60 * 5,
   });
 }

@@ -39,16 +39,21 @@ interface LedgerTableWidgetProps {
 type ExtendedTx = Transaction;
 
 const STANDARD_CATEGORIES = [
-  "Food & Dining",
-  "Transportation",
-  "Bills & Utilities",
-  "Shopping",
-  "Entertainment",
-  "Health & Wellness",
-  "Transfers & Investments",
-  "High-Risk / Anomaly",
-  "Income",
-];
+            "Income",
+            "Housing",
+            "Food & Dining",
+            "Transportation",
+            "Utilities",
+            "Entertainment & Lifestyle",
+            "Subscriptions & Digital Services",
+            "Shopping & Retail",
+            "Healthcare",
+            "Transfers & Payments",
+            "Fees & Charges",
+            "Savings & Investments",
+            "Taxes & Government Payments",
+            "Uncategorized"
+        ];
 
 export default function LedgerTableWidgetClient({
   initialData,

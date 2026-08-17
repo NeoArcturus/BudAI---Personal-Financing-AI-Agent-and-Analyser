@@ -34,25 +34,38 @@ class UserService:
         if not email or not password:
             raise ValueError("Email and password are required.")
         with SessionLocal() as session:
-            user = session.query(User).filter(User.name == email).first()
+            user = session.query(User).filter(User.email == email).first()
             if not user:
                 raise ValueError("Invalid credentials.")
             if not self._verify_password(password, user.password or ""):
                 raise ValueError("Invalid credentials.")
             return user.user_uuid
-    def register_user(self, email, password):
+    def register_user(self, email, password, name, date_of_birth=None, employment_status=None, country_of_tax_residence="UK"):
         email = (email or "").strip().lower()
         if not email or not password:
             raise ValueError("Email and password are required.")
         with SessionLocal() as session:
-            existing = session.query(User).filter(User.name == email).first()
+            existing = session.query(User).filter(User.email == email).first()
             if existing:
                 raise ValueError("Email already registered.")
             new_uuid = str(uuid.uuid4())
+            
+            from datetime import datetime
+            dob = None
+            if date_of_birth:
+                try:
+                    dob = datetime.strptime(date_of_birth, "%Y-%m-%d")
+                except ValueError:
+                    pass
+            
             new_user = User(
                 user_uuid=new_uuid,
-                name=email,
-                password=self._build_password_record(password)
+                email=email,
+                name=name,
+                password=self._build_password_record(password),
+                date_of_birth=dob,
+                employment_status=employment_status,
+                country_of_tax_residence=country_of_tax_residence
             )
             session.add(new_user)
             session.commit()

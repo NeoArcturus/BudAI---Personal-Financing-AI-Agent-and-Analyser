@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
+from fastapi.responses import JSONResponse
 from models.database_models import User
 from middleware.auth_middleware import get_current_user
 from fastapi_cache.decorator import cache
 from utils.cache_utils import user_cache_key_builder
+from utils.state_manager import get_account_state
+from models.status_codes import AIMLStatus, PipelineStatus
 
 from controllers.accounts.get import fetch_user_accounts, fetch_transactions, search_user_transactions
 from controllers.accounts.post import sync_accounts, extend_bank_connection
@@ -27,6 +30,18 @@ async def get_transactions_route(
     to_date: str = Query(None, alias="to"),
     current_user: User = Depends(get_current_user)
 ):
+    current_state = get_account_state(account_id)
+    
+    if current_state in [AIMLStatus.CATEGORIZATION_PROCESSING.value, PipelineStatus.LAZY_ML_PROCESSING.value]:
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": current_state,
+                "message": "Resource locked. Processing in progress.",
+                "transactions": []
+            }
+        )
+
     from services.api_integrator.truelayer_sync import TrueLayerSync
     sync_service = TrueLayerSync(user_id=current_user.user_uuid)
     # Background task to sync with TrueLayer

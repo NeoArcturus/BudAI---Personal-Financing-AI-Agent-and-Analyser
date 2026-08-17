@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Newspaper, ExternalLink, Image as ImageIcon } from "lucide-react";
 import { Card, Skeleton, ScrollShadow, Text, Link, CloseButton } from "@heroui/react";
-import WidgetFlipCard from "../../internal/FlipCard";
+import WidgetFlipCard, { FlipButton } from "../../internal/FlipCard";
 import { useRouter } from "next/navigation";
 import { useBudAI } from "@/app/context/AppContext";
 import { WidgetContext } from "../../../home/DashboardClient";
@@ -143,10 +143,13 @@ export default function FinancialNewsWidgetClient({
               </p>
             </div>
           </div>
-          <CloseButton
-            onPress={onRemove}
-            className="text-foreground/20 hover:text-foreground transition-all rounded-md"
-          />
+          <div className="flex items-center gap-1">
+            <FlipButton />
+            <CloseButton
+              onPress={onRemove}
+              className="w-8 h-8 min-w-8 text-foreground/20 hover:text-foreground transition-all rounded-md"
+            />
+          </div>
         </Card.Header>
 
         <Card.Content className="p-0 flex-1 flex flex-col gap-3 overflow-hidden min-h-0 relative">

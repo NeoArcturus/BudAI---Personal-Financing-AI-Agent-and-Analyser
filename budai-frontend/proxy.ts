@@ -5,7 +5,7 @@ export function proxy(request: NextRequest) {
   const token = request.cookies.get('budai_token')?.value;
   const path = request.nextUrl.pathname;
 
-  const isPublicPath = path === '/' || path === '/login' || path === '/register';
+  const isPublicPath = path === '/' || path === '/login' || path === '/register' || path === '/onboarding';
 
   if (isPublicPath && token) {
     return NextResponse.redirect(new URL('/home', request.url));

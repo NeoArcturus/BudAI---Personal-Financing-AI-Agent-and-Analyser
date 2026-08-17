@@ -6,6 +6,10 @@ import remarkGfm from "remark-gfm";
 import { BudAIMessage } from "../BudAIMessage";
 import { InterruptHandler } from "./InterruptHandler";
 import { EntityHighlighter } from "./EntityHighlighter";
+import { DynamicChart } from "./DynamicChart";
+import { TransactionSplitterWidget } from "./TransactionSplitterWidget";
+import { useDashboardStore } from "@/store/dashboardStore";
+import { useEffect } from "react";
 
 const renderThinkingBadge = (status: string) => {
   return (
@@ -14,6 +18,16 @@ const renderThinkingBadge = (status: string) => {
     </div>
   );
 };
+
+
+function LayoutUpdater({ layout }: { layout: any }) {
+  const setLayout = useDashboardStore((state: any) => state.setLayout);
+  useEffect(() => {
+    setLayout(layout);
+  }, [layout, setLayout]);
+  
+  return <div className="text-[10px] text-primary/80 italic my-2">Dashboard layout reorganized autonomously.</div>;
+}
 
 export const MemoizedChatMessage = React.memo(
   ({
@@ -74,7 +88,49 @@ export const MemoizedChatMessage = React.memo(
             {message.parts &&
               message.parts.some((p) => p.type.startsWith("data-")) && (
                 <div className="flex flex-col gap-2 mb-3">
-                  {(() => {
+                  
+            {message.toolInvocations?.map((toolInvocation, i) => {
+              const { toolName, toolCallId, state, args } = toolInvocation;
+              
+              if (toolName === "generate_ui_chart") {
+                return (
+                  <div key={toolCallId} className="w-full my-4">
+                    <DynamicChart config={args as any} />
+                  </div>
+                );
+              }
+              
+              
+              if (toolName === "reorder_dashboard_widgets") {
+                return <LayoutUpdater key={toolCallId} layout={args.layout} />;
+              }
+              if (toolName === "split_transaction") {
+                return (
+                  <div key={toolCallId} className="w-full my-4">
+                    <TransactionSplitterWidget 
+                      transactionId={args.transactionId}
+                      originalAmount={args.originalAmount}
+                      merchantName={args.merchantName}
+                      suggestedSplits={args.suggestedSplits}
+                      onConfirm={(splits) => {
+                        if (typeof sendMessage === "function") {
+                          sendMessage({ text: `User confirmed split for ${args.transactionId} with ${JSON.stringify(splits)}` }, { body: { session_id: activeSessionId } as any });
+                        }
+                      }}
+                      onCancel={() => {
+                        if (typeof sendMessage === "function") {
+                          sendMessage({ text: `User cancelled split for ${args.transactionId}` }, { body: { session_id: activeSessionId } as any });
+                        }
+                      }}
+                    />
+                  </div>
+                );
+              }
+              
+              return null;
+            })}
+
+            {(() => {
                     const allAnnotations = message.parts
                       .filter((p) => p.type.startsWith("data-"))
                       .flatMap((part) => {

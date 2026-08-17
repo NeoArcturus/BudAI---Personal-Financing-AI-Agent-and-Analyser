@@ -184,3 +184,5 @@ def get_impulse_vulnerability(user_uuid: str, db: SessionLocal = Depends(get_db)
         "most_vulnerable_day": days[worst_day_idx],
         "historical_density_spend": worst_amount
     }
+
+

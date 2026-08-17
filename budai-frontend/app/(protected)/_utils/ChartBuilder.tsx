@@ -701,10 +701,42 @@ export const buildChartConfig = (
           borderColor: metricColor,
           fill: false,
           tension: 0.4,
-          pointRadius: 2,
-          pointBackgroundColor: metricColor,
+          pointRadius: (ctx) => {
+            if (category !== "Forecast") return 2;
+            const label = allDates[ctx.dataIndex];
+            if (!label || typeof label !== "string") return 2;
+            const parts = label.split(" ");
+            let dayNum: number | null = null;
+            if (parts.length >= 2 && !isNaN(Number(parts[1]))) {
+              dayNum = Number(parts[1]);
+            } else if (label.includes("-")) {
+              try {
+                dayNum = new Date(label).getDate();
+              } catch {}
+            }
+            if (dayNum !== null && timeline.some((e) => e.day === dayNum)) return 6;
+            return 2;
+          },
+          pointStyle: (ctx) => {
+            if (category !== "Forecast") return "circle";
+            const label = allDates[ctx.dataIndex];
+            if (!label || typeof label !== "string") return "circle";
+            const parts = label.split(" ");
+            let dayNum: number | null = null;
+            if (parts.length >= 2 && !isNaN(Number(parts[1]))) {
+              dayNum = Number(parts[1]);
+            } else if (label.includes("-")) {
+              try {
+                dayNum = new Date(label).getDate();
+              } catch {}
+            }
+            if (dayNum !== null && timeline.some((e) => e.day === dayNum)) return "circle";
+            return "circle";
+          },
+          pointBackgroundColor: category === "Forecast" ? "#FFD700" : metricColor,
+          pointBorderColor: category === "Forecast" ? "#FFFFFF" : "transparent",
           pointHitRadius: 10,
-          pointHoverRadius: 6,
+          pointHoverRadius: 8,
         });
       });
     });
@@ -721,6 +753,32 @@ export const buildChartConfig = (
           >,
         plugins: {
           ...baseOptions.plugins,
+          tooltip: {
+            ...baseOptions.plugins.tooltip,
+            callbacks: {
+              ...baseOptions.plugins.tooltip?.callbacks,
+              footer: (items: TooltipItem<"line">[]) => {
+                const label = items[0]?.label;
+                if (!label || typeof label !== "string") return "";
+                const parts = label.split(" ");
+                let dayNum: number | null = null;
+                if (parts.length >= 2 && !isNaN(Number(parts[1]))) {
+                  dayNum = Number(parts[1]);
+                } else if (label.includes("-")) {
+                  try {
+                    dayNum = new Date(label).getDate();
+                  } catch {}
+                }
+                if (dayNum !== null) {
+                  const events = timeline.filter((e) => e.day === dayNum);
+                  if (events.length > 0) {
+                    return events.map((e) => `Event: ${e.merchant} (${e.category}) ${currencySymbol}${e.amount}`).join("\n");
+                  }
+                }
+                return "";
+              }
+            }
+          }
         },
       },
     } as unknown as NativeChartConfig;

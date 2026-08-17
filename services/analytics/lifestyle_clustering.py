@@ -6,6 +6,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 from sqlmodel import select
 import json
+import hashlib
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -67,6 +68,16 @@ class LifestyleClusteringService:
 
             unique_descriptions = list(set([tx._cluster_string for tx in txs if tx._cluster_string]))
             if not unique_descriptions:
+                return
+                
+            # Create a hash of the unique transactions string set
+            unique_descriptions.sort()
+            current_hash = hashlib.sha256("".join(unique_descriptions).encode('utf-8')).hexdigest()
+            
+            # Check if this exact cluster set was already processed
+            profile = session.execute(select(UserLifestyleProfile).where(UserLifestyleProfile.user_uuid == user_uuid)).scalars().first()
+            if profile and profile.last_cluster_hash == current_hash:
+                logger.info(json.dumps({"message": f"Clustering aborted: Identical transaction set for user {user_uuid}", "status_code": 200}))
                 return
                 
             # 1. Vector Extraction
@@ -229,11 +240,11 @@ class LifestyleClusteringService:
         # 6. Persistence
         with SessionLocal() as session:
             # Upsert UserLifestyleProfile
-            profile = session.execute(select(UserLifestyleProfile).where(UserLifestyleProfile.user_uuid == user_uuid)).scalars().first()
             if not profile:
                 profile = UserLifestyleProfile(profile_uuid=str(uuid.uuid4()), user_uuid=user_uuid)
             
             profile.macro_persona = analysis.macro_persona
+            profile.last_cluster_hash = current_hash
             profile.last_updated = datetime.utcnow()
             session.add(profile)
             

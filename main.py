@@ -151,6 +151,8 @@ app.add_middleware(
 from routes.webhook_routes import router as webhook_router
 from routes.widget_routes import router as widget_router
 from routes.intent_routes import router as intent_router
+from routes.dashboard_routes import router as dashboard_router
+from routes.onboarding_routes import router as onboarding_router
 
 app.include_router(auth_router)
 app.include_router(callback_router)
@@ -165,6 +167,8 @@ app.include_router(memory_router)
 app.include_router(analytics_router)
 app.include_router(widget_router)
 app.include_router(intent_router)
+app.include_router(dashboard_router)
+app.include_router(onboarding_router)
 
 if __name__ == "__main__":
     import uvicorn

@@ -11,6 +11,13 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     email: str
     password: str
+    name: str
+    date_of_birth: Optional[str] = None
+    employment_status: Optional[str] = None
+    country_of_tax_residence: str = "UK"
+
+class RefreshRequest(BaseModel):
+    refresh_token: Optional[str] = None
 
 class ChatRequest(BaseModel):
     input: str
@@ -32,6 +39,20 @@ class StreamChatRequest(BaseModel):
     active_account_id: Optional[str] = None
     htil_response: Optional[Dict[str, Any]] = None
     messageId: Optional[str] = None
+
+class OnboardingRequest(BaseModel):
+    messages: List[VercelMessage]
+    turn_count: Optional[int] = None
+
+class OnboardingFormRequest(BaseModel):
+    goals: List[str]
+    income_pattern: List[str]
+    liabilities: List[str]
+    user_summary: str
+
+class OnboardingLLMResult(BaseModel):
+    persona: str = Field(description="Must be exactly one of: STUDENT, PROFESSIONAL, BUSINESS, RETIREE, CREATIVE")
+    keypoints: List[str] = Field(description="3-4 synthesized sentences explaining their financial context based on the form and their summary")
 
 class ExplanationRequest(BaseModel):
     user_uuid: str

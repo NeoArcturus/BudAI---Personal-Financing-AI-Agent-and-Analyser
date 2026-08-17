@@ -24,6 +24,40 @@ const budAIDataPartSchema = z.object({
 });
 
 const budAITools = {
+  reorder_dashboard_widgets: tool({
+    description: "Reorder the dashboard widgets array on the home screen",
+    inputSchema: z.object({
+      layout: z.array(z.object({
+        id: z.string(),
+        type: z.string(),
+        height: z.number(),
+        colSpan: z.number()
+      }))
+    }),
+  }),
+  generate_ui_chart: tool({
+    description: "Render a dynamic chart",
+    inputSchema: z.object({
+      type: z.enum(["bar", "line", "pie", "radar", "doughnut"]),
+      title: z.string(),
+      subtitle: z.string().optional(),
+      labels: z.array(z.string()),
+      datasets: z.array(z.any()),
+      options: z.any().optional(),
+    }),
+  }),
+  split_transaction: tool({
+    description: "Split a transaction into multiple categories",
+    inputSchema: z.object({
+      transactionId: z.string(),
+      originalAmount: z.number(),
+      merchantName: z.string(),
+      suggestedSplits: z.array(z.object({
+        category: z.string(),
+        amount: z.number()
+      }))
+    }),
+  }),
   render_ui_chart: tool({
     description: "Render a financial chart based on tool output",
     inputSchema: z.object({
@@ -75,6 +109,7 @@ export type BudAIAnnotation =
 
 export type BudAIMessage = UIMessage<BudAIMetadata, BudAIDataPart, BudAITools> & {
   annotations?: BudAIAnnotation[];
+  toolInvocations?: any[];
   usage?: {
     completionTokens?: number;
     promptTokens?: number;

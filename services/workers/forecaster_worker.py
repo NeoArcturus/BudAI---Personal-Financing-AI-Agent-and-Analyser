@@ -31,7 +31,7 @@ llm = ChatOpenAI(
     api_key="budai-local",
     temperature=0,
     streaming=False,
-    
+    max_tokens=1000,
     timeout=600,
     
 )

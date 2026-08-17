@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Request, Response, Cookie
 from sqlalchemy.orm import Session
 from config import get_db, FRONTEND_URL
-from schemas.api_schema import LoginRequest, RegisterRequest, ExtendConnectionRequest, RevokeConnectionRequest
+from schemas.api_schema import LoginRequest, RegisterRequest, ExtendConnectionRequest, RevokeConnectionRequest, RefreshRequest
 from middleware.auth_middleware import get_current_user
 from models.database_models import User
 
@@ -16,8 +16,15 @@ async def login_route(request: LoginRequest, response: Response, db: Session = D
     return await login_user(request, response)
 
 @auth_router.post("/refresh")
-async def refresh_token_route(response: Response, db: Session = Depends(get_db), refresh_token: str | None = Cookie(None)):
-    return await refresh_user_token(response, db, refresh_token)
+async def refresh_token_route(request: Request, response: Response, db: Session = Depends(get_db), refresh_cookie: str | None = Cookie(alias="refresh_token", default=None)):
+    try:
+        body = await request.json()
+        token_from_body = body.get("refresh_token")
+    except Exception:
+        token_from_body = None
+        
+    final_token = token_from_body or refresh_cookie
+    return await refresh_user_token(response, db, final_token)
 
 @auth_router.get("/me")
 async def get_current_user_profile_route(current_user: User = Depends(get_current_user)):

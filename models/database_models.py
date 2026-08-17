@@ -1,4 +1,4 @@
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import UniqueConstraint, Column, JSON
 from datetime import datetime
@@ -11,8 +11,13 @@ class User(SQLModel, table=True):
     __tablename__ = "users"
     user_uuid: str = Field(primary_key=True, index=True)
     name: Optional[str] = None
+    email: str = Field(default="", index=True, unique=True)
     password: Optional[str] = None
-    user_type: Optional[str] = None
+    date_of_birth: Optional[datetime] = None
+    employment_status: Optional[str] = None
+    country_of_tax_residence: Optional[str] = Field(default="UK")
+    persona: Optional[str] = None
+    is_onboarded: bool = Field(default=False)
     
     banks: List["Bank"] = Relationship(back_populates="user")
     accounts: List["Account"] = Relationship(back_populates="user")
@@ -175,6 +180,7 @@ class UserLifestyleProfile(SQLModel, table=True):
     profile_uuid: str = Field(primary_key=True, index=True)
     user_uuid: Optional[str] = Field(default=None, foreign_key="users.user_uuid", index=True)
     macro_persona: Optional[str] = None
+    last_cluster_hash: Optional[str] = None
     last_updated: datetime = Field(default_factory=datetime.utcnow)
     
 class LifestyleCluster(SQLModel, table=True):
@@ -224,3 +230,5 @@ class MerchantRule(SQLModel, table=True):
     sub_category: Optional[str] = None
     tags: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+

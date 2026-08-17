@@ -239,7 +239,7 @@ class TrueLayerSync:
                 logger.error(json.dumps({"message": f"Failed to fetch API transactions for {acc_id}: {e}", "status_code": 500}))
         except Exception:
             logger.error(json.dumps({"message": f"Error in trigger_sync", "status_code": 500}), exc_info=True)
-
+        
     def process_and_store_transactions(self, session, tx_data, user_uuid, bank_uuid, account_id):
         from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         if not tx_data:
@@ -349,6 +349,14 @@ class TrueLayerSync:
                 clear_user_cache(str(user_uuid), namespace="categorizer")
             except Exception as e:
                 logger.error(json.dumps({"message": f"Failed in trigger_categorization: {e}", "status_code": 500}), exc_info=True)
+            finally:
+                from utils.state_manager import clear_account_state
+                from utils.cache_utils import clear_user_cache
+                
+                clear_account_state(account_id)
+                clear_user_cache(str(user_uuid), namespace="transactions")
+                clear_user_cache(str(user_uuid), namespace="categorizer")
+
         
         import threading
         threading.Thread(target=trigger_categorization, daemon=True).start()

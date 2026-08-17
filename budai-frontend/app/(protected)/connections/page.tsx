@@ -158,8 +158,8 @@ export default function ConnectionsPage() {
       }
       return true;
     }).sort((a: any, b: any) => {
-      if (a.status === 'expired' && b.status !== 'expired') return 1;
-      if (a.status !== 'expired' && b.status === 'expired') return -1;
+      if (a.status === '303-410' && b.status !== '303-410') return 1;
+      if (a.status !== '303-410' && b.status === '303-410') return -1;
       return 0;
     });
   }, [subscriptionsData, selectedAccount]);
@@ -440,7 +440,7 @@ export default function ConnectionsPage() {
                 <Card className="liquid-glass rounded-xl h-full flex flex-col p-8 overflow-hidden shadow-inner border-[0.5px] border-white/5">
                   <div className="flex justify-between items-start mb-6 shrink-0">
                     <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
-                      Active Subscriptions
+                      Detected Subscriptions
                     </h3>
                   </div>
                   <div className="flex-1 overflow-auto scrollbar-hide">
@@ -463,7 +463,7 @@ export default function ConnectionsPage() {
                                   {sub.merchant_name}
                                 </span>
                                 <span className="text-[9px] font-mono text-foreground/50 uppercase tracking-widest">
-                                  {sub.status === 'expired' ? 'Expired' : 'Active'} • {sub.predicted_frequency}
+                                  {sub.status === '303-410' ? 'Expired' : 'Active'} • {sub.predicted_frequency}
                                 </span>
                               </div>
                             </div>
@@ -471,7 +471,7 @@ export default function ConnectionsPage() {
                               <span className="font-mono font-bold text-foreground">
                                 {new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(sub.expected_amount)}
                               </span>
-                              {sub.status !== 'expired' && (
+                              {sub.status !== '303-410' && (
                                 <span className="text-[9px] font-mono text-primary/70 tracking-widest uppercase">
                                   {sub.next_expected_date ? new Date(sub.next_expected_date).toLocaleDateString("en-GB", { day: 'numeric', month: 'short' }) : 'Pending'}
                                 </span>

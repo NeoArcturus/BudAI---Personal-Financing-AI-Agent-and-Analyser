@@ -125,6 +125,16 @@ class SubscriptionDetector:
                     ).first()
 
                     if existing_sub:
+                        # Enforce permanent expiration if already expired or newly expired
+                        if existing_sub.status == "303-410" or days_overdue > 90:
+                            status_val = "303-410"
+                            
+                        # If no material changes exist, skip to save DB writes
+                        if (existing_sub.next_expected_date == next_date.replace(tzinfo=None) and
+                            existing_sub.last_payment_amount == float(latest_amount) and
+                            existing_sub.status == status_val):
+                            continue
+                            
                         existing_sub.last_payment_date = last_date.replace(tzinfo=None)
                         existing_sub.last_payment_amount = float(latest_amount)
                         existing_sub.next_expected_date = next_date.replace(tzinfo=None)

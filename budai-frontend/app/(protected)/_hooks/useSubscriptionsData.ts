@@ -22,7 +22,7 @@ interface SubscriptionItem {
   predicted_frequency: string;
   next_expected_date?: string;
   is_price_hike: boolean;
-  status?: "active" | "expired";
+  status?: "303-200" | "303-410";
 }
 
 interface SubscriptionsData {

@@ -1,5 +1,12 @@
 import { create } from 'zustand';
 
+export interface WidgetInstance {
+  id: string;
+  type: string;
+  height: number;
+  colSpan: number;
+}
+
 interface DashboardFilters {
   time_type: string;
   from_date?: string;
@@ -11,6 +18,8 @@ interface DashboardFilters {
 interface DashboardState {
   filters: DashboardFilters;
   setFilters: (filters: Partial<DashboardFilters>) => void;
+  layout: WidgetInstance[] | null;
+  setLayout: (layout: WidgetInstance[]) => void;
 }
 
 export const useDashboardStore = create<DashboardState>((set) => ({
@@ -20,4 +29,6 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   },
   setFilters: (newFilters) =>
     set((state) => ({ filters: { ...state.filters, ...newFilters } })),
+  layout: null,
+  setLayout: (layout) => set({ layout }),
 }));

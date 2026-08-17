@@ -57,10 +57,10 @@ export default function SimulationControlsModal({
               </div>
               <div>
                 <h3 className="text-foreground font-black text-xl tracking-tighter uppercase italic m-0">
-                  Projection Parameters
+                  Forecast Settings
                 </h3>
                 <p className="text-primary/50 text-[9px] font-black uppercase tracking-[0.3em] mt-1.5 m-0">
-                  Configure projection variables
+                  Adjust forecast settings
                 </p>
               </div>
             </Modal.Header>
@@ -69,14 +69,14 @@ export default function SimulationControlsModal({
               <div className="space-y-5">
                 <div className="flex justify-between items-center px-1">
                   <Label className="text-[9px] font-black uppercase tracking-[0.4em] text-foreground/30 pl-1 italic">
-                    Financial Discipline
+                    Spending Variation
                   </Label>
                   <span className="text-primary text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-md bg-primary/5 border-[0.5px] border-primary/20 shadow-sm">
                     {draft.discipline_multiplier < 0.8
-                      ? "STRICT"
+                      ? "LOW"
                       : draft.discipline_multiplier > 1.2
-                        ? "VOLATILE"
-                        : "BALANCED"}
+                        ? "HIGH"
+                        : "MODERATE"}
                   </span>
                 </div>
                 <Slider
@@ -95,15 +95,14 @@ export default function SimulationControlsModal({
                   </Slider.Track>
                 </Slider>
                 <Description className="text-[9px] text-foreground/20 leading-relaxed font-bold uppercase tracking-tight pl-1">
-                  Controls volatility. Lower values project high-predictability
-                  spending patterns.
+                  Adjusts the variation in projected spending.
                 </Description>
               </div>
 
               <div className="space-y-5">
                 <div className="flex justify-between items-center px-1">
                   <Label className="text-[9px] font-black uppercase tracking-[0.4em] text-foreground/30 pl-1 italic">
-                    Drift Delta
+                    Growth Adjustment
                   </Label>
                   <span className="text-primary font-mono text-[11px] font-black">
                     {(draft.drift_adjustment * 100).toFixed(1)}% / DAY
@@ -125,14 +124,13 @@ export default function SimulationControlsModal({
                   </Slider.Track>
                 </Slider>
                 <Description className="text-[9px] text-foreground/20 leading-relaxed font-bold uppercase tracking-tight pl-1">
-                  Offsets baseline growth rate. Target aggressive accumulation
-                  via positive adjustment.
+                  Adjusts the baseline growth rate.
                 </Description>
               </div>
 
               <div className="space-y-5">
                 <Label className="text-[9px] font-black uppercase tracking-[0.4em] text-foreground/30 pl-1 italic">
-                  Economic Environment
+                  Economic Condition
                 </Label>
                 <Select
                   value={draft.macro_environment}
@@ -153,18 +151,18 @@ export default function SimulationControlsModal({
                       {[
                         {
                           id: "Stable",
-                          label: "STABLE ECONOMY",
-                          desc: "Standard historical logic parameters",
+                          label: "STABLE",
+                          desc: "Standard historical parameters",
                         },
                         {
                           id: "Inflationary",
-                          label: "INFLATED ECONOMY",
+                          label: "HIGH INFLATION",
                           desc: "Elevated floor, lower growth rate",
                         },
                         {
                           id: "Recession",
-                          label: "RECESSION ECONOMY",
-                          desc: "High jump probability and severity",
+                          label: "RECESSION",
+                          desc: "High variation and severity",
                         },
                       ].map((item) => (
                         <ListBox.Item
@@ -231,7 +229,7 @@ export default function SimulationControlsModal({
                 onPress={handleApply}
                 className="flex-1 font-black uppercase tracking-[0.3em] text-[10px] h-14 rounded-xl hover:scale-[1.02] transition-all cursor-pointer flex items-center justify-center gap-3 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
               >
-                Generate Projection
+                Apply Settings
               </Button>
             </Modal.Footer>
           </Modal.Dialog>

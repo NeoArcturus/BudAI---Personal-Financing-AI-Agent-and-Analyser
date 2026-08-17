@@ -20,6 +20,7 @@ class OpenBankingStatus(str, Enum):
     DECRYPTION_FAILED = "201-500"
     WEBHOOK_ACCEPTED = "205-202"
 
+
 class PipelineStatus(str, Enum):
     TRANSACTIONS_SAVED = "300-200"
     DUPLICATE_TX_SKIPPED = "300-409"
@@ -27,6 +28,9 @@ class PipelineStatus(str, Enum):
     SUBSCRIPTION_DETECTED = "303-200"
     SUBSCRIPTION_PRICE_HIKE = "303-201"
     BUDGET_OVERRUN = "305-400"
+    LAZY_ML_PROCESSING = "307-102"
+    LAZY_ML_COMPLETE = "307-200"
+    LAZY_ML_CRASH = "307-500"
 
 class AIMLStatus(str, Enum):
     CATEGORIZATION_PROCESSING = "400-102"

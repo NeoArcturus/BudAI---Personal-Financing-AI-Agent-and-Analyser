@@ -50,7 +50,7 @@ export function Subscriptions() {
           <div className="flex flex-col gap-6 p-8 shrink-0 w-full z-10">
             <div className="flex justify-between items-start w-full">
               <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
-                Active Subscriptions
+                Detected Subscriptions
               </h3>
               <CloseButton onPress={onRemove} className="opacity-50 hover:opacity-100 hover:bg-white/10 transition-all rounded-full" />
             </div>
@@ -70,7 +70,7 @@ export function Subscriptions() {
           <div className="flex flex-col gap-6 p-8 shrink-0 w-full z-10">
             <div className="flex justify-between items-start w-full">
               <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
-                Active Subscriptions
+                Detected Subscriptions
               </h3>
               <CloseButton onPress={onRemove} className="opacity-50 hover:opacity-100 hover:bg-white/10 transition-all rounded-full" />
             </div>
@@ -99,7 +99,7 @@ export function Subscriptions() {
         <div className="flex flex-col gap-6 p-8 shrink-0 w-full z-10">
           <div className="flex justify-between items-start w-full">
             <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
-              Active Subscriptions
+              Detected Subscriptions
             </h3>
             <CloseButton onPress={onRemove} className="opacity-50 hover:opacity-100 hover:bg-white/10 transition-all rounded-full" />
           </div>
@@ -112,7 +112,7 @@ export function Subscriptions() {
               <span className="text-sm font-black font-mono text-primary tracking-widest">
                 {formatCurrency(
                   subscriptionsData.subscriptions
-                    .filter(sub => sub.status !== "expired")
+                    .filter(sub => sub.status !== "303-410")
                     .reduce(
                       (acc, sub) => acc + (sub.expected_amount / parseFrequencyToDays(sub.predicted_frequency)) * 30.4, 0
                     )
@@ -142,12 +142,12 @@ export function Subscriptions() {
             ) : (
               [...subscriptionsData.subscriptions]
                 .sort((a, b) => {
-                  if (a.status === "expired" && b.status !== "expired") return 1;
-                  if (a.status !== "expired" && b.status === "expired") return -1;
+                  if (a.status === "303-410" && b.status !== "303-410") return 1;
+                  if (a.status !== "303-410" && b.status === "303-410") return -1;
                   return b.expected_amount - a.expected_amount;
                 })
                 .map((sub, idx) => {
-                  const isExpired = sub.status === "expired";
+                  const isExpired = sub.status === "303-410";
                   const freqDays = parseFrequencyToDays(sub.predicted_frequency);
                   const annualizedCost = (sub.expected_amount / freqDays) * 365.25;
 

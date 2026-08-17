@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { ChevronDown, Activity, Calendar as CalendarIcon } from "lucide-react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { ChevronDown, Activity, Calendar as CalendarIcon, Target, Settings } from "lucide-react";
 import CoreChartEngine from "../../internal/ChartEngine";
 import type { Selection } from "@heroui/react";
 import {
@@ -19,12 +19,15 @@ import {
   CloseButton,
   ProgressBar,
   Spinner,
+  Button
 } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { today, getLocalTimeZone, DateValue } from "@internationalized/date";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
 import { useSpendingTrends, usePersistedState, useTransactions } from "@/lib/hooks";
-import WidgetFlipCard from "../../internal/FlipCard";
+import { apiFetch } from "@/lib/api";
+import WidgetFlipCard, { FlipButton } from "../../internal/FlipCard";
+import SimulationControlsModal, { SimulationOverrides } from "@/app/(protected)/_components/modals/SimulationControlsModal";
 import { useRouter } from "next/navigation";
 import { Account, BankChartData } from "@/types";
 import { cn } from "@/lib/utils";
@@ -90,8 +93,86 @@ export default function SpendingTrendWidgetClient({
     hasTransactions,
   );
 
-  const isInitialLoading = isChartLoading || (isTransactionsFetching && !hasTransactions);
-  const isFetching = isChartFetching || isTransactionsFetching;
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [simulationOverrides, setSimulationOverrides] = useState<SimulationOverrides>({
+    discipline_multiplier: 1.0,
+    drift_adjustment: 0.0,
+    macro_environment: "Stable",
+    stress_test_active: false,
+    days: 30,
+  });
+
+  const [expenseForecast, setExpenseForecast] = useState<any>(null);
+  const [isForecastLoading, setIsForecastLoading] = useState(false);
+
+  const fetchExpenseForecast = useCallback(async () => {
+    if (!selectedAccountId) return;
+    setIsForecastLoading(true);
+    try {
+      const expenseRes = await apiFetch(
+        "/api/media/execute",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            tool_name: "generate_expense_forecast",
+            parameters: {
+              bank_name_or_id: selectedAccountId,
+              ...simulationOverrides,
+            },
+          }),
+        },
+        true
+      );
+      if (expenseRes.ok) {
+        const result = await expenseRes.json() as any;
+        setExpenseForecast(result.data);
+      }
+    } catch (error) {
+      console.error("Forecast Fetch Error:", error);
+    } finally {
+      setIsForecastLoading(false);
+    }
+  }, [selectedAccountId, simulationOverrides]);
+
+  useEffect(() => {
+    fetchExpenseForecast();
+  }, [fetchExpenseForecast]);
+
+  const combinedPayload = useMemo(() => {
+    if (!chartPayload || chartPayload.length === 0) return chartPayload;
+    if (!expenseForecast) return chartPayload;
+
+    const series = (expenseForecast && typeof expenseForecast === 'object' && 'series' in expenseForecast) ? expenseForecast.series : (Array.isArray(expenseForecast) ? expenseForecast : [expenseForecast]);
+    const timeline = (expenseForecast && typeof expenseForecast === 'object' && 'timeline' in expenseForecast) ? expenseForecast.timeline : [];
+
+    const baseData = chartPayload[0]?.data || [];
+    const forecastData = series[0]?.data || [];
+
+    const mappedForecast = forecastData.map((pt: any) => {
+      const date = pt.Day || pt.Date || pt.Month || "";
+      const val = Number(pt["Projected Daily Spend (GBP)"] || pt["Projected Spend"] || pt["spend"] || 0);
+      return {
+        Date: date,
+        Month: date,
+        Category: "Forecast",
+        Amount: val,
+        currency: pt.currency || "GBP",
+      };
+    });
+
+    return {
+      series: [
+        {
+          ...chartPayload[0],
+          data: [...baseData, ...mappedForecast]
+        }
+      ],
+      timeline
+    };
+  }, [chartPayload, expenseForecast]);
+
+  const isInitialLoading = isChartLoading || (isTransactionsFetching && !hasTransactions) || (isForecastLoading && !expenseForecast);
+  const isFetching = isChartFetching || isTransactionsFetching || isForecastLoading;
 
   const totalExpenses = useMemo(() => {
     let total = 0;
@@ -108,7 +189,10 @@ export default function SpendingTrendWidgetClient({
   }, [chartPayload]);
 
   const config = useMemo(() => {
-    if (!startDate || !endDate || !Array.isArray(chartPayload) || chartPayload.length === 0) return null;
+    const isArray = Array.isArray(combinedPayload);
+    const series = isArray ? combinedPayload : (combinedPayload as any).series;
+    
+    if (!startDate || !endDate || !series || series.length === 0) return null;
 
     const chartType =
       granularity === "daily"
@@ -119,7 +203,7 @@ export default function SpendingTrendWidgetClient({
 
     return buildChartConfig(
       chartType,
-      chartPayload,
+      combinedPayload as any,
       {
         bank_name_or_id: selectedAccountId,
         from_date: fromStr,
@@ -129,7 +213,7 @@ export default function SpendingTrendWidgetClient({
       { disableAnimation: true },
     );
   }, [
-    chartPayload,
+    combinedPayload,
     startDate,
     endDate,
     selectedAccountId,
@@ -170,12 +254,15 @@ export default function SpendingTrendWidgetClient({
         <Card.Header className="flex flex-col gap-6 p-8 shrink-0 w-full z-10">
           <div className="flex justify-between items-start w-full">
             <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
-              Past Expenditure
+              Expenditure & Forecast
             </h3>
-            <CloseButton
-              onPress={onRemove}
-              className="text-foreground/20 hover:text-foreground transition-all rounded-md"
-            />
+            <div className="flex items-center gap-1">
+              <FlipButton />
+              <CloseButton
+                onPress={onRemove}
+                className="w-8 h-8 min-w-8 text-foreground/20 hover:text-foreground transition-all rounded-md"
+              />
+            </div>
           </div>
 
           <div className="flex flex-wrap items-end gap-4 w-full pointer-events-auto">
@@ -307,9 +394,12 @@ export default function SpendingTrendWidgetClient({
               </DatePicker.Popover>
             </DatePicker>
 
-            <div className="ml-auto flex shrink-0">
+            <div className="flex-1 min-w-40 max-w-50 ml-auto">
+              <Label className="text-[9px] font-black uppercase tracking-[0.3em] text-foreground/40 mb-2 block pl-1">
+                Selected Account
+              </Label>
               <Dropdown>
-                <Dropdown.Trigger className="h-12 min-h-12 min-w-40 max-w-55 bg-white/5 hover:bg-white/10 border-[0.5px] border-white/10 text-[11px] text-foreground font-black uppercase tracking-widest rounded-xl px-5 flex items-center justify-between transition-all cursor-pointer outline-none focus:border-primary/50 shadow-inner">
+                <Dropdown.Trigger className="h-12 min-h-12 w-full bg-white/5 hover:bg-white/10 border-[0.5px] border-white/10 text-[10px] text-foreground font-black uppercase tracking-widest rounded-xl px-4 flex items-center justify-between transition-all cursor-pointer outline-none focus:border-primary/50 shadow-inner">
                   <span className="truncate pointer-events-none">
                     {activeAccountName}
                   </span>
@@ -318,43 +408,35 @@ export default function SpendingTrendWidgetClient({
                     className="text-foreground/30 shrink-0 pointer-events-none"
                   />
                 </Dropdown.Trigger>
-                <Dropdown.Popover
-                  className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 shadow-2xl rounded-2xl min-w-50 z-50"
-                  placement="bottom left"
-                >
+                <Dropdown.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-xl shadow-2xl w-64 z-50 p-2">
                   <Dropdown.Menu
-                    items={dropdownItems}
-                    selectionMode="single"
+                    items={accounts.map(a => ({ ...a, id: a.account_id }))}
+                    className="outline-none"
                     selectedKeys={new Set([selectedAccountId])}
-                    onSelectionChange={(keys: Selection) => {
-                      if (keys !== "all") {
-                        const selectedValue = Array.from(keys)[0];
-                        if (selectedValue)
-                          setSelectedAccountId(String(selectedValue));
-                      }
+                    onSelectionChange={(keys: any) => {
+                      const val = Array.from(keys)[0] as string;
+                      if (val) setSelectedAccountId(val);
                     }}
-                    className="p-2"
+                    selectionMode="single"
                   >
-                    {(acc: Account) => (
+                    {(acc: any) => (
                       <Dropdown.Item
-                        key={acc.account_id}
-                        id={acc.account_id}
+                        key={acc.id}
+                        id={acc.id}
                         textValue={acc.bank_name}
-                        className="rounded-xl transition-all data-[hover=true]:bg-white/10 py-3 px-4 outline-none cursor-pointer w-full block border-[0.5px] border-transparent data-[hover=true]:border-primary/30"
+                        className="flex flex-col px-4 py-3 rounded-lg hover:bg-white/10 cursor-pointer outline-none transition-all"
                       >
-                        <div className="flex flex-col w-full">
-                          <Badge.Anchor className="w-full relative flex items-center justify-between">
-                            <Label className="text-[11px] font-black text-foreground uppercase tracking-tight cursor-pointer pointer-events-none pr-4 italic">
+                        <div className="w-full relative flex items-center justify-between">
+                            <span className="text-[11px] font-black text-foreground uppercase tracking-tight pr-4 italic truncate">
                               {acc.bank_name} ({acc.currency || "GBP"})
-                            </Label>
-                            {selectedAccountId === acc.account_id && (
-                              <Badge className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,242,255,0.6)]" />
+                            </span>
+                            {selectedAccountId === acc.id && (
+                              <div className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,242,255,0.6)]" />
                             )}
-                          </Badge.Anchor>
-                          <Description className="text-[9px] text-foreground/30 font-mono tracking-[0.2em] pointer-events-none mt-1.5 uppercase">
-                            Account No: *{acc.account_number?.slice(-4) || "0000"}
-                          </Description>
-                        </div>
+                          </div>
+                        <span className="text-foreground/20 text-[9px] font-mono tracking-widest mt-1.5 uppercase">
+                          Account No: *{acc.account_number?.slice(-4)}
+                        </span>
                       </Dropdown.Item>
                     )}
                   </Dropdown.Menu>
@@ -420,22 +502,35 @@ export default function SpendingTrendWidgetClient({
               </div>
             ) : (
               <>
-                <div className="flex items-baseline gap-4">
-                  <h4 className="text-4xl font-normal text-foreground tracking-tighter mb-1 font-mono">
-                    {new Intl.NumberFormat("en-GB", {
-                      style: "currency",
-                      currency: activeAccount?.currency || "GBP",
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(totalExpenses)}
-                  </h4>
-                  {isFetching && (
-                    <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  )}
+                <div className="flex items-baseline gap-4 w-full justify-between pr-8">
+                  <div className="flex flex-col">
+                    <div className="flex items-baseline gap-4">
+                      <h4 className="text-4xl font-normal text-foreground tracking-tighter mb-1 font-mono">
+                        {new Intl.NumberFormat("en-GB", {
+                          style: "currency",
+                          currency: activeAccount?.currency || "GBP",
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        }).format(totalExpenses)}
+                      </h4>
+                      {isFetching && (
+                        <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                      )}
+                    </div>
+                    <p className="text-[9px] font-black text-foreground/30 uppercase tracking-[0.3em]">
+                      Total Expenditure
+                    </p>
+                  </div>
+                  <Button
+                    isIconOnly
+                    size="sm"
+                    variant="ghost"
+                    className="w-8 h-8 min-w-8 bg-white/5 text-foreground/60 hover:text-primary rounded-lg border-[0.5px] border-white/10"
+                    onPress={() => setIsModalOpen(true)}
+                  >
+                    <Settings size={14} />
+                  </Button>
                 </div>
-                <p className="text-[9px] font-black text-foreground/30 uppercase tracking-[0.3em]">
-                  Total Expenditure
-                </p>
               </>
             )}
           </div>
@@ -462,6 +557,12 @@ export default function SpendingTrendWidgetClient({
           </div>
         </Card.Content>
       </Card>
+      <SimulationControlsModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onApply={setSimulationOverrides}
+        initialValues={simulationOverrides}
+      />
     </WidgetFlipCard>
   );
 }

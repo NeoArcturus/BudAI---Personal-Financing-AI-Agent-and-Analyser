@@ -19,7 +19,7 @@ import {
 } from "@heroui/react";
 import { cn } from "@/lib/utils";
 import CoreChartEngine from "../../internal/ChartEngine";
-import WidgetFlipCard from "../../internal/FlipCard";
+import WidgetFlipCard, { FlipButton } from "../../internal/FlipCard";
 import { useRouter } from "next/navigation";
 import { useBudAI } from "@/app/context/AppContext";
 import { WidgetContext } from "../../../home/DashboardClient";
@@ -165,10 +165,13 @@ export default function CommodityMarketWidgetClient({
               </p>
             </div>
           </div>
-          <CloseButton
-            onPress={onRemove}
-            className="text-foreground/20 hover:text-foreground transition-all rounded-md"
-          />
+          <div className="flex items-center gap-1">
+            <FlipButton />
+            <CloseButton
+              onPress={onRemove}
+              className="w-8 h-8 min-w-8 text-foreground/20 hover:text-foreground transition-all rounded-md"
+            />
+          </div>
         </Card.Header>
 
         <Card.Content className="p-0 flex-1 flex flex-col overflow-hidden min-h-0 relative">

@@ -32,10 +32,13 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      const data = (await res.json()) as { token?: string; detail?: string };
+      const data = (await res.json()) as { token?: string; refresh_token?: string; detail?: string };
 
       if (res.ok && data.token) {
         localStorage.setItem("budai_token", data.token);
+        if (data.refresh_token) {
+          localStorage.setItem("budai_refresh_token", data.refresh_token);
+        }
         localStorage.setItem("budai_user_name", email.split("@")[0] || "User");
         document.cookie = `budai_token=${data.token}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
         router.push("/home");
@@ -138,15 +141,7 @@ export default function LoginPage() {
             </Button>
           </Form>
 
-          <Card.Footer className="text-center text-muted-foreground mt-10 text-[11px] z-10 relative flex justify-center w-full font-bold uppercase tracking-widest gap-2">
-            <span>Don&apos;t have an account?</span>
-            <Link
-              href="/register"
-              className="text-primary hover:text-primary/80 transition-colors border-none font-black"
-            >
-              Sign Up
-            </Link>
-          </Card.Footer>
+
         </Card.Content>
       </Card>
     </div>

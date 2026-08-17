@@ -42,6 +42,10 @@ def background_fetch_async_results(results_uri: str, user_uuid: str, bank_uuid: 
                 tx_data = res.json().get("results", [])
                 logger.info(json.dumps({"message": f"Successfully pulled {len(tx_data)} transactions from async results.", "status_code": 200}))
                 
+                # Transition state to AI Categorization Processing
+                from utils.state_manager import set_account_state
+                set_account_state(acc_id, "400-102")
+                
                 sync_service = TrueLayerSync(user_id=user_uuid)
                 sync_service.process_and_store_transactions(session, tx_data, user_uuid, bank_uuid, acc_id)
                 

@@ -117,10 +117,10 @@ export default function LandingPage() {
             Log In
           </Link>
           <Button
-            onPress={() => router.push("/register")}
+            onPress={() => router.push("/onboarding")}
             className="font-extrabold text-xs tracking-wide px-6 h-9 rounded-md transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
           >
-            Sign Up
+            Get Started
           </Button>
           <Button
             isIconOnly
@@ -162,10 +162,10 @@ export default function LandingPage() {
               className="flex flex-col sm:flex-row items-center gap-6 mt-4 w-full justify-start"
             >
               <Button
-                onPress={() => router.push("/register")}
+                onPress={() => router.push("/onboarding")}
                 className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl hover:scale-[1.02] transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
               >
-                Go to Dashboard
+                Get Started
               </Button>
               <Button
                 variant="outline"
@@ -203,7 +203,7 @@ export default function LandingPage() {
         <section className="py-24 bg-background border-y border-white/5 relative z-20">
           <div className="text-center mb-12">
             <h3 className="font-mono text-[10px] font-black text-white/40 tracking-[0.2em] uppercase">
-              INSTITUTIONAL INTEGRATIONS
+              Bank Integrations
             </h3>
           </div>
           <div className="flex flex-wrap justify-center gap-12 md:gap-24 items-center opacity-40 px-6 max-w-6xl mx-auto">

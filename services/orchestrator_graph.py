@@ -127,9 +127,10 @@ async def generate_session_title(session_id: str, first_msg: str):
             model="lmstudio-community/Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit",
             base_url=OLLAMA_BASE_URL,
             api_key="budai-local",
-            temperature=0
+            temperature=0,
+            max_tokens=200
         )
-        res = await llm.ainvoke(f"Professional title for: '{first_msg}'. 3-4 words.")
+        res = await llm.ainvoke("Professional title for: '" + first_msg + "'. 3-4 words.")
         title = res.content.strip().replace('"', '')
         with SessionLocal() as session:
             db_session = session.query(ChatSession).filter_by(
@@ -180,10 +181,8 @@ supervisor_llm = ChatOpenAI(
     api_key="budai-local",
     temperature=0.1,
     streaming=True,
-    max_tokens=20000,
-    
-    timeout=600,
-    
+    max_tokens=5000,
+    timeout=600
 )
 
 supervisor_tools = [

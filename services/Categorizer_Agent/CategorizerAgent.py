@@ -185,7 +185,7 @@ class CategorizerAgent:
             logger.info(json.dumps({"message": f"Background Categorizer found {len(transactions)} uncategorized transactions. Processing...", "status_code": 200}))
 
             batch_size = 100
-            semaphore = asyncio.Semaphore(1)
+            semaphore = asyncio.Semaphore(3)
             
             async def sem_task(batch):
                 async with semaphore:
@@ -255,12 +255,24 @@ class CategorizerAgent:
         system_prompt = f"""You are a highly intelligent financial categorizer.
 Classify each transaction based on your understanding of the transaction strings, amount, and date.
 Rely primarily on the `semi_cleaned_string` to deduce the merchant. 
-CRITICAL RULE: DO NOT categorize internal bank transfers or 'From Savings' as 'Income'. 'Income' is ONLY for salary, refunds, or external payments. Transfers must be 'Transfers & Payments'.
+CRITICAL RULE: Income is strictly for Salary or Refunds. Money sent or received from individuals/friends (P2P) MUST be categorized as 'Transfers & Payments'.
 
-Output valid JSON matching the exact schema provided. Think step-by-step to deduce intent before categorizing.
+Output valid JSON matching the exact schema provided.
+CRITICAL RULES:
+1. DO NOT explain your reasoning.
+2. DO NOT output a chain of thought or any conversational text.
+3. Respond ONLY with the requested JSON.
+
 - Ensure 'category' strictly matches one of the following main categories: {categories_str}.
 - Generate a concise 1-3 word string for 'sub_category' (e.g. 'Groceries', 'Coffee').
-- Generate an array of string tags representing behavior and intent (e.g., '#essential', '#discretionary', '#impulse-buy', '#work-expense')."""
+- Generate an array of string tags representing behavior and intent (e.g., '#essential', '#discretionary', '#impulse-buy', '#work-expense').
+
+EXAMPLES:
+Input: [{{"id": 0, "semi_cleaned_string": "UBER EATS"}}]
+Output: {{"results": [{{"id": 0, "category": "Food & Dining", "sub_category": "Delivery", "tags": ["#discretionary"]}}]}}
+
+Input: [{{"id": 1, "semi_cleaned_string": "TFL TRAVEL"}}]
+Output: {{"results": [{{"id": 1, "category": "Transportation", "sub_category": "Transit", "tags": ["#essential"]}}]}}"""
         try:
             def _locked_call():
                 from services.llm_manager import GlobalLLMManager
@@ -269,7 +281,7 @@ Output valid JSON matching the exact schema provided. Think step-by-step to dedu
                     return self.structured_llm.invoke([
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": json.dumps(minimal_batch)}
-                    ], config={"callbacks": []})
+                    ], config={"callbacks": []}, extra_body={"enable_thinking": False})
                 finally:
                     GlobalLLMManager.release()
             
@@ -331,7 +343,7 @@ Output valid JSON matching the exact schema provided. Think step-by-step to dedu
                 })
                 
             batch_size = 100
-            semaphore = asyncio.Semaphore(1)
+            semaphore = asyncio.Semaphore(3)
             
             async def sem_task(batch):
                 async with semaphore:

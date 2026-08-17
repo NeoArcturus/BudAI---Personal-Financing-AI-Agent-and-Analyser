@@ -12,6 +12,32 @@ logger = get_core_logger(__name__)
 class GetConnectedAccountsInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID to query accounts for.")
 
+class UpdateUserPersonaInput(BaseModel):
+    user_uuid: str = Field(..., description="The user UUID.")
+    persona: str = Field(..., description="The deduced user persona (e.g., 'STUDENT', 'PROFESSIONAL', 'RETIREE', 'BUSINESS').")
+
+@tool(args_schema=UpdateUserPersonaInput)
+def update_user_persona(user_uuid: str, persona: str) -> str:
+    """
+    Updates the user's base financial persona in the database.
+    Use this during onboarding after deducing their role from the conversation.
+    """
+    from models.database_models import User
+    
+    logger.info(json.dumps({"message": f"Executing MCP Tool: update_user_persona ({persona})", "status_code": 200}))
+    try:
+        with SessionLocal() as session:
+            user = session.query(User).filter_by(user_uuid=user_uuid).first()
+            if not user:
+                return "User not found."
+            
+            user.persona = persona.upper()
+            session.commit()
+            return f"Successfully updated user persona to {persona.upper()}."
+    except Exception as e:
+        logger.error(json.dumps({"message": f"Database error updating persona: {e}", "status_code": 500}))
+        return f"Database error: {str(e)}"
+
 @tool(args_schema=GetConnectedAccountsInput)
 def get_connected_accounts(user_uuid: str) -> str:
     """

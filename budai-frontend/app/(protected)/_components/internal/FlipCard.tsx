@@ -7,9 +7,32 @@ import {
   ArrowRight,
   RotateCcw,
   MessageSquare,
+  Info,
 } from "lucide-react";
 import { Button, Card, Skeleton, ScrollShadow, Surface } from "@heroui/react";
 import { cn } from "@/lib/utils";
+
+export const FlipCardContext = React.createContext({
+  isFlipped: false,
+  toggleFlip: () => {},
+});
+
+export const useFlipCard = () => React.useContext(FlipCardContext);
+
+export const FlipButton = ({ className }: { className?: string }) => {
+  const { toggleFlip } = useFlipCard();
+  return (
+    <Button
+      isIconOnly
+      size="sm"
+      variant="ghost"
+      onPress={toggleFlip}
+      className={cn("text-foreground/50 hover:text-foreground transition-all rounded-full bg-transparent border-none", className)}
+    >
+      <RotateCcw size={16} />
+    </Button>
+  );
+};
 
 interface WidgetFlipCardProps {
   children: React.ReactNode;
@@ -45,23 +68,9 @@ export default function WidgetFlipCard({
           variant="transparent"
           className="absolute inset-0 w-full h-full backface-hidden z-10 p-0 m-0 border-none bg-transparent"
         >
-          {children}
-
-          <Button
-            onPress={toggleFlip}
-            className="absolute top-8 right-16 h-8 px-4 rounded-lg flex items-center justify-center gap-2 bg-primary/5 text-primary border-[0.5px] border-primary/20 hover:border-primary/50 z-50 transition-all shadow-[0_0_15px_rgba(0,242,255,0.05)] hover:shadow-[0_0_20px_rgba(0,242,255,0.2)] cursor-pointer"
-          >
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] whitespace-nowrap">
-              Open Advisor
-            </span>
-            <Sparkles
-              size={12}
-              className={cn(
-                "shrink-0",
-                showSkeleton ? "animate-spin" : "animate-pulse",
-              )}
-            />
-          </Button>
+          <FlipCardContext.Provider value={{ isFlipped, toggleFlip }}>
+            {children}
+          </FlipCardContext.Provider>
         </Surface>
 
         <Surface
@@ -74,11 +83,11 @@ export default function WidgetFlipCard({
                 <MessageSquare size={24} />
               </div>
               <div className="flex flex-col justify-center">
-                <h3 className="text-foreground font-black text-xl tracking-tighter uppercase italic m-0">
-                  Financial Insights
+                <h3 className="text-foreground font-black text-[10px] tracking-widest uppercase italic m-0">
+                  Analysis
                 </h3>
-                <p className="text-primary/50 text-[9px] font-black uppercase tracking-[0.3em] mt-1.5 m-0">
-                  Real-time Analysis
+                <p className="text-primary/50 text-[8px] font-mono tracking-widest mt-1 m-0">
+                  System Context
                 </p>
               </div>
             </Card.Header>
@@ -109,7 +118,7 @@ export default function WidgetFlipCard({
                     <div className="flex items-center gap-3 text-primary/30">
                       <div className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-pulse" />
                       <span className="text-[9px] font-black uppercase tracking-[0.4em]">
-                        Advisor Access
+                        Context
                       </span>
                     </div>
                     <p className="text-foreground/70 text-[15px] leading-relaxed font-medium tracking-tight">
@@ -121,21 +130,15 @@ export default function WidgetFlipCard({
               </ScrollShadow>
             </Card.Content>
 
-            <Card.Footer className="p-10 pt-6 mt-auto border-t-[0.5px] border-white/5 flex items-center gap-5 bg-white/[0.01]">
-              <Button
-                onPress={onDiscuss}
-                isDisabled={showSkeleton}
-                className="flex-1 font-black uppercase tracking-[0.2em] text-[11px] h-14 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-3 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
-              >
-                Talk to Advisor
-                <ArrowRight size={18} />
-              </Button>
+            <Card.Footer className="p-4 mt-auto border-t-[0.5px] border-white/5 flex items-center justify-end bg-white/[0.01]">
               <Button
                 isIconOnly
+                size="sm"
+                variant="ghost"
                 onPress={toggleFlip}
-                className="w-14 h-14 min-w-14 rounded-xl text-foreground/30 hover:text-foreground hover:bg-white/5 flex items-center justify-center transition-all cursor-pointer bg-transparent border-[0.5px] border-white/10"
+                className="w-8 h-8 min-w-8 text-foreground/20 hover:text-foreground hover:bg-white/5 transition-all rounded-md cursor-pointer bg-transparent border-none"
               >
-                <RotateCcw size={20} />
+                <RotateCcw size={16} />
               </Button>
             </Card.Footer>
           </Card>

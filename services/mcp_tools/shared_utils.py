@@ -30,18 +30,7 @@ class ForecastBudgetImpactInput(BaseModel):
     account_id: str = Field(..., description="List of accounts.")
     days: int = Field(default=30)
 
-class FindTotalSpentInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
-    category: str = Field(...)
-    account_id: str = Field(...)
-    from_date: str | None = Field(default=None)
-    to_date: str | None = Field(default=None)
 
-class FindHighestSpendingCategoryInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
-    account_id: str = Field(...)
-    from_date: str | None = Field(default=None)
-    to_date: str | None = Field(default=None)
 
 class CreateBargraphChartInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
@@ -51,12 +40,7 @@ class CreatePieChartInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
     account_id: str = Field(...)
 
-class PlotExpensesInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
-    plot_time_type: str = Field(...)
-    from_date: str = Field(...)
-    to_date: str = Field(...)
-    account_id: str = Field(...)
+
 
 class GenerateExpenseForecastInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
@@ -81,11 +65,7 @@ class AnalyzeCriticalSurvivalMetricsInput(BaseModel):
 class AnalyzeWealthAccelerationMetricsInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")
 
-class PlotCashFlowMixedInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
-    account_id: str = Field(...)
-    from_date: str = Field(...)
-    to_date: str = Field(...)
+
 
 class PlotHealthRadarInput(BaseModel):
     user_uuid: str = Field(..., description="The user UUID.")

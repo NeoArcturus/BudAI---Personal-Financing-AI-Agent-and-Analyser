@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { ChevronDown, BarChart2, Calendar as CalendarIcon } from "lucide-react";
+import { ChevronDown, BarChart2, Calendar as CalendarIcon, Info } from "lucide-react";
 import CoreChartEngine from "../../internal/ChartEngine";
 import type { Selection } from "@heroui/react";
 import {
@@ -21,7 +21,7 @@ import { Transaction, BankChartData } from "@/types";
 import { today, getLocalTimeZone, DateValue } from "@internationalized/date";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
 import { useTransactions, usePersistedState } from "@/lib/hooks";
-import WidgetFlipCard from "../../internal/FlipCard";
+import WidgetFlipCard, { FlipButton } from "../../internal/FlipCard";
 import { useRouter } from "next/navigation";
 import { WidgetContext } from "../../../home/DashboardClient";
 
@@ -197,10 +197,13 @@ export default function CashFlowWidgetClient({
             <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
               Cashflow Insights
             </h3>
-            <CloseButton
-              onPress={onRemove}
-              className="text-foreground/20 hover:text-foreground transition-all rounded-md"
-            />
+            <div className="flex items-center gap-1">
+              <FlipButton />
+              <CloseButton
+                onPress={onRemove}
+                className="w-8 h-8 min-w-8 text-foreground/20 hover:text-foreground transition-all rounded-md"
+              />
+            </div>
           </div>
 
           <div className="flex flex-wrap items-end gap-4 w-full pointer-events-auto">
@@ -365,7 +368,7 @@ export default function CashFlowWidgetClient({
                         className="flex flex-col px-4 py-3 rounded-lg hover:bg-white/10 cursor-pointer outline-none transition-all"
                       >
                         <div className="w-full relative flex items-center justify-between">
-                            <span className="text-[11px] font-black text-foreground uppercase tracking-tight pr-4 italic">
+                            <span className="text-[11px] font-black text-foreground uppercase tracking-tight pr-4 italic truncate">
                               {acc.bank_name} ({acc.currency || "GBP"})
                             </span>
                             {selectedAccountId === acc.id && (

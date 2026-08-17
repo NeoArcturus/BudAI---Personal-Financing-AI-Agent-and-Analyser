@@ -27,7 +27,7 @@ async def get_spending_trends(
     if not to_date:
         to_date = datetime.now().strftime("%Y-%m-%d")
 
-    ea = ExpenseAnalysis(identifier=account_id, user_uuid=current_user.user_uuid)
+    ea = ExpenseAnalysis(account_id=account_id, user_uuid=current_user.user_uuid)
     if not ea.fetch_data(from_date, to_date):
         return {"status": "success", "data": []}
 
@@ -82,7 +82,7 @@ async def get_expense_distribution(
     if not to_date:
         to_date = datetime.now().strftime("%Y-%m-%d")
 
-    ea = ExpenseAnalysis(identifier=account_id, user_uuid=current_user.user_uuid)
+    ea = ExpenseAnalysis(account_id=account_id, user_uuid=current_user.user_uuid)
     if not ea.fetch_data(from_date, to_date):
          return {"status": "success", "data": []}
          

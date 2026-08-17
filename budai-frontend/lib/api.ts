@@ -44,6 +44,7 @@ export const clearAdviceCache = (): void => {
 export const clearSession = (): void => {
   if (typeof window !== "undefined") {
     localStorage.removeItem("budai_token");
+    localStorage.removeItem("budai_refresh_token");
     clearAdviceCache();
     document.cookie =
       "budai_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax";
@@ -92,12 +93,19 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
       
       try {
-        const refreshResponse = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {}, {
+        const storedRefreshToken = typeof window !== "undefined" ? localStorage.getItem("budai_refresh_token") : null;
+        const refreshResponse = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
+          refresh_token: storedRefreshToken
+        }, {
           withCredentials: true
         });
         const newToken = refreshResponse.data.token;
+        const newRefreshToken = refreshResponse.data.refresh_token;
         if (typeof window !== "undefined") {
           localStorage.setItem("budai_token", newToken);
+          if (newRefreshToken) {
+            localStorage.setItem("budai_refresh_token", newRefreshToken);
+          }
           
           document.cookie = `budai_token=${newToken}; path=/; max-age=604800; samesite=lax`;
         }
@@ -179,6 +187,14 @@ export async function apiFetch(
     };
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
+      if (error.response.status === 401) {
+        clearSession();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("budai-unauthorized"));
+          window.location.href = "/login";
+        }
+      }
+      
       const errorData = error.response.data || {};
       throw new Error(
         (errorData as { message?: string }).message ||

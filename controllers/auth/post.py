@@ -83,12 +83,13 @@ async def login_user(request: LoginRequest, response: Response):
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=True,
+        secure=False,
         samesite="lax",
         max_age=7 * 24 * 60 * 60
     )
     return {
         "token": access_token,
+        "refresh_token": refresh_token,
         "status": "success",
         "expires_in_minutes": ACCESS_TOKEN_EXPIRE_MINUTES,
         "username": username,
@@ -135,7 +136,7 @@ async def refresh_user_token(response: Response, db: Session, refresh_token: str
             key="refresh_token",
             value=new_refresh_token,
             httponly=True,
-            secure=True,
+            secure=False,
             samesite="lax",
             max_age=7 * 24 * 60 * 60
         )
@@ -164,7 +165,14 @@ async def register_user(request: RegisterRequest):
     """
     user_service = UserService()
     try:
-        user_uuid = user_service.register_user(request.email, request.password)
+        user_uuid = user_service.register_user(
+            email=request.email, 
+            password=request.password,
+            name=request.name,
+            date_of_birth=request.date_of_birth,
+            employment_status=request.employment_status,
+            country_of_tax_residence=request.country_of_tax_residence
+        )
     except ValueError as e:
         logger.warning(json.dumps({"message": f"Registration failed for {request.email}: {e}", "status_code": 400}))
         raise HTTPException(status_code=400, detail=str(e))

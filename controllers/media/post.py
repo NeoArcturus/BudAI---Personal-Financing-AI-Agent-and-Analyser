@@ -14,9 +14,9 @@ from services.mcp_tools.forecaster_tools import generate_financial_forecast, gen
 from services.mcp_tools.categorizer_tools import (
     create_bargraph_chart_and_save, create_pie_chart_and_save
 )
-from services.mcp_tools.analyser_tools import (
-    find_total_spent_for_given_category, find_highest_spending_category,
-    plot_expenses, plot_cash_flow_mixed
+
+from services.mcp_tools.core_query_tools import (
+    query_transactions, aggregate_financial_data
 )
 from services.mcp_tools.health_tools import (
     analyze_critical_survival_metrics, analyze_wealth_acceleration_metrics,
@@ -31,17 +31,15 @@ class MediaExecuteRequest(BaseModel):
 
 TOOL_MAPPING = {
     "generate_financial_forecast": generate_financial_forecast,
-    "find_total_spent_for_given_category": find_total_spent_for_given_category,
-    "find_highest_spending_category": find_highest_spending_category,
     "create_bargraph_chart_and_save": create_bargraph_chart_and_save,
     "create_pie_chart_and_save": create_pie_chart_and_save,
-    "plot_expenses": plot_expenses,
     "generate_expense_forecast": generate_expense_forecast,
     "analyze_critical_survival_metrics": analyze_critical_survival_metrics,
     "analyze_wealth_acceleration_metrics": analyze_wealth_acceleration_metrics,
-    "plot_cash_flow_mixed": plot_cash_flow_mixed,
     "plot_health_radar": plot_health_radar,
-    "get_financial_health_metrics": get_financial_health_metrics
+    "get_financial_health_metrics": get_financial_health_metrics,
+    "query_transactions": query_transactions,
+    "aggregate_financial_data": aggregate_financial_data
 }
 
 async def execute_tool(request: MediaExecuteRequest, current_user: User):
