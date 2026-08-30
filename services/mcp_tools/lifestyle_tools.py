@@ -142,27 +142,29 @@ def predict_impulse_vulnerability(user_uuid: str) -> str:
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: predict_impulse_vulnerability", "status_code": 200}))
     try:
+        from sqlalchemy import text
         with SessionLocal() as session:
-            txs = session.execute(
-                select(Transaction)
-                .where(Transaction.user_uuid == user_uuid)
-                .where(Transaction.amount < 0)
-            ).scalars().all()
+            query = text("""
+                SELECT EXTRACT(isodow FROM date) as dow, sum(abs(amount)) as total_spend
+                FROM transactions
+                WHERE user_uuid = :user_uuid AND amount < 0
+                GROUP BY dow
+                ORDER BY total_spend DESC
+                LIMIT 1
+            """)
+            result = session.execute(query, {"user_uuid": user_uuid}).fetchone()
             
-            if not txs:
+            if not result or result[0] is None:
                 return "No transaction history to predict impulse vulnerability."
                 
-            df = pd.DataFrame([{"amount": t.amount, "day": t.date.weekday() if t.date else 0} for t in txs])
-            if df.empty:
-                return "Insufficient data."
-                
-            day_spend = df.groupby("day")["amount"].sum().abs()
-            worst_day = day_spend.idxmax()
+            dow_idx = int(result[0])
             days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            worst_day_name = days[dow_idx - 1] if 1 <= dow_idx <= 7 else "Unknown"
             
-            return f"Impulse Vulnerability: Statistically, the user's highest density spending cluster activates on {days[worst_day]}s. Recommend locking down discretionary budgets on this day."
+            return f"Impulse Vulnerability: Statistically, the user's highest density spending cluster activates on {worst_day_name}s. Recommend locking down discretionary budgets on this day."
     except Exception as e:
-        return f"Error predicting impulse windows: {str(e)}"
+        logger.error(json.dumps({"message": f"Error: {e}", "status_code": 500}))
+        return f"Error: {str(e)}"
 
 @tool(args_schema=StandardUserInput)
 def get_upcoming_subscriptions(user_uuid: str) -> str:

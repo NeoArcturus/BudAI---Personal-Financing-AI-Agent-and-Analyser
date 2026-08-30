@@ -1,6 +1,6 @@
 import json
 from typing import List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 from langchain_core.tools import tool
 from sqlalchemy import text, select, func, and_
@@ -17,7 +17,7 @@ class QueryTransactionsInput(BaseModel):
     account_id: Optional[str] = Field(default=None, description="The specific account ID or Bank Name to filter by.")
     start_date: Optional[str] = Field(default=None, description="Start date in YYYY-MM-DD format.")
     end_date: Optional[str] = Field(default=None, description="End date in YYYY-MM-DD format.")
-    categories: Optional[List[str]] = Field(default=None, description="List of exact categories to filter by.")
+    categories: Optional[List[str]] = Field(default=None, description="List of categories to filter by. EXACT MATCH ONLY. Valid strings: 'Entertainment & Lifestyle', 'Fees & Charges', 'Food & Dining', 'Housing', 'Income', 'Shopping & Retail', 'Subscriptions & Digital Services', 'Taxes & Government Payments', 'Transfers & Payments', 'Transportation', 'Utilities'.")
     min_amount: Optional[float] = Field(default=None, description="Minimum absolute transaction amount.")
     max_amount: Optional[float] = Field(default=None, description="Maximum absolute transaction amount.")
     transaction_type: Optional[str] = Field(default=None, description="'income' or 'expense'.")
@@ -30,7 +30,7 @@ class AggregateFinancialDataInput(BaseModel):
     group_by: str = Field(..., description="'day', 'month', or 'category'.")
     metric: str = Field(default="sum", description="'sum', 'average', or 'count'.")
     transaction_type: Optional[str] = Field(default=None, description="'income' or 'expense'.")
-    categories: Optional[List[str]] = Field(default=None, description="List of categories to filter by before aggregating.")
+    categories: Optional[List[str]] = Field(default=None, description="List of categories to filter by. EXACT MATCH ONLY. Valid strings: 'Entertainment & Lifestyle', 'Fees & Charges', 'Food & Dining', 'Housing', 'Income', 'Shopping & Retail', 'Subscriptions & Digital Services', 'Taxes & Government Payments', 'Transfers & Payments', 'Transportation', 'Utilities'.")
 
 # ----------------- Helper -----------------
 
@@ -59,8 +59,10 @@ def _apply_transaction_filters(query: Any, user_uuid: str, account_id: Optional[
 
     # Date filters
     if start_date:
+        if "T" in start_date: start_date = start_date.split("T")[0]
         query = query.where(Transaction.date >= datetime.strptime(start_date, "%Y-%m-%d"))
     if end_date:
+        if "T" in end_date: end_date = end_date.split("T")[0]
         query = query.where(Transaction.date <= datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1))
 
     # Categories
@@ -108,7 +110,7 @@ def query_transactions(user_uuid: str, account_id: Optional[str] = None, start_d
                                                categories, min_amount, max_amount, transaction_type, session)
             
             # Order by most recent
-            query = query.order_by(Transaction.date.desc()).limit(100) # Safeguard limit
+            query = query.order_by(Transaction.date.desc()).limit(500) # Safeguard limit
             
             transactions = session.execute(query).scalars().all()
             
@@ -145,9 +147,9 @@ def aggregate_financial_data(user_uuid: str, group_by: str, metric: str = "sum",
         with SessionLocal() as session:
             # Determine grouping column
             if group_by == "day":
-                group_col = func.date_trunc('day', Transaction.date)
+                group_col = func.time_bucket(text("'1 day'"), Transaction.date)
             elif group_by == "month":
-                group_col = func.date_trunc('month', Transaction.date)
+                group_col = func.time_bucket(text("'1 month'"), Transaction.date)
             elif group_by == "category":
                 group_col = Transaction.category
             else:

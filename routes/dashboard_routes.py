@@ -33,7 +33,30 @@ def get_user_widgets(current_user: User = Depends(get_current_user), db: Session
     if user and user.persona:
         widgets = PERSONA_WIDGET_MAP.get(user.persona, PERSONA_WIDGET_MAP["PROFESSIONAL"])
         
+    from models.database_models import UserLifestyleProfile
+    profile = db.execute(select(UserLifestyleProfile).where(UserLifestyleProfile.user_uuid == current_user.user_uuid)).scalars().first()
+    if profile and profile.hidden_widgets:
+        hidden_list = profile.hidden_widgets.split(",")
+        widgets = [w for w in widgets if w not in hidden_list]
+        
     return {"widgets": widgets}
+
+@router.delete("/{widget_type}")
+def delete_user_widget(widget_type: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from models.database_models import UserLifestyleProfile
+    profile = db.execute(select(UserLifestyleProfile).where(UserLifestyleProfile.user_uuid == current_user.user_uuid)).scalars().first()
+    
+    if not profile:
+        profile = UserLifestyleProfile(profile_uuid=str(uuid.uuid4()), user_uuid=current_user.user_uuid)
+        db.add(profile)
+        
+    hidden_list = profile.hidden_widgets.split(",") if profile.hidden_widgets else []
+    if widget_type not in hidden_list:
+        hidden_list.append(widget_type)
+        profile.hidden_widgets = ",".join(hidden_list).strip(",")
+        db.commit()
+        
+    return {"status": "success", "message": f"{widget_type} widget permanently hidden"}
 
 @router.post("/data")
 def fetch_widget_data(payload: DataRequestPayload, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

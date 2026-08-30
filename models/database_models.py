@@ -1,6 +1,7 @@
 from typing import Optional, List, Any, Dict
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import UniqueConstraint, Column, JSON
+from pgvector.sqlalchemy import Vector
 from datetime import datetime
 from services.logger_setup import get_core_logger
 from models.status_codes import OpenBankingStatus, PipelineStatus, TaskStatus
@@ -22,9 +23,6 @@ class User(SQLModel, table=True):
     banks: List["Bank"] = Relationship(back_populates="user")
     accounts: List["Account"] = Relationship(back_populates="user")
     transactions: List["Transaction"] = Relationship(back_populates="user")
-    liabilities: List["Liability"] = Relationship(back_populates="user")
-    budgets: List["Budget"] = Relationship(back_populates="user")
-    allocation_rules: List["AllocationRule"] = Relationship(back_populates="user")
     subscriptions: List["Subscription"] = Relationship(back_populates="user")
 
 class Bank(SQLModel, table=True):
@@ -74,7 +72,7 @@ class Transaction(SQLModel, table=True):
     date: Optional[datetime] = None
     amount: Optional[float] = None
     currency: str = Field(default="GBP")
-    category: Optional[str] = None
+    category: Optional[str] = Field(default="Uncategorised")
     sub_category: Optional[str] = None
     description: Optional[str] = None
     semi_cleaned_description: Optional[str] = None
@@ -110,77 +108,13 @@ class ChatHistory(SQLModel, table=True):
     
     session: Optional["ChatSession"] = Relationship(back_populates="messages")
 
-class ForecastParameters(SQLModel, table=True):
-    __tablename__ = "forecast_parameters"
-    user_uuid: str = Field(primary_key=True, index=True, foreign_key="users.user_uuid")
-    kappa: float = Field(default=2.0)
-    theta: float = Field(default=0.04)
-    xi: float = Field(default=0.1)
-    rho: float = Field(default=-0.5)
-    lambda_val: float = Field(default=0.1)
-    mu_j: float = Field(default=-0.05)
-    sigma_j: float = Field(default=0.1)
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
-
-class BackgroundTask(SQLModel, table=True):
-    __tablename__ = "background_tasks"
-    task_id: str = Field(primary_key=True, index=True)
-    user_uuid: Optional[str] = Field(default=None, foreign_key="users.user_uuid", index=True)
-    type: Optional[str] = None
-    status: str = Field(default="600-102") # 600-102 denotes a pending/processing task
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-class Liability(SQLModel, table=True):
-    __tablename__ = "liabilities"
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
-    user_uuid: Optional[str] = Field(default=None, foreign_key="users.user_uuid", index=True)
-    name: Optional[str] = None
-    balance: float = Field(default=0.0)
-    interest_rate: float = Field(default=0.0)
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
-    
-    user: Optional["User"] = Relationship(back_populates="liabilities")
-
-class AdvisorSummary(SQLModel, table=True):
-    __tablename__ = "advisor_summaries"
-    summary_uuid: str = Field(primary_key=True, index=True)
-    user_uuid: Optional[str] = Field(default=None, foreign_key="users.user_uuid", index=True)
-    widget_id: Optional[str] = Field(default=None, index=True)
-    data_hash: Optional[str] = Field(default=None, index=True)
-    summary_text: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-class ChartCache(SQLModel, table=True):
-    __tablename__ = "chart_cache"
-    cache_id: str = Field(primary_key=True, index=True)
-    chart_data: Optional[str] = None
-
-class Budget(SQLModel, table=True):
-    __tablename__ = "budgets"
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
-    user_uuid: Optional[str] = Field(default=None, foreign_key="users.user_uuid", index=True)
-    category: Optional[str] = None
-    monthly_limit: Optional[float] = None
-    rollover_enabled: bool = Field(default=False)
-    
-    user: Optional["User"] = Relationship(back_populates="budgets")
-
-class AllocationRule(SQLModel, table=True):
-    __tablename__ = "allocation_rules"
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
-    user_uuid: Optional[str] = Field(default=None, foreign_key="users.user_uuid", index=True)
-    bucket_name: Optional[str] = None
-    percentage: Optional[float] = None
-    
-    user: Optional["User"] = Relationship(back_populates="allocation_rules")
-
 class UserLifestyleProfile(SQLModel, table=True):
     __tablename__ = "user_lifestyle_profiles"
     profile_uuid: str = Field(primary_key=True, index=True)
     user_uuid: Optional[str] = Field(default=None, foreign_key="users.user_uuid", index=True)
     macro_persona: Optional[str] = None
     last_cluster_hash: Optional[str] = None
+    hidden_widgets: str = Field(default="")
     last_updated: datetime = Field(default_factory=datetime.utcnow)
     
 class LifestyleCluster(SQLModel, table=True):
@@ -208,6 +142,7 @@ class Subscription(SQLModel, table=True):
     next_expected_date: datetime
     is_price_hike: bool = Field(default=False)
     status: str = Field(default=PipelineStatus.SUBSCRIPTION_DETECTED.value)
+    cluster_signature_hash: Optional[str] = Field(default=None, unique=True, index=True)
     last_updated: datetime = Field(default_factory=datetime.utcnow)
     
     user: Optional["User"] = Relationship(back_populates="subscriptions")
@@ -221,14 +156,11 @@ class ProactiveInsight(SQLModel, table=True):
     urgency_level: int = Field(default=1) # 1=low, 5=high
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-class MerchantRule(SQLModel, table=True):
-    __tablename__ = "merchant_rules"
-    id: Optional[int] = Field(default=None, primary_key=True, index=True)
-    user_uuid: str = Field(foreign_key="users.user_uuid", index=True)
-    merchant_name: str = Field(index=True)
-    category: Optional[str] = None
-    sub_category: Optional[str] = None
-    tags: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
+class MerchantKnowledge(SQLModel, table=True):
+    __tablename__ = "merchant_knowledge"
+    knowledge_uuid: str = Field(primary_key=True, index=True)
+    clean_merchant_name: str = Field(index=True)
+    category: str
+    embedding: Any = Field(sa_column=Column(Vector(768)))
+    is_human_verified: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
-
-

@@ -46,14 +46,6 @@ class FindHighestSpendingCategoryInput(BaseToolInput):
     account_id: str = Field(..., description="The exact account ID (UUID) to analyze. CRITICAL: NEVER leak or mention the raw UUID to the user in chat. Always refer to the account by its Bank Name and Currency.")
     user_uuid: str = Field(..., description="The exact user_uuid string.")
 
-class CreateBargraphChartInput(BaseToolInput):
-    account_id: str = Field(..., description="The exact account ID (UUID) to analyze. CRITICAL: NEVER leak or mention the raw UUID to the user in chat. Always refer to the account by its Bank Name and Currency.")
-    user_uuid: str = Field(..., description="The exact user_uuid string.")
-
-class CreatePieChartInput(BaseToolInput):
-    account_id: str = Field(..., description="The exact account ID (UUID) to analyze. CRITICAL: NEVER leak or mention the raw UUID to the user in chat. Always refer to the account by its Bank Name and Currency.")
-    user_uuid: str = Field(..., description="The exact user_uuid string.")
-
 class PlotExpensesInput(BaseToolInput):
     plot_time_type: str = Field(..., description="'Daily', 'Weekly', or 'Monthly'.")
     from_date: str = Field(..., description="Start date YYYY-MM-DD.")

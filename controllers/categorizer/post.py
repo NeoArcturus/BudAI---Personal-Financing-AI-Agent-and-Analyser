@@ -1,7 +1,7 @@
 import json
 from fastapi import HTTPException, BackgroundTasks
 from sqlalchemy import text
-from models.database_models import User, BackgroundTask, Transaction
+from models.database_models import User, Transaction
 from schemas.api_schema import TransactionLabelCorrectionRequest, RetrainCategorizerRequest
 from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
 from config import SessionLocal
@@ -25,7 +25,7 @@ def background_retrain_and_recategorize(user_uuid: str, task_id: str):
     """
     try:
         with SessionLocal() as session:
-            task = session.query(BackgroundTask).filter_by(task_id=task_id).first()
+            task = None
             if task:
                 task.status = "processing"
                 session.commit()
@@ -34,7 +34,7 @@ def background_retrain_and_recategorize(user_uuid: str, task_id: str):
         with SessionLocal() as session:
             txs = session.query(Transaction).filter_by(user_uuid=user_uuid).all()
             if not txs:
-                task = session.query(BackgroundTask).filter_by(task_id=task_id).first()
+                task = None
                 if task:
                     task.status = "completed"
                     session.commit()
@@ -86,14 +86,14 @@ def background_retrain_and_recategorize(user_uuid: str, task_id: str):
                     forecaster.generate_dynamic_parameters(user_uuid, acc_id)
             except Exception as e:
                 logger.error(json.dumps({"message": f"Failed to regenerate dynamic parameters: {e}", "status_code": 500}))
-            task = session.query(BackgroundTask).filter_by(task_id=task_id).first()
+            task = None
             if task:
                 task.status = "completed"
                 session.commit()
     except Exception as e:
         logger.error(json.dumps({"message": f"Task {task_id} failed with critical error: {e}", "status_code": 500}))
         with SessionLocal() as session:
-            task = session.query(BackgroundTask).filter_by(task_id=task_id).first()
+            task = None
             if task:
                 task.status = "failed"
                 session.commit()
@@ -140,12 +140,7 @@ async def save_manual_label(payload: TransactionLabelCorrectionRequest, backgrou
                 )
                 task_id = str(uuid.uuid4())
                 if payload.retrain_model:
-                    new_task = BackgroundTask(
-                        task_id=task_id,
-                        user_uuid=current_user.user_uuid,
-                        type="retrain_recategorize"
-                    )
-                    session.add(new_task)
+                    pass
                     session.commit()
                 return task_id
                 
@@ -187,12 +182,7 @@ async def retrain_categorizer(payload: RetrainCategorizerRequest, background_tas
         task_id = str(uuid.uuid4())
         def _queue_retrain():
             with SessionLocal() as session:
-                new_task = BackgroundTask(
-                    task_id=task_id,
-                    user_uuid=current_user.user_uuid,
-                    type="full_retrain"
-                )
-                session.add(new_task)
+                pass
                 session.commit()
         await asyncio.to_thread(_queue_retrain)
         background_tasks.add_task(background_retrain_and_recategorize, current_user.user_uuid, task_id)

@@ -1,6 +1,4 @@
 import json
-import pandas as pd
-import numpy as np
 import logging
 from sqlalchemy import text
 from config import SessionLocal
@@ -11,29 +9,16 @@ logger = get_core_logger(__name__)
 class FinancialHealthAnalyzer:
     def __init__(self, user_uuid, db_path=None):
         self.user_uuid = user_uuid
-        self.df = self._fetch_transactions()
-    def _fetch_transactions(self):
-        with SessionLocal() as session:
-            try:
-                query = text(
-                    "SELECT * FROM transactions WHERE user_uuid = :user_uuid")
-                df = pd.read_sql_query(query, session.connection(), params={
-                                       "user_uuid": self.user_uuid})
-                if df.empty:
-                    return df
-                df.columns = [c.lower() for c in df.columns]
-                df = df.loc[:, ~df.columns.duplicated()].copy()
-                if 'timestamp' in df.columns and 'date' not in df.columns:
-                    df['date'] = df['timestamp']
-                return df
-            except Exception:
-                logger.error(json.dumps({"message": f"An error occurred in this block", "status_code": 500}), exc_info=True)
-                return pd.DataFrame()
+        # We no longer load all transactions into a Pandas DataFrame!
+        # self.df = self._fetch_transactions()  <-- REMOVED
+
     def _fetch_total_liquidity(self):
         try:
             with SessionLocal() as session:
                 banks = session.execute(
-                    text("SELECT bank_name FROM banks WHERE user_uuid = :user_uuid"), {"user_uuid": self.user_uuid}).fetchall()
+                    text("SELECT bank_name FROM banks WHERE user_uuid = :user_uuid"), 
+                    {"user_uuid": self.user_uuid}
+                ).fetchall()
             total = 0.0
             for b in banks:
                 try:
@@ -42,27 +27,32 @@ class FinancialHealthAnalyzer:
                     if balance is not None:
                         total += float(balance)
                 except Exception:
-                    logger.error(json.dumps({"message": f"An error occurred in this block", "status_code": 500}), exc_info=True)
+                    logger.error(json.dumps({"message": f"An error occurred fetching balance for {b[0]}", "status_code": 500}), exc_info=True)
                     pass
             return float(total)
         except Exception:
-            logger.error(json.dumps({"message": f"An error occurred in this block", "status_code": 500}), exc_info=True)
+            logger.error(json.dumps({"message": "An error occurred fetching banks", "status_code": 500}), exc_info=True)
             return 0.0
+
     def calculate_subsistence_floor(self):
-        df = self.df.copy()
-        if df.empty or 'category' not in df.columns:
-            return 0.0
-        df['date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True)
-        inelastic_categories = ['Rent', 'Mortgage',
-                                'Utilities', 'Insurance', 'Groceries', 'Debt_Min']
-        subsistence_df = df[df['category'].isin(
-            inelastic_categories) & (df['amount'] < 0)].copy()
-        subsistence_df['amount'] = subsistence_df['amount'].abs()
-        if subsistence_df.empty:
-            return 0.0
-        monthly_totals = subsistence_df.groupby(
-            pd.Grouper(key='date', freq='ME'))['amount'].sum()
-        return float(monthly_totals.tail(3).mean()) if not monthly_totals.empty else 0.0
+        query = text("""
+            SELECT sum(abs(amount)) as monthly_floor
+            FROM transactions
+            WHERE user_uuid = :user_uuid
+              AND category IN ('Rent', 'Mortgage', 'Utilities', 'Insurance', 'Groceries', 'Debt_Min')
+              AND amount < 0
+            GROUP BY time_bucket('1 month', date)
+            ORDER BY time_bucket('1 month', date) DESC
+            LIMIT 3
+        """)
+        with SessionLocal() as session:
+            results = session.execute(query, {"user_uuid": self.user_uuid}).fetchall()
+            if not results:
+                return 0.0
+            totals = [float(r[0]) for r in results if r[0] is not None]
+            if not totals: return 0.0
+            return sum(totals) / len(totals)
+
     def calculate_liquid_runway(self):
         liquidity = self._fetch_total_liquidity()
         floor = self.calculate_subsistence_floor()
@@ -70,13 +60,16 @@ class FinancialHealthAnalyzer:
             return float('inf')
         mean_daily_floor = floor / 30.0
         return float(liquidity / mean_daily_floor)
+
     def avalanche_debt_optimization(self, monthly_surplus=0.0):
         try:
             with SessionLocal() as session:
                 debts = session.execute(
-                    text("SELECT account_name, balance, interest_rate, min_payment FROM liabilities WHERE user_uuid = :user_uuid"), {"user_uuid": self.user_uuid}).fetchall()
+                    text("SELECT account_name, balance, interest_rate, min_payment FROM liabilities WHERE user_uuid = :user_uuid"), 
+                    {"user_uuid": self.user_uuid}
+                ).fetchall()
         except Exception:
-            logger.error(json.dumps({"message": f"An error occurred in this block", "status_code": 500}), exc_info=True)
+            logger.error(json.dumps({"message": "An error occurred fetching debts", "status_code": 500}), exc_info=True)
             return []
         sorted_debts = sorted(debts, key=lambda x: x[2], reverse=True)
         plan = []
@@ -91,69 +84,104 @@ class FinancialHealthAnalyzer:
                 "interest_saved_annually": monthly_interest * 12
             })
         return plan
+
     def calculate_net_worth_velocity(self):
-        df = self.df.copy()
-        if df.empty:
-            return 0.0
-        df['date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True)
-        df['amount'] = df['amount'].astype(float)
-        monthly_net = df.groupby(pd.Grouper(key='date', freq='ME'))[
-            'amount'].sum()
-        if len(monthly_net) < 2:
-            return float(monthly_net.sum())
-        return float(monthly_net.diff().mean())
+        query = text("""
+            WITH monthly_net AS (
+                SELECT time_bucket('1 month', date) as month, sum(amount) as net
+                FROM transactions
+                WHERE user_uuid = :user_uuid
+                GROUP BY time_bucket('1 month', date)
+                ORDER BY month ASC
+            ),
+            diffs AS (
+                SELECT net - lag(net) OVER (ORDER BY month) as delta
+                FROM monthly_net
+            )
+            SELECT avg(delta) FROM diffs;
+        """)
+        with SessionLocal() as session:
+            res = session.execute(query, {"user_uuid": self.user_uuid}).fetchone()
+            if res and res[0] is not None:
+                return float(res[0])
+            
+            # Fallback if no diffs (only 1 month of data)
+            fallback = session.execute(text("""
+                SELECT sum(amount) FROM transactions WHERE user_uuid = :user_uuid
+            """), {"user_uuid": self.user_uuid}).fetchone()
+            return float(fallback[0]) if fallback and fallback[0] else 0.0
+
     def calculate_mpc(self):
-        df = self.df.copy()
-        if df.empty:
-            return 0.0
-        df['date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True)
-        income_df = df[df['amount'] > 0]
-        expense_df = df[df['amount'] < 0].copy()
-        expense_df['amount'] = expense_df['amount'].abs()
-        monthly_income = income_df.groupby(
-            pd.Grouper(key='date', freq='ME'))['amount'].sum()
-        monthly_expense = expense_df.groupby(
-            pd.Grouper(key='date', freq='ME'))['amount'].sum()
-        merged = pd.DataFrame(
-            {'income': monthly_income, 'expense': monthly_expense}).fillna(0)
-        merged['delta_income'] = merged['income'].diff()
-        merged['delta_expense'] = merged['expense'].diff()
-        valid_months = merged[merged['delta_income'] > 0]
-        if valid_months.empty:
-            return 0.0
-        mpc = (valid_months['delta_expense'] /
-               valid_months['delta_income']).mean()
-        return float(max(0.0, min(mpc, 1.0)))
+        query = text("""
+            WITH monthly_flows AS (
+                SELECT time_bucket('1 month', date) as month,
+                       sum(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
+                       sum(CASE WHEN amount < 0 THEN abs(amount) ELSE 0 END) as expense
+                FROM transactions
+                WHERE user_uuid = :user_uuid
+                GROUP BY time_bucket('1 month', date)
+                ORDER BY month ASC
+            ),
+            deltas AS (
+                SELECT 
+                    income - lag(income) OVER (ORDER BY month) as delta_income,
+                    expense - lag(expense) OVER (ORDER BY month) as delta_expense
+                FROM monthly_flows
+            )
+            SELECT avg(delta_expense / delta_income)
+            FROM deltas
+            WHERE delta_income > 0;
+        """)
+        with SessionLocal() as session:
+            res = session.execute(query, {"user_uuid": self.user_uuid}).fetchone()
+            mpc = float(res[0]) if res and res[0] is not None else 0.0
+            return float(max(0.0, min(mpc, 1.0)))
+
     def calculate_shock_absorption(self):
-        df = self.df.copy()
-        if df.empty:
-            return 0.0
         liquidity = self._fetch_total_liquidity()
-        df['date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True)
-        monthly_net = df.groupby(pd.Grouper(key='date', freq='ME'))[
-            'amount'].sum()
-        max_deficit = abs(monthly_net.min()) if monthly_net.min() < 0 else 0
+        query = text("""
+            SELECT min(net) FROM (
+                SELECT sum(amount) as net
+                FROM transactions
+                WHERE user_uuid = :user_uuid
+                GROUP BY time_bucket('1 month', date)
+            ) t;
+        """)
+        with SessionLocal() as session:
+            res = session.execute(query, {"user_uuid": self.user_uuid}).fetchone()
+            max_deficit = abs(float(res[0])) if res and res[0] is not None and float(res[0]) < 0 else 0.0
+            
         if max_deficit == 0:
             return float('inf')
         return float(liquidity / max_deficit)
+
     def calculate_interest_drag(self):
         try:
             with SessionLocal() as session:
                 res = session.execute(
-                    text("SELECT SUM(balance * (interest_rate / 100) / 12) FROM liabilities WHERE user_uuid = :user_uuid"), {"user_uuid": self.user_uuid}).fetchone()
+                    text("SELECT SUM(balance * (interest_rate / 100) / 12) FROM liabilities WHERE user_uuid = :user_uuid"), 
+                    {"user_uuid": self.user_uuid}
+                ).fetchone()
                 monthly_interest = float(res[0]) if res and res[0] else 0.0
         except Exception:
-            logger.error(json.dumps({"message": f"An error occurred in this block", "status_code": 500}), exc_info=True)
+            logger.error(json.dumps({"message": "An error occurred fetching interest drag", "status_code": 500}), exc_info=True)
             monthly_interest = 0.0
-        df = self.df.copy()
-        if df.empty:
+
+        if monthly_interest == 0.0:
             return 0.0
-        df['date'] = pd.to_datetime(df['date'], format='ISO8601', utc=True)
-        income_df = df[df['amount'] > 0]
-        if income_df.empty:
-            return 0.0
-        avg_monthly_income = income_df.groupby(pd.Grouper(key='date', freq='ME'))[
-            'amount'].sum().mean()
+
+        query = text("""
+            SELECT avg(income) FROM (
+                SELECT sum(amount) as income
+                FROM transactions
+                WHERE user_uuid = :user_uuid AND amount > 0
+                GROUP BY time_bucket('1 month', date)
+            ) t;
+        """)
+        with SessionLocal() as session:
+            res = session.execute(query, {"user_uuid": self.user_uuid}).fetchone()
+            avg_monthly_income = float(res[0]) if res and res[0] is not None else 0.0
+            
         if avg_monthly_income == 0:
             return 0.0
         return float((monthly_interest / avg_monthly_income) * 100)

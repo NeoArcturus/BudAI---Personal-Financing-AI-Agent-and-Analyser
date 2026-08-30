@@ -116,7 +116,7 @@ export default function SpendingTrendWidgetClient({
           body: JSON.stringify({
             tool_name: "generate_expense_forecast",
             parameters: {
-              bank_name_or_id: selectedAccountId,
+              account_id: selectedAccountId,
               ...simulationOverrides,
             },
           }),

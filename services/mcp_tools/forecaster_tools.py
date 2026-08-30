@@ -141,12 +141,13 @@ def generate_financial_forecast(user_uuid: str, account_ids: list[str], days: in
         return _res
 
 @tool(args_schema=GenerateExpenseForecastInput)
-def generate_expense_forecast(user_uuid: str, account_ids: list[str], days: int = 30) -> str:
+def generate_expense_forecast(user_uuid: str, account_id: str, days: int = 30) -> str:
     """
     Calculate future expense projections using 1 million paths and historical spending velocity.
     
     Args:
         user_uuid (str): The unique identifier of the user.
+        account_id (str): The specific account ID to analyze.
         account_ids (list[str]): The target account (must be exactly one).
         days (int): The number of days to forecast.
         
@@ -155,23 +156,19 @@ def generate_expense_forecast(user_uuid: str, account_ids: list[str], days: int 
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: generate_expense_forecast", "status_code": 200}))
     try:
-        accounts, suffix = _parse_accounts(account_ids, user_uuid)
-        if not accounts: return "Error: No accounts found."
-        if len(accounts) > 1: return "Please specify exactly one account for forecasting. The ForecasterAgent cannot process multiple accounts simultaneously."
-        
         agent = ForecasterAgent()
-        payload, timeline_events = [], []
-        for acc in accounts:
-            current_balance = agent.fetch_live_balance(acc, user_uuid)
-            E0, mu_E = agent.fetch_expense_parameters(acc, user_uuid, 60)
-            df_temp, timeline = agent.run_expense_simulation(acc, E0, mu_E, user_uuid, days, 1000000, current_balance=current_balance)
-            bank_data = []
-            if not df_temp.empty:
-                exp_vals = df_temp.iloc[0].values.tolist()
-                for i in range(days + 1):
-                    bank_data.append({"Day": f"Day {i}", "Projected Spend": round(float(exp_vals[i]), 2)})
-            payload.append({"bank_name": acc, "data": bank_data})
-            timeline_events.extend(timeline)
+        current_balance = agent.fetch_live_balance(account_id, user_uuid)
+        E0, mu_E = agent.fetch_expense_parameters(account_id, user_uuid, 60)
+        df_temp, timeline = agent.run_expense_simulation(account_id, E0, mu_E, user_uuid, days, 1000000, current_balance=current_balance)
+        
+        bank_data = []
+        if not df_temp.empty:
+            exp_vals = df_temp.iloc[0].values.tolist()
+            for i in range(days + 1):
+                bank_data.append({"Day": f"Day {i}", "Projected Spend": round(float(exp_vals[i]), 2)})
+                
+        payload = [{"bank_name": account_id, "data": bank_data}]
+        timeline_events = timeline
         
         cache_id = _cache_chart_data({"series": payload, "timeline": timeline_events})
         events_str = "\n".join([f"- Day {e['day']}: {e['merchant']} ({e['category']}) £{e['amount']}" for e in timeline_events])

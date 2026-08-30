@@ -166,6 +166,9 @@ async def execute_chat_graph_async(initial_state: dict):
                     session_id, initial_state['user_input']))
             else:
                 db_session.last_updated = datetime.utcnow()
+                if db_session.title == "New Conversation":
+                    asyncio.create_task(generate_session_title(
+                        session_id, initial_state['user_input']))
                 session.commit()
 
             new_msg = ChatHistory(user_uuid=user_uuid, session_id=session_id,

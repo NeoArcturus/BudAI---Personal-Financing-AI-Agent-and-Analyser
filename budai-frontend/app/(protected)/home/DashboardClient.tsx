@@ -297,9 +297,14 @@ export default function DashboardClient({
   };
 
   const handleRemoveWidget = (idToRemove: string) => {
+    const widgetToDelete = localWidgets.find((w) => w.widget_uuid === idToRemove);
     setLocalWidgets((current) => current.filter((w) => w.widget_uuid !== idToRemove));
-    // Note: If removing an AI widget, it will reappear on next poll unless removed in backend.
-    // Ideally we should hit a DELETE endpoint here if it's not manual.
+    
+    if (widgetToDelete && !widgetToDelete.isManual) {
+      apiFetch(`/api/dashboard/widgets/${widgetToDelete.type}`, {
+        method: "DELETE",
+      }, true).catch((e) => console.error("Failed to blacklist AI widget:", e));
+    }
   };
 
   const handleAddManualWidget = (type: string) => {

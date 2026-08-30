@@ -76,19 +76,9 @@ class CategorizerAgent:
         if corrected_label not in self.valid_categories:
             raise ValueError(f"Invalid category label: {corrected_label}")
         with SessionLocal() as session:
-            from models.database_models import Transaction, MerchantRule
+            from models.database_models import Transaction
             tx = session.query(Transaction).filter_by(transaction_uuid=transaction_uuid).first()
             if not tx: return
-            
-            merchant = tx.semi_cleaned_description or tx.description
-            if merchant:
-                merchant = merchant.strip().lower()
-                existing_rule = session.query(MerchantRule).filter_by(user_uuid=user_uuid, merchant_name=merchant).first()
-                if existing_rule:
-                    existing_rule.category = corrected_label
-                else:
-                    rule = MerchantRule(user_uuid=user_uuid, merchant_name=merchant, category=corrected_label)
-                    session.add(rule)
             
             tx.category = corrected_label
             session.commit()
@@ -145,7 +135,7 @@ class CategorizerAgent:
 
     async def async_train_global(self):
         try:
-            from models.database_models import Transaction, MerchantRule
+            from models.database_models import Transaction
             
             with SessionLocal() as session:
                 uncategorized_txs = session.query(Transaction).filter(
@@ -166,8 +156,6 @@ class CategorizerAgent:
                 
                 # Fetch memory rules
                 user_uuids = list(set([tx.user_uuid for tx in uncategorized_txs if tx.user_uuid]))
-                rules = session.query(MerchantRule).filter(MerchantRule.user_uuid.in_(user_uuids)).all()
-                rule_map = {f"{r.user_uuid}_{r.merchant_name}": r.category for r in rules}
                 
                 transactions = []
                 for tx in uncategorized_txs:
@@ -316,17 +304,12 @@ Output: {{"results": [{{"id": 1, "category": "Transportation", "sub_category": "
                 raise ValueError("CategorizerAgent strictly handles a single account identifier.")
                 
             from services.api_integrator.account_reader import AccountReader
-            from models.database_models import MerchantRule
             
             user_acc = AccountReader(user_id=user_uuid)
             raw_df = user_acc.get_transactions(account_id, user_uuid, start_date, end_date)
             if raw_df is None or raw_df.empty:
                 return None
                 
-            with SessionLocal() as session:
-                rules = session.query(MerchantRule).filter(MerchantRule.user_uuid == user_uuid).all()
-                rule_map = {r.merchant_name: r.category for r in rules}
-            
             transactions = []
             for _, row in raw_df.iterrows():
                 tx_uuid = row.get('transaction_uuid') or row.get('transaction_id')

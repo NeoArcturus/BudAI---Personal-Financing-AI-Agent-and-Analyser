@@ -11,9 +11,7 @@ from config import SessionLocal
 from services.logger_setup import get_core_logger
 
 from services.mcp_tools.forecaster_tools import generate_financial_forecast, generate_expense_forecast
-from services.mcp_tools.categorizer_tools import (
-    create_bargraph_chart_and_save, create_pie_chart_and_save
-)
+
 
 from services.mcp_tools.core_query_tools import (
     query_transactions, aggregate_financial_data
@@ -31,8 +29,6 @@ class MediaExecuteRequest(BaseModel):
 
 TOOL_MAPPING = {
     "generate_financial_forecast": generate_financial_forecast,
-    "create_bargraph_chart_and_save": create_bargraph_chart_and_save,
-    "create_pie_chart_and_save": create_pie_chart_and_save,
     "generate_expense_forecast": generate_expense_forecast,
     "analyze_critical_survival_metrics": analyze_critical_survival_metrics,
     "analyze_wealth_acceleration_metrics": analyze_wealth_acceleration_metrics,

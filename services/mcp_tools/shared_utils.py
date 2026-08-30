@@ -32,14 +32,6 @@ class ForecastBudgetImpactInput(BaseModel):
 
 
 
-class CreateBargraphChartInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
-    account_id: str = Field(...)
-
-class CreatePieChartInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
-    account_id: str = Field(...)
-
 
 
 class GenerateExpenseForecastInput(BaseModel):

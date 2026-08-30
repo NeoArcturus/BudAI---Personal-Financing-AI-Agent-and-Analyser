@@ -30,7 +30,7 @@ llm = ChatOpenAI(
     api_key="budai-local",
     temperature=0,
     streaming=False,
-    max_tokens=1000,
+    max_tokens=4000,
     timeout=600,
     
 )
@@ -45,7 +45,10 @@ async def query_transactions_wrapper(
     categories: list[str] = None, min_amount: float = None, max_amount: float = None,
     transaction_type: str = None, state: Annotated[BudAIState, InjectedState] = None
 ) -> str:
-    """Dynamically filter and read transaction records. Returns a JSON string of transactions."""
+    """Dynamically filter and read transaction records. Returns a JSON string of transactions.
+    CRITICAL: The 'categories' argument must be an EXACT match from this list ONLY:
+    ['Entertainment & Lifestyle', 'Fees & Charges', 'Food & Dining', 'Housing', 'Income', 'Shopping & Retail', 'Subscriptions & Digital Services', 'Taxes & Government Payments', 'Transfers & Payments', 'Transportation', 'Utilities']
+    """
     user_uuid = state.get("user_uuid")
     return await bridge.call_tool("analyser", "query_transactions", {
         "user_uuid": user_uuid, "account_id": account_id, "start_date": start_date,
@@ -59,7 +62,10 @@ async def aggregate_financial_data_wrapper(
     start_date: str = None, end_date: str = None, transaction_type: str = None,
     categories: list[str] = None, state: Annotated[BudAIState, InjectedState] = None
 ) -> str:
-    """Aggregate transaction data (e.g., sum by category, average by month). Returns JSON grouping."""
+    """Aggregate transaction data (e.g., sum by category, average by month). Returns JSON grouping.
+    CRITICAL: The 'categories' argument must be an EXACT match from this list ONLY:
+    ['Entertainment & Lifestyle', 'Fees & Charges', 'Food & Dining', 'Housing', 'Income', 'Shopping & Retail', 'Subscriptions & Digital Services', 'Taxes & Government Payments', 'Transfers & Payments', 'Transportation', 'Utilities']
+    """
     user_uuid = state.get("user_uuid")
     return await bridge.call_tool("analyser", "aggregate_financial_data", {
         "user_uuid": user_uuid, "group_by": group_by, "metric": metric, "account_id": account_id,
@@ -136,7 +142,7 @@ ROUTING (Use these tools):
 """,
     )
 
-@tool("call_analyser", description="Use this tool ONLY for historical user transaction data analysis, past user spending totals, past user cash flow trends, and past user transaction comparisons.")
+@tool("call_analyser", description="Use this tool to fetch raw transaction lists, specific merchant names, exact line-item amounts, historical user transaction data analysis, past user spending totals, and past user cash flow trends.")
 async def call_analyser_agent(
     query: str,
     config: RunnableConfig,

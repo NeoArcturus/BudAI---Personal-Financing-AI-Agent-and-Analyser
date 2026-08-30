@@ -30,7 +30,7 @@ llm = ChatOpenAI(
     api_key="budai-local", 
     temperature=0,
     streaming=False,
-    max_tokens=1000,
+    max_tokens=4000,
     timeout=600,
     
 )
@@ -123,7 +123,7 @@ ROUTING (Use these tools):
 """,
     )
 
-@tool("call_categorizer", description="Use this tool ONLY to break down user spending by category, classify merchants, or group user transactions.")
+@tool("call_categorizer", description="Use this tool ONLY to generate category pie/bar charts, manually update transaction tags, or retrain the categorization model. Do NOT use this to fetch raw transactions or merchant lists.")
 async def call_categorizer_agent(
     query: str, 
     config: RunnableConfig,

@@ -1,0 +1,10 @@
+services:
+  telemetry-collector:
+    image: jaegertracing/all-in-one:latest
+    container_name: budai-telemetry-dashboard
+    ports:
+      - "16686:16686" # Tracing Dashboard UI
+      - "4327:4317"   # OTLP gRPC receiver (Mapped to 4327 to avoid SigNoz conflicts)
+      - "4328:4318"   # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true

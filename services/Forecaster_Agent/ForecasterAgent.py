@@ -9,7 +9,6 @@ from config import SessionLocal
 from services.api_integrator.account_reader import AccountReader
 from services.Forecaster_Agent.mathematics.mathematics import run_hybrid_engine, run_converged_expense_engine
 from services.Forecaster_Agent.models.parameter_lstm import ParameterLSTM
-from models.database_models import ForecastParameters
 from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
@@ -38,12 +37,7 @@ class ForecasterAgent:
         return float(balance) if balance is not None else 0.0
 
     def get_user_params(self, user_uuid):
-        with SessionLocal() as session:
-            params = session.query(ForecastParameters).filter_by(
-                user_uuid=user_uuid).first()
-            if params:
-                return {'kappa': params.kappa, 'theta': params.theta, 'xi': params.xi, 'rho': params.rho, 'lambda': params.lambda_val, 'mu_J': params.mu_j, 'sigma_j': params.sigma_j}
-        return {'kappa': 2.0, 'theta': 0.04, 'xi': 0.1, 'rho': -0.5, 'lambda': 0.1, 'mu_J': -0.05, 'sigma_J': 0.1}
+        return {'kappa': 0.1, 'theta': 1000.0, 'xi': 0.2, 'rho': -0.5, 'lambda': 0.1, 'mu_J': -0.05, 'sigma_j': 0.1}
 
     def generate_dynamic_parameters(self, user_uuid, account_id):
         try:
@@ -69,21 +63,31 @@ class ForecasterAgent:
                 feature_vector, dtype=torch.float32).unsqueeze(0).to(self.device)
             with torch.no_grad():
                 out = self.lstm(tensor_in).cpu().numpy()[0]
-            with SessionLocal() as session:
-                params = session.query(ForecastParameters).filter_by(
-                    user_uuid=user_uuid).first()
-                if not params:
-                    params = ForecastParameters(user_uuid=user_uuid)
-                    session.add(params)
-                params.kappa, params.theta, params.xi, params.rho, params.lambda_val, params.mu_j, params.sigma_j = float(
-                    out[0]*5.0), float(out[1]*0.2), float(out[2]*0.5), float(out[3]*2.0-1.0), float(out[4]*0.5), float(out[5]*0.5-0.25), float(out[6]*0.3)
-                session.commit()
+            # Database logic for ForecastParameters removed as table is deprecated.
+            # return the parameters directly or just return success
+            return out
         except Exception as e:
             logger.error(json.dumps({"message": f"Dynamic params failed: {e}", "status_code": 500}))
 
     def fetch_and_calculate_parameters(self, account_id, current_balance, user_uuid, lookback_days=60):
         try:
             with SessionLocal() as session:
+                # Attempt to use TimescaleDB Continuous Aggregate if it exists
+                try:
+                    ts_query = text("""
+                        SELECT AVG(daily_net) as avg_drift, STDDEV(daily_net) as volatility 
+                        FROM rolling_user_stats 
+                        WHERE account_id = :account_id AND bucket >= NOW() - INTERVAL '60 days'
+                    """)
+                    stats = session.execute(ts_query, {"account_id": account_id}).fetchone()
+                    if stats and stats[0] is not None:
+                        mu = float(stats[0]) / (current_balance or 1.0)
+                        sigma = float(stats[1] or 0.05) / (current_balance or 1.0)
+                        return current_balance, mu, sigma
+                except Exception:
+                    # Fallback to Pandas if TimescaleDB views aren't initialized yet
+                    pass
+
                 row = session.execute(text("SELECT b.bank_name FROM banks b LEFT JOIN accounts a ON b.bank_uuid = a.bank_uuid WHERE a.account_id=:account_id OR b.bank_name ILIKE :ident"), {
                                       "account_id": account_id, "ident": f"%{account_id}%"}).fetchone()
                 user = AccountReader(user_uuid)

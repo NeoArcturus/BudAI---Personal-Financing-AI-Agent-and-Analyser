@@ -1,4 +1,5 @@
 import os
+import re
 import hdbscan
 import numpy as np
 import uuid
@@ -11,6 +12,7 @@ from pydantic import BaseModel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 from config import SessionLocal
+from sqlalchemy import text
 from models.database_models import Transaction, UserLifestyleProfile, LifestyleCluster
 from services.logger_setup import get_core_logger
 
@@ -31,8 +33,11 @@ class LifestyleClusteringService:
         if not base_url.endswith("/v1"): 
             base_url = f"{base_url}/v1"
             
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        self.embeddings = OpenAIEmbeddings(
+            base_url=base_url,
+            model="text-embedding-nomic-embed-text-v1.5",
+            api_key="budai-local",
+            check_embedding_ctx_length=False
         )
         
         self.llm = ChatOpenAI(
@@ -43,36 +48,63 @@ class LifestyleClusteringService:
             max_tokens=20000
         )
         
+    def _clean_structural_noise(self, text: str) -> str:
+        if not text: return ""
+        text = text.lower()
+        text = re.sub(r'card transaction of .*? issued by', '', text)
+        text = re.sub(r'card transaction of .*? to', '', text)
+        text = re.sub(r'\(fee:.*?\)', '', text)
+        text = re.sub(r'gbp', '', text)
+        text = re.sub(r'usd', '', text)
+        text = re.sub(r'eur', '', text)
+        text = re.sub(r'[0-9]+', '', text)
+        return text.strip()
+        
     def analyze_user_lifestyle(self, user_uuid: str):
         logger.info(json.dumps({"message": f"Starting HDBSCAN lifestyle analysis for user {user_uuid}", "status_code": 200}))
         
         with SessionLocal() as session:
-            txs = session.execute(
-                select(Transaction).where(Transaction.user_uuid == user_uuid).where(Transaction.amount < 0)
-            ).scalars().all()
+            # OPTIMIZATION: Pull unique clustered strings and pre-aggregate their totals natively in SQL
+            query = text("""
+                SELECT 
+                    COALESCE(NULLIF(TRIM(semi_cleaned_description), ''), NULLIF(TRIM(sub_category), ''), TRIM(description)) as cluster_string,
+                    SUM(ABS(amount)) as total_spend,
+                    COUNT(*) as tx_count
+                FROM transactions 
+                WHERE user_uuid = :user_uuid AND amount < 0
+                GROUP BY cluster_string
+                HAVING COUNT(*) > 0
+            """)
             
-            if not txs or len(txs) < 10:
-                logger.warning(json.dumps({"message": f"Not enough transactions to cluster for {user_uuid}", "status_code": 400}))
+            results = session.execute(query, {"user_uuid": user_uuid}).fetchall()
+            
+            if not results or len(results) < 5:
+                logger.warning(json.dumps({"message": f"Not enough unique transactions to cluster for {user_uuid}", "status_code": 400}))
                 return
                 
-            # Extract strings to embed (Prefer sub_category, fallback to semi_cleaned, fallback to raw)
-            def get_cluster_string(tx):
-                if tx.sub_category and tx.sub_category.strip():
-                    return tx.sub_category.strip()
-                if getattr(tx, 'semi_cleaned_description', None) and tx.semi_cleaned_description.strip():
-                    return tx.semi_cleaned_description.strip()
-                return tx.description or ""
+            unique_descriptions = []
+            spend_map = {}
+            count_map = {}
+            
+            for r in results:
+                raw_str = str(r[0]) if r[0] else "Unknown"
+                c_str = self._clean_structural_noise(raw_str)
+                if not c_str: c_str = "Unknown"
                 
-            for tx in txs:
-                tx._cluster_string = get_cluster_string(tx)
+                if c_str not in unique_descriptions:
+                    unique_descriptions.append(c_str)
+                    spend_map[c_str] = float(r[1])
+                    count_map[c_str] = int(r[2])
+                else:
+                    spend_map[c_str] += float(r[1])
+                    count_map[c_str] += int(r[2])
 
-            unique_descriptions = list(set([tx._cluster_string for tx in txs if tx._cluster_string]))
             if not unique_descriptions:
                 return
                 
             # Create a hash of the unique transactions string set
-            unique_descriptions.sort()
-            current_hash = hashlib.sha256("".join(unique_descriptions).encode('utf-8')).hexdigest()
+            sorted_desc = sorted(unique_descriptions)
+            current_hash = hashlib.sha256("".join(sorted_desc).encode('utf-8')).hexdigest()
             
             # Check if this exact cluster set was already processed
             profile = session.execute(select(UserLifestyleProfile).where(UserLifestyleProfile.user_uuid == user_uuid)).scalars().first()
@@ -80,195 +112,132 @@ class LifestyleClusteringService:
                 logger.info(json.dumps({"message": f"Clustering aborted: Identical transaction set for user {user_uuid}", "status_code": 200}))
                 return
                 
-            # 1. Vector Extraction
-            logger.info(json.dumps({"message": f"Unique clustering strings count: {len(unique_descriptions)}", "status_code": 200}))
-            desc_vectors = self.embeddings.embed_documents(unique_descriptions)
-            logger.info(json.dumps({"message": f"Vectors returned: {len(desc_vectors)}", "status_code": 200}))
-            desc_to_vec = {desc: vec for desc, vec in zip(unique_descriptions, desc_vectors)}
-            
-            # Map back to transactions
-            tx_vectors = []
-            valid_txs = []
-            for tx in txs:
-                if tx._cluster_string and tx._cluster_string in desc_to_vec:
-                    vec = desc_to_vec[tx._cluster_string]
-                    if not np.isnan(vec).any():
-                        tx_vectors.append(vec)
-                        valid_txs.append(tx)
-                    
-            if not tx_vectors:
-                logger.warning(json.dumps({"message": f"All generated vectors were invalid (NaNs) for user {user_uuid}", "status_code": 400}))
+            # Embeddings & HDBSCAN
+            try:
+                vectors = self.embeddings.embed_documents(unique_descriptions)
+                vector_matrix = np.array(vectors)
+                
+                min_cluster_size = 2
+                clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, metric='euclidean', cluster_selection_method='eom')
+                cluster_labels = clusterer.fit_predict(vector_matrix)
+            except Exception as e:
+                logger.error(json.dumps({"message": f"Error running HDBSCAN: {e}", "status_code": 500}))
                 return
                 
-            X = np.array(tx_vectors)
-            logger.info(json.dumps({"message": f"X shape constructed: {X.shape}", "status_code": 200}))
-        
-        # 2. Cluster Generation
-        clusterer = hdbscan.HDBSCAN(min_cluster_size=3, metric='euclidean')
-        cluster_labels = clusterer.fit_predict(X)
-        outlier_scores = clusterer.outlier_scores_
-        
-        # 3. Data Aggregation & Anomaly Tagging
-        clusters_data = {}
-        with SessionLocal() as session:
-            for idx, tx in enumerate(valid_txs):
-                label = int(cluster_labels[idx])
-                score = float(outlier_scores[idx]) if outlier_scores is not None else 0.0
-                
-                if score > 0.95:
-                    # Tag semantic anomaly directly in the DB
-                    db_tx = session.execute(select(Transaction).where(Transaction.transaction_uuid == tx.transaction_uuid)).scalars().first()
-                    if db_tx:
-                        db_tx.is_semantic_anomaly = True
-                        session.add(db_tx)
-                
-                if label == -1:
-                    continue # Noise
-                    
-                if label not in clusters_data:
-                    clusters_data[label] = {
-                        "txs": [],
+            # Aggregate clusters
+            cluster_groups = {}
+            for idx, label in enumerate(cluster_labels):
+                if label == -1: continue # Ignore noise
+                if label not in cluster_groups:
+                    cluster_groups[label] = {
+                        "strings": [],
                         "total_spend": 0.0,
-                        "merchants": set()
+                        "tx_count": 0
                     }
-                clusters_data[label]["txs"].append(tx)
-                clusters_data[label]["total_spend"] += abs(tx.amount) if tx.amount else 0.0
-                clusters_data[label]["merchants"].add(getattr(tx, '_cluster_string', tx.description))
+                c_str = unique_descriptions[idx]
+                cluster_groups[label]["strings"].append(c_str)
+                cluster_groups[label]["total_spend"] += spend_map.get(c_str, 0.0)
+                cluster_groups[label]["tx_count"] += count_map.get(c_str, 0)
                 
-            session.commit()
-            
-        # 4. Filter to top 5 clusters by a composite score (Density + Financial Value)
-        # Formula: (Transaction Count * 50) + Total Spend
-        sorted_clusters = sorted(
-            clusters_data.items(), 
-            key=lambda item: (len(item[1]["txs"]) * 50) + item[1]["total_spend"], 
-            reverse=True
-        )[:5]
-        
-        if not sorted_clusters:
-            return
-            
-        cluster_summaries = []
-        from collections import Counter
-        for label, data in sorted_clusters:
-            # Count merchant frequencies
-            desc_counts = Counter(getattr(tx, '_cluster_string', tx.description) for tx in data["txs"] if getattr(tx, '_cluster_string', tx.description))
-            # Sort by frequency (descending) and then alphabetically (ascending) for strict determinism
-            sorted_merchants = sorted(desc_counts.keys(), key=lambda k: (-desc_counts[k], k))
-            merchants = sorted_merchants[:7]
-            
-            # Extract top categories
-            cat_counts = Counter(tx.category for tx in data["txs"] if getattr(tx, 'category', None))
-            top_cats = [cat for cat, _ in cat_counts.most_common(2)]
-            
-            # Temporal Context (Day of Week & Time of Day)
-            txs_with_dates = [tx for tx in data["txs"] if getattr(tx, 'date', None)]
-            if txs_with_dates:
-                weekends = sum(1 for tx in txs_with_dates if tx.date.weekday() >= 5)
-                day_type = "Mostly Weekends" if weekends > (len(txs_with_dates) / 2) else "Mostly Weekdays"
+            if not cluster_groups:
+                logger.info(json.dumps({"message": f"No valid clusters formed (all noise) for user {user_uuid}", "status_code": 200}))
+                return
                 
-                hours = [tx.date.hour for tx in txs_with_dates]
-                avg_hour = sum(hours) / len(hours) if hours else 12
-                if 5 <= avg_hour < 12: time_str = "Mornings"
-                elif 12 <= avg_hour < 17: time_str = "Afternoons"
-                elif 17 <= avg_hour < 22: time_str = "Evenings"
-                else: time_str = "Late Night"
-            else:
-                day_type = "Mixed Days"
-                time_str = "Mixed Times"
+            # Sort clusters by total spend to prioritize context
+            sorted_clusters = sorted(cluster_groups.items(), key=lambda x: x[1]["total_spend"], reverse=True)
+            
+            # Construct Prompt Payload
+            cluster_summaries = []
+            for c_id, data in sorted_clusters[:10]: # Top 10 clusters max
+                cluster_summaries.append(
+                    f"Cluster {c_id}: "
+                    f"Spend: £{data['total_spend']:.2f} ({data['tx_count']} transactions). "
+                    f"Sample Items: {', '.join(data['strings'][:5])}..."
+                )
                 
-            summary_line = (
-                f"Cluster ID {label}: {len(data['txs'])} txs, £{data['total_spend']:.2f} total spend. "
-                f"Merchants: {', '.join(merchants)}. "
-                f"Categories: {', '.join(top_cats) if top_cats else 'None'}. "
-                f"Timing: {day_type}, {time_str}."
-            )
-            cluster_summaries.append(summary_line)
+            # OPTIMIZATION: Income Context SQL Aggregation
+            inc_query = text("""
+                SELECT description, SUM(amount) as inc_total
+                FROM transactions
+                WHERE user_uuid = :user_uuid AND amount > 0
+                GROUP BY description
+                ORDER BY inc_total DESC
+                LIMIT 5
+            """)
+            income_results = session.execute(inc_query, {"user_uuid": user_uuid}).fetchall()
             
-        # 5. Income Context for Macro-Persona Constraint
-        with SessionLocal() as session:
-            income_txs = session.execute(
-                select(Transaction).where(Transaction.user_uuid == user_uuid).where(Transaction.amount > 0)
-            ).scalars().all()
-            
-            if income_txs:
-                income_summaries = [f"- £{tx.amount:.2f} from {tx.description} on {tx.date.strftime('%Y-%m-%d') if tx.date else 'Unknown'}" for tx in income_txs]
+            if income_results:
+                income_summaries = [f"- £{float(r[1]):.2f} from {r[0]}" for r in income_results]
             else:
                 income_summaries = ["No income transactions recorded."]
-            income_context = "\n".join(income_summaries)
-
-        # 6. Macro-Persona & Micro-Lifestyle LLM Extraction
-        prompt = f"""
-        You are a financial behavioral psychologist. Analyze the following spend clusters and income data for a user.
-        
-        Income Transactions:
-        {income_context}
-        
-        Spend Clusters:
-        {chr(10).join(cluster_summaries)}
-        
-        1. Classify the user into one primary Macro-Persona EXACTLY from this list: [STUDENT, PROFESSIONAL, BUSINESS, RETIREE, CREATIVE].
-        2. For each Cluster ID, generate a 2-word micro-archetype (e.g. 'Food Lover', 'Late-Night Cabs', 'Generous Friend', 'Frequent Flyer') and a short, simple 1-sentence summary.
-        
-        CRITICAL RULES:
-        - If the user's Income Transactions are NOT regular (e.g., highly sporadic dates, wildly varying amounts, or no income at all), the Macro-Persona MUST be 'STUDENT'. They CANNOT be 'PROFESSIONAL', 'BUSINESS', or 'RETIREE'.
-        - Use simple, everyday conversational language. 
-        - DO NOT use academic, financial, or corporate jargon (e.g., avoid words like 'utilize', 'mobility', 'management', 'wealth', 'networking').
-        - Make the archetypes highly diverse, casual, and relatable to normal human habits.
-        
-        Return the result EXACTLY as JSON matching this schema:
-        {{
-            "macro_persona": "STRING",
-            "clusters": [
-                {{"hdbscan_cluster_id": INT, "micro_archetype": "STRING", "behavioral_summary": "STRING"}}
-            ]
-        }}
-        """
-        
-        structured_llm = self.llm.with_structured_output(LifestyleAnalysisOutput)
-        from services.llm_manager import GlobalLLMManager
-        try:
-            GlobalLLMManager.acquire_background()
+                
+            prompt = f"""
+            You are an elite behavioral economist. Analyze these semantic transaction clusters and deduce the user's lifestyle macro-persona.
+            
+            INCOME SOURCES (Top 5):
+            {chr(10).join(income_summaries)}
+            
+            SPENDING CLUSTERS (HDBSCAN Derived):
+            {chr(10).join(cluster_summaries)}
+            
+            Respond EXACTLY with a JSON object matching this schema:
+            {{
+                "macro_persona": "e.g., Aspiring Yuppie, Frugal Student, Suburban Parent",
+                "clusters": [
+                    {{
+                        "hdbscan_cluster_id": [The integer ID from the input],
+                        "micro_archetype": "Short 2-word label for this specific behavior (e.g., Caffeine Addict)",
+                        "behavioral_summary": "1 sentence analyzing the psychological driver behind this cluster."
+                    }}
+                ]
+            }}
+            """
+            
             try:
-                analysis: LifestyleAnalysisOutput = structured_llm.invoke(prompt)
-            finally:
-                GlobalLLMManager.release()
-        except Exception as e:
-            logger.error(json.dumps({"message": f"LLM failed to generate lifestyle analysis: {e}", "status_code": 500}))
-            return
-            
-        # 6. Persistence
-        with SessionLocal() as session:
-            # Upsert UserLifestyleProfile
+                response = self.llm.invoke(prompt)
+                
+                raw_content = response.content
+                if "```json" in raw_content:
+                    raw_content = raw_content.split("```json")[1].split("```")[0]
+                elif "```" in raw_content:
+                    raw_content = raw_content.split("```")[1].split("```")[0]
+                    
+                analysis = LifestyleAnalysisOutput.model_validate_json(raw_content.strip())
+                
+            except Exception as e:
+                logger.error(json.dumps({"message": f"LLM parsing failed for lifestyle clustering: {e}", "status_code": 500}))
+                return
+                
+            # Persist to DB
             if not profile:
-                profile = UserLifestyleProfile(profile_uuid=str(uuid.uuid4()), user_uuid=user_uuid)
-            
+                profile = UserLifestyleProfile(
+                    profile_uuid=str(uuid.uuid4()),
+                    user_uuid=user_uuid
+                )
+                session.add(profile)
+                
             profile.macro_persona = analysis.macro_persona
             profile.last_cluster_hash = current_hash
             profile.last_updated = datetime.utcnow()
-            session.add(profile)
             
-            # Clear old clusters and insert new ones
-            old_clusters = session.execute(select(LifestyleCluster).where(LifestyleCluster.user_uuid == user_uuid)).scalars().all()
-            for oc in old_clusters:
-                session.delete(oc)
+            # OPTIMIZATION: Bulk Delete Old Clusters
+            session.execute(text("DELETE FROM lifestyle_clusters WHERE user_uuid = :uuid"), {"uuid": user_uuid})
                 
             for c_info in analysis.clusters:
                 cluster_label = c_info.hdbscan_cluster_id
-                if cluster_label in clusters_data:
-                    data = clusters_data[cluster_label]
+                if cluster_label in cluster_groups:
+                    c_data = cluster_groups[cluster_label]
                     lc = LifestyleCluster(
                         cluster_uuid=str(uuid.uuid4()),
                         user_uuid=user_uuid,
                         hdbscan_cluster_id=cluster_label,
                         micro_archetype=c_info.micro_archetype,
                         behavioral_summary=c_info.behavioral_summary,
-                        total_spend=data["total_spend"],
-                        transaction_count=len(data["txs"]),
-                        last_updated=datetime.utcnow()
+                        total_spend=c_data["total_spend"],
+                        transaction_count=c_data["tx_count"],
+                        representative_entities=",".join(c_data["strings"][:5])
                     )
                     session.add(lc)
-            
+                    
             session.commit()
-            
-        logger.info(json.dumps({"message": f"Successfully completed lifestyle clustering for user {user_uuid}", "status_code": 200}))
+            logger.info(json.dumps({"message": f"Successfully updated lifestyle profile for user {user_uuid}", "status_code": 200}))

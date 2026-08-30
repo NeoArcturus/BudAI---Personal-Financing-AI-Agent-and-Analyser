@@ -4,6 +4,42 @@ import asyncio
 import os
 import warnings
 
+if os.environ.get("COLLECTOR_ENDPOINT"):
+    try:
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import Resource
+        
+        from opentelemetry._logs import set_logger_provider
+        from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+        from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+
+        from openinference.instrumentation.langchain import LangChainInstrumentor
+        from opentelemetry.instrumentation.logging import LoggingInstrumentor
+        
+        resource = Resource.create({"service.name": "budai-api"})
+        
+        # gRPC requires stripping the http:// prefix
+        base_endpoint = os.environ.get("COLLECTOR_ENDPOINT", "http://signoz-ingester-1:4317").replace("http://", "")
+        
+        # Traces
+        tracer_provider = TracerProvider(resource=resource)
+        tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=base_endpoint, insecure=True)))
+        trace.set_tracer_provider(tracer_provider)
+        
+        # Logs
+        logger_provider = LoggerProvider(resource=resource)
+        logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=base_endpoint, insecure=True)))
+        set_logger_provider(logger_provider)
+        
+        LangChainInstrumentor().instrument(tracer_provider=tracer_provider)
+        LoggingInstrumentor().instrument(set_logging_format=True)
+    except Exception as e:
+        print(f"Failed to initialize SigNoz OpenTelemetry: {e}")
+
 warnings.filterwarnings("ignore", message=".*extra_body.*")
 
 import langchain_openai.chat_models.base as base
@@ -19,7 +55,6 @@ def patched_convert_delta(_dict, default_class):
 base._convert_delta_to_message_chunk = patched_convert_delta
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from apscheduler.schedulers.background import BackgroundScheduler
 from contextlib import asynccontextmanager
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
@@ -44,98 +79,26 @@ logger = get_core_logger(__name__)
 
 init_db()
 
-def refresh_all_tokens():
-    try:
-        with SessionLocal() as session:
-            providers = session.query(Bank.bank_name, Bank.truelayer_provider_id, Bank.user_uuid).all()
-        if not providers:
-            return
-        token_gen = AccessTokenGenerator()
-        for bank_name, provider_id, user_uuid in providers:
-            try:
-                success = token_gen.refresh_token(provider_id, user_uuid)
-                if success:
-                    logger.debug(json.dumps({"message": f"Successfully refreshed tokens for {bank_name}.", "status_code": 100}))
-                else:
-                    logger.warning({"message": f"Failed to refresh tokens for {bank_name}.", "status_code": 400})
-            except Exception as e:
-                logger.error({"message": f"Error refreshing {bank_name}: {e}", "status_code": 500})
-    except Exception as e:
-        logger.error({"message": f"Critical error in token refresh scheduler: {e}", "status_code": 500})
-
-def run_global_lifestyle_analytics():
-    try:
-        from models.database_models import User
-        from services.analytics.lifestyle_clustering import LifestyleClusteringService
-        from services.analytics.subscription_detector import SubscriptionDetector
-        logger.info({"message": f"Starting global background job: Analytics & Subscriptions", "status_code": 200})
-        
-        with SessionLocal() as session:
-            users = session.query(User).all()
-            
-        if not users:
-            return
-            
-        cluster_service = LifestyleClusteringService()
-        sub_detector = SubscriptionDetector()
-        
-        for user in users:
-            try:
-                cluster_service.analyze_user_lifestyle(user.user_uuid)
-                sub_detector.analyze_user_subscriptions(user.user_uuid)
-            except Exception as e:
-                logger.error({"message": f"Failed analytics for user {user.user_uuid}: {e}", "status_code": 500})
-                
-        logger.info({"message": f"Global background job completed: Analytics & Subscriptions", "status_code": 200})
-    except Exception as e:
-        logger.error({"message": f"Critical error in lifestyle analytics scheduler: {e}", "status_code": 500})
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info({"message": f"INITIALIZING BUDAI CORE ENGINE", "status_code": 200})
     bridge = MCPBridge()
     FastAPICache.init(InMemoryBackend(), prefix="budai-cache")
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(func=refresh_all_tokens, trigger="interval", minutes=45)
-    
-    # Run HDBSCAN analytics every 10 minutes for testing
-    scheduler.add_job(func=run_global_lifestyle_analytics, trigger="interval", minutes=10)
-    
-    from services.analytics.proactive_insights import generate_proactive_insights_for_all_users
-    scheduler.add_job(func=generate_proactive_insights_for_all_users, trigger="interval", hours=12)
-    
-    from services.analytics.subscription_sweeper import expire_stale_subscriptions
-    scheduler.add_job(func=expire_stale_subscriptions, trigger="interval", minutes=5)
-    
-    scheduler.start()
-    logger.info({"message": f"Background scheduler started: Token Refresh (45m), Lifestyle Analytics (10m), Proactive Insights (12h), Sub Sweeper (5m)", "status_code": 200})
-    def _run_global_training():
-        try:
-            from services.memory_service import MemoryService
-            logger.info({"message": f"Pre-warming local ML embedding model...", "status_code": 200})
-            MemoryService() # Initialize singleton to pre-load embedding model
-            logger.info({"message": f"ML embedding model initialized.", "status_code": 200})
-        except Exception as e:
-            logger.error({"message": f"Failed to initialize MemoryService: {e}", "status_code": 500})
-            
-        try:
-            from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
-            agent = CategorizerAgent()
-            res = agent.train_global()
-            if res.get("trained"):
-                logger.debug(json.dumps({"message": f"Global categorization model trained on {res.get('samples', 0)} samples.", "status_code": 100}))
-            else:
-                logger.debug(json.dumps({"message": f"Global categorization model initialization: {res.get('reason')}", "status_code": 100}))
-        except Exception as e:
-            logger.error({"message": f"Failed to initialize global categorizer: {e}", "status_code": 500})
-            
-    asyncio.create_task(asyncio.to_thread(_run_global_training))
-    
+    logger.info({"message": f"Background tasks have been offloaded to Prefect workers.", "status_code": 200})
     yield
-    scheduler.shutdown()
-    logger.info({"message": f"Shutting down background scheduler", "status_code": 200})
+    logger.info({"message": f"Shutting down core engine", "status_code": 200})
+
 
 app = FastAPI(title="BudAI API Core", version="2.0.0", lifespan=lifespan)
+
+if os.environ.get("COLLECTOR_ENDPOINT"):
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+        FastAPIInstrumentor.instrument_app(app)
+        SQLAlchemyInstrumentor().instrument(engine=engine)
+    except Exception as e:
+        print(f"Failed to instrument FastAPI/SQLAlchemy: {e}")
 
 app.add_middleware(StripCacheControlMiddleware)
 
@@ -172,4 +135,4 @@ app.include_router(onboarding_router)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=False)

@@ -49,12 +49,18 @@ def ensure_db_exists():
 def init_db(db_path=None):
     try:
         ensure_db_exists()
+        
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            
         SQLModel.metadata.create_all(bind=engine)
         
         from sqlalchemy import text
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_category VARCHAR;"))
             conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_semantic_anomaly BOOLEAN DEFAULT FALSE;"))
+            conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cluster_signature_hash VARCHAR UNIQUE;"))
 
         logger.debug(json.dumps({"message": f"Database initialized successfully", "status_code": 100}))
     except Exception as e:

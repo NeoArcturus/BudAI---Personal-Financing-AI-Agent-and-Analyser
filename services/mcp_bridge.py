@@ -1,6 +1,9 @@
 import json
+import importlib
+import pkgutil
 from services.logger_setup import get_core_logger
 import inspect
+import services.mcp_tools
 
 logger = get_core_logger(__name__)
 
@@ -10,13 +13,43 @@ class MCPBridge:
     and directly invokes the native Python @tool functions in services/mcp_tools/.
     """
     def __init__(self):
-        pass
+        self._tool_cache = {}
         
+    def _find_tool_module(self, tool_name: str, preferred_server: str = None) -> str:
+        if tool_name in self._tool_cache:
+            return self._tool_cache[tool_name]
+            
+        if preferred_server:
+            try:
+                mod_name = f"services.mcp_tools.{preferred_server}_tools"
+                mod = importlib.import_module(mod_name)
+                if hasattr(mod, tool_name):
+                    self._tool_cache[tool_name] = mod_name
+                    return mod_name
+            except ImportError:
+                pass
+                
+        # Scan all modules in mcp_tools if not found in the preferred location
+        for _, module_name, _ in pkgutil.iter_modules(services.mcp_tools.__path__):
+            full_module_name = f"services.mcp_tools.{module_name}"
+            try:
+                mod = importlib.import_module(full_module_name)
+                if hasattr(mod, tool_name):
+                    self._tool_cache[tool_name] = full_module_name
+                    return full_module_name
+            except Exception:
+                continue
+                
+        return None
+
     async def call_tool(self, server_name: str, tool_name: str, arguments: dict):
         try:
-            module_name = f"services.mcp_tools.{server_name}_tools"
-            module = __import__(module_name, fromlist=[tool_name])
+            module_name = self._find_tool_module(tool_name, server_name)
             
+            if not module_name:
+                raise AttributeError(f"Could not find tool '{tool_name}' in any module inside services/mcp_tools")
+                
+            module = importlib.import_module(module_name)
             tool_func = getattr(module, tool_name)
             
             if hasattr(tool_func, "invoke"):

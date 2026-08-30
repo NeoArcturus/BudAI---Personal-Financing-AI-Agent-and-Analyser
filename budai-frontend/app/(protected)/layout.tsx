@@ -42,20 +42,28 @@ export default async function ProtectedLayout({
 
     if (accountsRes?.status !== 401 && sessionsRes?.status !== 401) {
       if (accountsRes && accountsRes.ok) {
-        const accountsData = (await accountsRes.json()) as any;
-        initialAccounts = accountsData.accounts || [];
+        try {
+          const accountsData = (await accountsRes.json()) as any;
+          initialAccounts = accountsData.accounts || [];
+        } catch (e) {
+          console.warn("Failed to parse accounts JSON:", e);
+        }
       }
 
       if (sessionsRes && sessionsRes.ok) {
-        const sessionsData = (await sessionsRes.json()) as any;
-        if (Array.isArray(sessionsData)) {
-          initialSessions = sessionsData.map((s) => ({
-            id: s.session_id,
-            title: s.title,
-            messages: [],
-            lastUpdated: new Date(s.last_updated),
-            contextData: s.context_data,
-          }));
+        try {
+          const sessionsData = (await sessionsRes.json()) as any;
+          if (Array.isArray(sessionsData)) {
+            initialSessions = sessionsData.map((s: any) => ({
+              id: s.session_id,
+              title: s.title,
+              messages: [],
+              lastUpdated: new Date(s.last_updated),
+              contextData: s.context_data,
+            }));
+          }
+        } catch (e) {
+          console.warn("Failed to parse sessions JSON:", e);
         }
       }
     }

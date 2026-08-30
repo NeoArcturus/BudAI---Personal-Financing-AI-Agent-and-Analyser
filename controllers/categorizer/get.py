@@ -1,7 +1,7 @@
 import json
 from fastapi import HTTPException, Query
 from sqlalchemy import text
-from models.database_models import User, BackgroundTask
+from models.database_models import User
 from config import SessionLocal
 from services.logger_setup import get_core_logger
 import asyncio
@@ -19,11 +19,7 @@ async def get_task_status(task_id: str, current_user: User):
     Returns:
         dict: The status payload for the specified task.
     """
-    with SessionLocal() as session:
-        task = session.query(BackgroundTask).filter_by(task_id=task_id, user_uuid=current_user.user_uuid).first()
-        if not task:
-            return {"task_id": task_id, "status": "not_found"}
-        return {"task_id": task_id, "status": task.status}
+    return {"task_id": task_id, "status": "deprecated"}
 
 async def get_review_candidates(account_id: str | None, limit: int, current_user: User):
     """

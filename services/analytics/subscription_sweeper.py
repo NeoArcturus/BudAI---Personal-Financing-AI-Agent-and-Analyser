@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta
 from config import SessionLocal
 from models.database_models import Subscription
+from sqlalchemy import text
 from services.logger_setup import get_core_logger
 
 logger = get_core_logger(__name__)
@@ -17,17 +18,15 @@ def expire_stale_subscriptions():
         threshold_date = datetime.utcnow() - timedelta(days=100)
         
         with SessionLocal() as session:
-            stale_subs = session.query(Subscription).filter(
-                Subscription.status == "active",
-                Subscription.next_expected_date < threshold_date
-            ).all()
-            
-            count = 0
-            for sub in stale_subs:
-                sub.status = "expired"
-                sub.last_updated = datetime.utcnow()
-                count += 1
-                
+            result = session.execute(
+                text("""
+                    UPDATE subscriptions 
+                    SET status = 'expired', last_updated = :now 
+                    WHERE status = 'active' AND next_expected_date < :threshold
+                """),
+                {"now": datetime.utcnow(), "threshold": threshold_date}
+            )
+            count = result.rowcount
             session.commit()
             logger.info(json.dumps({"message": f"Subscription sweeper completed. Marked {count} subscriptions as expired.", "status_code": 200}))
     except Exception as e:

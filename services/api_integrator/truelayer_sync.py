@@ -306,13 +306,53 @@ class TrueLayerSync:
                 "description": raw_string,
                 "semi_cleaned_description": semi_cleaned,
                 "fully_cleaned_description": fully_cleaned,
-                "category": "Uncategorized"
+                "category": "Uncategorised"
             })
             seen_in_batch.add(tx_id)
             seen_in_batch.add(tx_hash)
             
         if not new_txs:
             return
+            
+        # --- PHASE 2: Fast Path RAG Intercept ---
+        import os
+        from langchain_openai import OpenAIEmbeddings
+        from models.database_models import MerchantKnowledge
+        from sqlalchemy import text
+        
+        try:
+            base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
+            if not base_url.endswith("/v1"): 
+                base_url = f"{base_url}/v1"
+                
+            embeddings_model = OpenAIEmbeddings(
+                base_url=base_url,
+                model="text-embedding-nomic-embed-text-v1.5",
+                api_key="budai-local",
+                check_embedding_ctx_length=False
+            )
+            
+            # Extract strings to embed (using semi_cleaned as it strikes a good balance)
+            strings_to_embed = [tx["semi_cleaned_description"] for tx in new_txs]
+            if strings_to_embed:
+                vectors = embeddings_model.embed_documents(strings_to_embed)
+                
+                for idx, tx in enumerate(new_txs):
+                    v = vectors[idx]
+                    # Cosine distance < 0.05
+                    query_with_dist = text("""
+                        SELECT category, clean_merchant_name, (embedding <=> :vec) as distance
+                        FROM merchant_knowledge 
+                        ORDER BY embedding <=> :vec 
+                        LIMIT 1
+                    """)
+                    result_dist = session.execute(query_with_dist, {"vec": str(v)}).first()
+                    if result_dist and result_dist.distance < 0.05:
+                        tx["category"] = result_dist.category
+        except Exception as e:
+            from services.logger_setup import get_core_logger
+            logger = get_core_logger(__name__)
+            logger.error(f"RAG Intercept Fast Path failed: {e}")
 
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         
