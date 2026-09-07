@@ -52,3 +52,5 @@ hdbscan
 langchain-huggingface
 
 pytest-sugar
+
+langfuse

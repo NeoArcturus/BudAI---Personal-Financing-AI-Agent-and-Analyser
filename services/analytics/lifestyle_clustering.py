@@ -41,7 +41,7 @@ class LifestyleClusteringService:
         )
         
         self.llm = ChatOpenAI(
-            model="lmstudio-community/Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit", 
+            model="Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit", 
             base_url=base_url, 
             api_key="budai-local", 
             temperature=0,

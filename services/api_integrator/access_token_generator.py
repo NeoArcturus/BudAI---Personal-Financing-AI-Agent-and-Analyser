@@ -66,65 +66,80 @@ class AccessTokenGenerator:
 
     def extend_connection(self, bank_uuid, user_uuid):
         try:
+            from models.database_models import User
             with SessionLocal() as session:
                 bank = session.query(Bank).filter_by(bank_uuid=bank_uuid, user_uuid=user_uuid).first()
-                if not bank or not bank.access_token:
-                    return {"status": "error", "message": "Bank not found"}
+                if not bank or not bank.refresh_token:
+                    return {"status": "error", "message": "Bank or refresh token not found"}
 
-                raw_access = self.cipher_suite.decrypt(bytes(bank.access_token)).decode()
-                headers = {"Authorization": f"Bearer {raw_access}"}
+                user = session.query(User).filter_by(user_uuid=user_uuid).first()
+                if not user:
+                    return {"status": "error", "message": "User not found"}
+
+                raw_refresh = self.cipher_suite.decrypt(bytes(bank.refresh_token)).decode()
                 
-                url = "https://api.truelayer.com/data/v1/connections/extend"
-                res = requests.post(url, headers=headers)
+                # Construct the exact ExtendConnectionRequest payload per TrueLayer OpenAPI Spec
+                payload = {
+                    "user_has_reconfirmed_consent": False, # Or False, depending on flow. For automated we assume True if allowed.
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "refresh_token": raw_refresh,
+                    "redirect_uri": self.redirect_uri,
+                    "user": {
+                        "id": user_uuid,
+                        "name": getattr(user, "name", None) or "BudAI User",
+                        "email": user.email or "user@budai.com"
+                    }
+                }
+                
+                # We also need the access token for the Authorization header
+                raw_access = self.cipher_suite.decrypt(bytes(bank.access_token)).decode()
+                headers = {
+                    "Authorization": f"Bearer {raw_access}",
+                    "Content-Type": "application/json"
+                }
+                
+                url = "https://api.truelayer.com/connections/extend"
+                res = requests.post(url, json=payload, headers=headers)
                 
                 if res.status_code == 200:
                     data = res.json()
-                    status = data.get("status")
-                    if status == "no_action_needed":
-                        # The token is silently extended
+                    action_needed = data.get("action_needed")
+                    
+                    if action_needed == "no_action_needed":
+                        # The token is silently extended. TrueLayer returned new tokens!
+                        if "access_token" in data:
+                            bank.access_token = self.cipher_suite.encrypt(data["access_token"].encode())
+                        if "refresh_token" in data:
+                            bank.refresh_token = self.cipher_suite.encrypt(data["refresh_token"].encode())
+                            
                         bank.consent_status = OpenBankingStatus.CONNECTION_ACTIVE.value
                         session.commit()
                         logger.info(json.dumps({"message": f"Connection {bank_uuid} silently extended.", "status_code": 200}))
-                        
-                        # Trigger a background /me sync to update the expiration dates in DB
-                        import threading
-                        def sync_me():
-                            try:
-                                me_res = requests.get("https://api.truelayer.com/data/v1/me", headers=headers)
-                                if me_res.status_code == 200:
-                                    me_data = me_res.json()
-                                    expires_at = me_data['results'][0].get('consent_expires_at')
-                                    if expires_at:
-                                        with SessionLocal() as s2:
-                                            b2 = s2.query(Bank).filter_by(bank_uuid=bank_uuid).first()
-                                            b2.consent_expires_at = pd.to_datetime(expires_at, format='ISO8601').to_pydatetime()
-                                            s2.commit()
-                            except Exception:
-                                pass
-                        threading.Thread(target=sync_me, daemon=True).start()
-                        
                         return {"status": "extended"}
-                    elif status in ["authentication_needed", "reconfirmation_of_consent_needed"]:
+                        
+                    elif action_needed in ["authentication_needed", "reconfirmation_of_consent_needed"]:
                         bank.consent_status = OpenBankingStatus.CONNECTION_EXPIRED.value
                         session.commit()
-                        
-                        auth_uri = data.get("authorization_uri")
-                        # If TrueLayer didn't return one directly, fallback to reauthuri generator
-                        if not auth_uri and bank.refresh_token:
-                            raw_refresh = self.cipher_suite.decrypt(bytes(bank.refresh_token)).decode()
-                            auth_uri = self.get_reauth_link(raw_refresh, user_uuid)
-                            
-                        logger.warning(json.dumps({"message": f"Connection {bank_uuid} requires manual re-auth.", "status_code": 401}))
-                        return {"status": "reauth_required", "auth_uri": auth_uri}
-                        
-                elif res.status_code in [401, 403]:
-                    bank.consent_status = OpenBankingStatus.BANK_REVOKED_CONSENT.value
+                        logger.info(json.dumps({"message": f"Connection {bank_uuid} requires reauth: {action_needed}.", "status_code": 401}))
+                        return {"status": "reauth_required"}
+                
+                elif res.status_code == 401:
+                    logger.warning(json.dumps({"message": f"Connection {bank_uuid} 401 Unauthorized. Refresh token invalid.", "status_code": 401}))
+                    bank.consent_status = OpenBankingStatus.CONNECTION_EXPIRED.value
                     session.commit()
-                    logger.warning(json.dumps({"message": f"Connection {bank_uuid} revoked by bank (403/401).", "status_code": 403}))
-                    return {"status": "revoked"}
+                    return {"status": "reauth_required"}
+                    
+                elif res.status_code == 422:
+                    logger.warning(json.dumps({"message": f"Connection {bank_uuid} cannot be extended (422).", "status_code": 422}))
+                    bank.consent_status = OpenBankingStatus.CONNECTION_EXPIRED.value
+                    session.commit()
+                    return {"status": "reauth_required"}
+                    
                 else:
-                    logger.error(json.dumps({"message": f"Extend failed for {bank_uuid}: {res.text}", "status_code": 500}))
-                    return {"status": "error", "message": res.text}
+                    logger.error(json.dumps({"message": f"Extend failed for {bank_uuid}. HTTP {res.status_code}: {res.text}", "status_code": 500}))
+                    return {"status": "error", "message": res.text or str(res.status_code)}
+                    
         except Exception as e:
             logger.error(json.dumps({"message": f"Failed to extend connection: {e}", "status_code": 500}), exc_info=True)
             return {"status": "error"}

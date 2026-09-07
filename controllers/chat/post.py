@@ -12,6 +12,7 @@ import asyncio
 import uuid
 import json
 from services.logger_setup import get_core_logger
+from langfuse.langchain import CallbackHandler
 from langgraph.types import Command
 from langchain_core.messages import HumanMessage
 
@@ -30,8 +31,11 @@ async def run_graph_task(task_id: str, state_input: dict):
     """
     try:
         full_response = []
-        config = {"configurable": {"thread_id": state_input.get(
+        config = {"run_name": "budai-agent-chat", "configurable": {"thread_id": state_input.get(
             "session_id", str(uuid.uuid4()))}}
+        langfuse_handler = CallbackHandler()
+        config["metadata"] = {"session_id": state_input.get("session_id", "default"), "user_id": str(state_input.get("user_uuid", "system"))}
+        config["callbacks"] = [langfuse_handler]
 
         async with await budai_app.astream_events(state_input, version="v3", config=config) as stream:
             async for message in stream.messages:
@@ -139,7 +143,10 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
         })
 
     async def generate_response():
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {"run_name": "budai-agent-chat", "configurable": {"thread_id": thread_id}}
+        langfuse_handler = CallbackHandler()
+        config["metadata"] = {"session_id": request.session_id or "default", "user_id": str(current_user.user_uuid)}
+        config["callbacks"] = [langfuse_handler]
         input_data = resume_command if resume_command else initial_state
         queue = asyncio.Queue()
         sent_cache_ids = set()
@@ -393,8 +400,11 @@ async def chat(request: ChatRequest, current_user: User):
     })
 
     async def generate():
-        config = {"configurable": {
+        config = {"run_name": "budai-agent-chat", "configurable": {
             "thread_id": request.session_id or str(uuid.uuid4())}}
+        langfuse_handler = CallbackHandler()
+        config["metadata"] = {"session_id": request.session_id or "default", "user_id": str(current_user.user_uuid)}
+        config["callbacks"] = [langfuse_handler]
         queue = asyncio.Queue()
         sent_cache_ids = set()
 

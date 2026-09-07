@@ -27,12 +27,12 @@ interface BudAIChatMessage {
 
 export interface BudAIAdvisorContext {
   type:
-    | "cash_flow"
-    | "spending_trend"
-    | "expense_distribution"
-    | "ledger_audit"
-    | "market_audit"
-    | "general";
+  | "cash_flow"
+  | "spending_trend"
+  | "expense_distribution"
+  | "ledger_audit"
+  | "market_audit"
+  | "general";
   accountId?: string;
   data?: [];
 }
@@ -119,7 +119,7 @@ export default function AdvisorPage() {
                 const msg = m as BudAIChatMessage;
                 const parts: Array<{ type: "text" | "reasoning"; text: string }> = [];
 
-                
+
                 if (msg.reasoning_content) {
                   parts.push({
                     type: "reasoning",
@@ -127,7 +127,7 @@ export default function AdvisorPage() {
                   });
                 }
 
-                
+
                 const text = msg.content || "";
                 const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g;
                 let hasThinkTags = false;
@@ -195,7 +195,7 @@ export default function AdvisorPage() {
     try {
       if (typeof sendMessage === "function") {
         let currentSessionId = activeSessionId;
-        
+
         if (!currentSessionId || currentSessionId === "new-session") {
           currentSessionId = crypto.randomUUID();
           setActiveSessionId(currentSessionId);
@@ -357,7 +357,7 @@ export default function AdvisorPage() {
                   "Analyze my latest spending trends",
                   "What's my cash flow looking like?",
                   "Review my high-value transactions",
-                  "Perform a ledger audit",
+                  "Perform a account audit",
                 ].map((hint, idx) => (
                   <Button
                     key={idx}

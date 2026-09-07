@@ -27,7 +27,7 @@ export const InterruptHandler = ({
   };
 
   return (
-    <div className="flex flex-col gap-4 bg-warning/10 border border-warning/40 p-6 rounded-2xl mt-4 w-full max-w-2xl relative overflow-hidden liquid-glass">
+    <div className="flex flex-col gap-4 bg-warning/10 border border-warning/40 p-6 rounded-2xl mt-4 w-full max-w-2xl relative overflow-hidden">
       <div className="absolute top-0 left-0 w-1 h-full bg-warning"></div>
 
       <div className="flex items-center gap-3 text-warning text-[10px] tracking-[0.2em] uppercase font-black">

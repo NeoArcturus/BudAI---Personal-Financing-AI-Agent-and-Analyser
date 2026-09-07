@@ -241,7 +241,7 @@ class TrueLayerSync:
             logger.error(json.dumps({"message": f"Error in trigger_sync", "status_code": 500}), exc_info=True)
         
     def process_and_store_transactions(self, session, tx_data, user_uuid, bank_uuid, account_id):
-        from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+        from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         if not tx_data:
             return
         new_txs = []
@@ -261,6 +261,8 @@ class TrueLayerSync:
             amount = float(tx.get("amount", 0.0))
             currency = str(tx.get("currency", "GBP"))
             original_desc = str(tx.get("description", ""))
+            status = tx.get("status", "SETTLED").upper()
+            is_pending = status == "PENDING"
             
             classification_list = tx.get("transaction_classification", [])
             if isinstance(classification_list, list) and classification_list:
@@ -270,10 +272,11 @@ class TrueLayerSync:
             else:
                 desc_val = original_desc
                 
+            # If norm_id is missing, fallback to a robust deterministic hash (ignoring exact time)
             tx_hash = hashlib.sha256(
                 f"{user_uuid}_{account_id}_{date_val.strftime('%Y-%m-%d')}_{amount}_{desc_val}".encode()).hexdigest()
             
-            tx_id = norm_id or raw_tx_id or tx_hash
+            tx_id = norm_id or tx_hash
             
             if tx_id in seen_in_batch or tx_hash in seen_in_batch:
                 continue
@@ -284,15 +287,12 @@ class TrueLayerSync:
             
             # 1. Semi-Cleaned (Stop-Word Removal)
             stop_words = ["card transaction of", "gbp", "issued by", "london", "contactless", "direct debit", "standing order", "visa", "mastercard"]
-            semi_cleaned = raw_string
-            for word in stop_words:
-                semi_cleaned = re.sub(r'(?i)\b' + re.escape(word) + r'\b', '', semi_cleaned)
-            # Remove consecutive whitespace left over by stop word removal
-            semi_cleaned = re.sub(r'\s+', ' ', semi_cleaned).strip()
-            
-            # 2. Fully Cleaned (Aggressive Regex)
-            fully_cleaned = re.sub(r'[^a-zA-Z\s]', '', raw_string).strip().lower()
-            fully_cleaned = re.sub(r'\s+', ' ', fully_cleaned)
+            # Fast ETL String Cleaning (Replaced LLM bottleneck)
+            semi_cleaned = raw_string.lower()
+            for w in stop_words:
+                semi_cleaned = semi_cleaned.replace(w, "")
+            semi_cleaned = semi_cleaned.strip()
+            fully_cleaned = re.sub(r'[^a-zA-Z\s]', '', semi_cleaned).strip().lower()
 
             new_txs.append({
                 "transaction_uuid": tx_id,
@@ -306,7 +306,8 @@ class TrueLayerSync:
                 "description": raw_string,
                 "semi_cleaned_description": semi_cleaned,
                 "fully_cleaned_description": fully_cleaned,
-                "category": "Uncategorised"
+                "category": "Uncategorized",
+                "is_pending": is_pending
             })
             seen_in_batch.add(tx_id)
             seen_in_batch.add(tx_hash)
@@ -341,7 +342,7 @@ class TrueLayerSync:
                     v = vectors[idx]
                     # Cosine distance < 0.05
                     query_with_dist = text("""
-                        SELECT category, clean_merchant_name, (embedding <=> :vec) as distance
+                        SELECT knowledge_uuid, category, clean_merchant_name, (embedding <=> :vec) as distance
                         FROM merchant_knowledge 
                         ORDER BY embedding <=> :vec 
                         LIMIT 1
@@ -349,6 +350,7 @@ class TrueLayerSync:
                     result_dist = session.execute(query_with_dist, {"vec": str(v)}).first()
                     if result_dist and result_dist.distance < 0.05:
                         tx["category"] = result_dist.category
+                        tx["merchant_knowledge_uuid"] = result_dist.knowledge_uuid
         except Exception as e:
             from services.logger_setup import get_core_logger
             logger = get_core_logger(__name__)
@@ -364,7 +366,10 @@ class TrueLayerSync:
             "currency": stmt.excluded.currency,
             "description": stmt.excluded.description,
             "semi_cleaned_description": stmt.excluded.semi_cleaned_description,
-            "fully_cleaned_description": stmt.excluded.fully_cleaned_description
+            "fully_cleaned_description": stmt.excluded.fully_cleaned_description,
+            "is_pending": stmt.excluded.is_pending,
+            "category": stmt.excluded.category,
+            "merchant_knowledge_uuid": stmt.excluded.merchant_knowledge_uuid
         }
         
         stmt = stmt.on_conflict_do_update(
@@ -381,7 +386,7 @@ class TrueLayerSync:
         def trigger_categorization():
             try:
                 import asyncio
-                from services.Categorizer_Agent.lazy_ml import categorize_specific_transactions_bg
+                from agents.core_financial.Categorizer_Agent.lazy_ml import categorize_specific_transactions_bg
                 tx_uuids = [tx["transaction_uuid"] for tx in new_txs]
                 asyncio.run(categorize_specific_transactions_bg(tx_uuids, user_uuid))
                 from utils.cache_utils import clear_user_cache

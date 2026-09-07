@@ -1,10 +1,26 @@
 @import "tailwindcss";
+@import "@heroui/styles";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --color-obsidian: var(--background);
+  --color-neon-cyan: var(--primary);
+  --color-deep-pink: #ff3366;
+  --color-app-bg: var(--background);
+  --color-app-surface: var(--card);
+  --color-app-sidebar: var(--sidebar);
+  --color-app-border: var(--border);
+  --color-brand-cyan: var(--primary);
+  --color-brand-pink: #ff3366;
+  --color-brand-blue: #3D73FF;
+  --color-brand-orange: #FF8A4C;
+  --color-brand-green: #00E096;
+  --color-text-main: var(--foreground);
+  --color-text-muted: var(--muted-foreground);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-jakarta);
@@ -211,12 +227,7 @@
     box-shadow: 0 4px 24px rgba(239, 68, 68, 0.1);
   }
 
-  .card-hover:hover {
-    box-shadow: 0 20px 40px -20px rgba(0, 127, 255, 0.1);
-    border-color: rgba(0, 127, 255, 0.3);
-    transform: translateY(-4px) translateZ(0);
-    transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
+  /* Replaced by HeroUI .card[data-hovered] in components layer */
 
   .bg-deep-void {
     background-color: var(--background);
@@ -431,4 +442,75 @@
 .animate-glitch {
   animation: textGlitch 0.3s cubic-bezier(.25, .46, .45, .94) both infinite;
   text-shadow: 2px 0 rgba(243, 18, 96, 0.5), -2px 0 rgba(0, 111, 238, 0.5);
+}
+
+@layer components {
+
+  /* Map HeroUI's Card to the BudAI aesthetic globally */
+  .card, .popover, .modal {
+    @apply border-[1px] border-white/5 backdrop-blur-2xl saturate-[2] rounded-2xl;
+    background-color: rgba(0, 0, 0, 0.6);
+    box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.6);
+    will-change: transform, backdrop-filter;
+    transform: translateZ(0);
+  }
+
+  /* HeroUI Global Animation Overrides */
+  
+  /* Popover & Modal entrance/exit */
+  .popover[data-entering], 
+  .modal[data-entering],
+  [role="dialog"][data-entering] {
+    @apply animate-in zoom-in-95 fade-in-0 duration-300;
+  }
+
+  .popover[data-exiting], 
+  .modal[data-exiting],
+  [role="dialog"][data-exiting] {
+    @apply animate-out zoom-out-95 fade-out duration-200;
+  }
+
+  /* Universal Button interaction physics */
+  .button {
+    @apply transition-all duration-200 ease-out;
+    will-change: transform;
+  }
+  
+  .button:not(:hover) {
+    will-change: auto;
+  }
+
+  .button[data-hovered="true"], .button:hover {
+    filter: brightness(1.1);
+  }
+
+  .button:active,
+  .button[data-pressed="true"] {
+    transform: scale(0.95);
+  }
+
+  /* Card interaction physics */
+  .card[data-hovered="true"], .card-hover:hover, .popover[data-hovered="true"], .modal[data-hovered="true"] {
+    box-shadow: 0 20px 40px -20px rgba(0, 242, 255, 0.15);
+    border-color: rgba(0, 242, 255, 0.4);
+    transform: translateY(-4px) translateZ(0);
+  }
+
+  /* Reduce motion accessibility */
+  @media (prefers-reduced-motion: reduce) {
+    .button, .card, .popover, .modal {
+      transition: none !important;
+      animation: none !important;
+      transform: none !important;
+    }
+  }
+
+  [data-reduce-motion="true"] .button,
+  [data-reduce-motion="true"] .card,
+  [data-reduce-motion="true"] .popover,
+  [data-reduce-motion="true"] .modal {
+      transition: none !important;
+      animation: none !important;
+      transform: none !important;
+  }
 }

@@ -15,7 +15,7 @@ def extract_persona_task(form_context: str) -> dict:
         OLLAMA_BASE_URL = f"{OLLAMA_BASE_URL}/v1"
 
     onboarding_llm = ChatOpenAI(
-        model="lmstudio-community/Qwen3.5-9B-GGUF",
+        model="Qwen3.5-9B-GGUF",
         base_url=OLLAMA_BASE_URL,
         api_key="budai-local",
         temperature=0,

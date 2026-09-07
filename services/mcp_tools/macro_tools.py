@@ -67,44 +67,7 @@ def get_financial_news(query: str = "") -> str:
     Returns:
         str: A formatted string of recent news headlines with links and summaries.
     """
-    global _news_cache
-    current_time = time.time()
-
-    if query in _news_cache:
-        timestamp, cached_results = _news_cache[query]
-        if current_time - timestamp < NEWS_CACHE_TTL:
-            _res = cached_results
-            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-            return _res
-
-    try:
-        with NewsDataApiClient(apikey=NEWSDATA_API_KEY) as api:
-            search_query = f"{query} financial news economy"
-            response = api.latest_api(q=search_query, language="en")
-            results = response.get('results', [])
-
-            if not results:
-                _res = f"No recent financial news found for '{query}'."
-                logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-                return _res
-
-            formatted_news = []
-            for r in results[:5]:
-                title = r.get('title', 'No Title')
-                snippet = r.get('description') or r.get('content') or 'No Snippet available.'
-                url = r.get('link', '')
-                formatted_news.append(f"- {title}\n  Summary: {snippet}\n  Link: {url}")
-
-            final_results = f"Top financial headlines for '{query}':\n" + "\n\n".join(formatted_news)
-            _news_cache[query] = (current_time, final_results)
-            _res = final_results
-            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-            return _res
-    except Exception as e:
-        logger.error(json.dumps({"message": f"News Error: {e}", "status_code": 500}))
-        _res = "Financial news service is currently unavailable."
-        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-        return _res
+    return "Web search is currently ON HOLD. Do not attempt to search the web for news."
 
 def perform_currency_conversion(amount: float, from_currency: str, to_currency: str) -> str:
     """

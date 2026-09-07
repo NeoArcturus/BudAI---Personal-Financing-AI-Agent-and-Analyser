@@ -102,6 +102,8 @@ const baseOptions = {
   },
 };
 
+const redPalette = ["#EF4444", "#F87171", "#FCA5A5", "#FECACA", "#991B1B", "#7F1D1D"];
+const yellowPalette = ["#EAB308", "#FDE047", "#FEF08A", "#FEF9C3", "#854D0E", "#713F12"];
 const colorPalette = [
   "#00F2FF",
   "#A855F7",
@@ -115,8 +117,10 @@ const colorPalette = [
 
 const getColorForMetric = (
   metricName: string,
-  defaultIndex: number,
+  defaultIndex: number, themeOverride?: "red" | "yellow"
 ): string => {
+  if (themeOverride === "red") return redPalette[defaultIndex % redPalette.length];
+  if (themeOverride === "yellow") return yellowPalette[defaultIndex % yellowPalette.length];
   const lower = metricName.toLowerCase();
   if (
     lower.includes("balance") ||
@@ -217,8 +221,9 @@ export const buildChartConfig = (
   rawPayload: ChartPayload,
   params: ToolParameters,
   customTitle?: string,
-  options?: { disableAnimation?: boolean },
+  options?: { disableAnimation?: boolean; themeOverride?: "red" | "yellow" },
 ): NativeChartConfig | null => {
+  const activePalette = options?.themeOverride === "red" ? redPalette : options?.themeOverride === "yellow" ? yellowPalette : colorPalette;
   const animationOverride = options?.disableAnimation
     ? { duration: 0, delay: 0 }
     : undefined;
@@ -255,8 +260,8 @@ export const buildChartConfig = (
     const datasets = payloadData.map((b, i) => {
       const metricColor =
         payloadData.length > 1
-          ? colorPalette[i % colorPalette.length]
-          : getColorForMetric("expense", i);
+          ? activePalette[i % activePalette.length]
+          : getColorForMetric("expense", i, options?.themeOverride);
 
       return {
         label: `${b.bank_name} Spent (${currencySymbol})`,
@@ -304,7 +309,7 @@ export const buildChartConfig = (
         datasets: [
           {
             data: amounts,
-            backgroundColor: colorPalette,
+            backgroundColor: activePalette,
             borderWidth: 0,
             hoverOffset: 12,
             radius: "80%",
@@ -503,8 +508,8 @@ export const buildChartConfig = (
       payloadData.forEach((b, i) => {
         const metricColor =
           payloadData.length > 1
-            ? colorPalette[i % colorPalette.length]
-            : getColorForMetric("balance", i);
+            ? activePalette[i % activePalette.length]
+            : getColorForMetric("balance", i, options?.themeOverride);
         datasets.push({
           label: `${b.bank_name} Balance`,
           data: allLabels.map((label) => {
@@ -553,8 +558,8 @@ export const buildChartConfig = (
       payloadData.forEach((b, i) => {
         const metricColor =
           payloadData.length > 1
-            ? colorPalette[i % colorPalette.length]
-            : getColorForMetric("spend", i);
+            ? activePalette[i % activePalette.length]
+            : getColorForMetric("spend", i, options?.themeOverride);
         datasets.push({
           label: `${b.bank_name} Expenses`,
           data: allLabels.map((label) => {
@@ -660,8 +665,8 @@ export const buildChartConfig = (
       bankCategories.forEach((category) => {
         const metricColor =
           bankCategories.length === 1 && payloadData.length === 1
-            ? getColorForMetric("expense", idx)
-            : colorPalette[colorIndex % colorPalette.length];
+            ? getColorForMetric("expense", idx, options?.themeOverride)
+            : activePalette[colorIndex % activePalette.length];
         colorIndex++;
 
         const label =

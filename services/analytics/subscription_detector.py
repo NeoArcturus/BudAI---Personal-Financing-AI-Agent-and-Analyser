@@ -41,7 +41,7 @@ class SubscriptionDetector:
         # Qwen LLM for Entity Extraction/Naming
         self.chat_model = ChatOpenAI(
             base_url=base_url,
-            model="lmstudio-community/Qwen3.5-9B-GGUF",
+            model="Qwen3.5-9B-GGUF",
             api_key="budai-local",
             temperature=0
         )
@@ -71,15 +71,19 @@ class SubscriptionDetector:
                 logger.info(f"No subscription candidates found for user {user_uuid}")
                 return
 
-            # Phase 2: RAG Intercept (Placeholder for Mixed Quantization DB lookup)
-            # e.g., pools = self.fast_vector_intercept(session, pools)
+            # Phase 2: RAG Intercept & Vector Observability
+            rag_clusters, unmatched_pools = self.fast_vector_intercept(session, pools)
             
-            # Phase 3: Transform & Cluster
-            clusters = self.generate_and_cluster(pools)
+            # Phase 3: Transform & Cluster (Only on Unmatched)
+            llm_clusters = self.generate_and_cluster(unmatched_pools)
+            
+            # Combine Clusters
+            all_clusters = rag_clusters + llm_clusters
             
             # Phase 4: Load & Storage Quantization
-            self.upsert_and_archive(session, user_uuid, clusters)
-            
+            if all_clusters:
+                self.upsert_and_archive(session, user_uuid, all_clusters)
+
     def extract_and_partition(self, session, user_uuid):
         logger = _get_logger()
         # Strictly filter data to reduce O(N^2) load
@@ -118,6 +122,113 @@ class SubscriptionDetector:
             
         logger.info(f"Extracted and partitioned {len(txs)} transactions into {len(pools)} semantic micro-pools.")
         return pools
+
+
+    def fast_vector_intercept(self, session, pools):
+        from sqlalchemy import text
+        import numpy as np
+        
+        logger = _get_logger()
+        logger.info("Executing Phase 2: RAG Vector Intercept with Observability Telemetry")
+        
+        unmatched_pools = {}
+        matched_groups = {} 
+        
+        os.makedirs("logs", exist_ok=True)
+        log_file_path = "logs/vector_similarity.jsonl"
+        
+        for account_id, txs in pools.items():
+            unmatched_pools[account_id] = []
+            matched_groups[account_id] = {}
+                
+            for tx in txs:
+                desc = tx.description or ""
+                try:
+                    query_vector = self.embeddings.embed_query(desc)
+                except Exception as e:
+                    logger.error(f"Embedding failed for tx {tx.transaction_uuid}: {e}")
+                    unmatched_pools[account_id].append(tx)
+                    continue
+                
+                # RAG Query with exact < 0.2 cosine distance threshold
+                sql = text('''
+                    SELECT clean_merchant_name, 
+                           embedding::text as target_vector_str, 
+                           (embedding <=> CAST(:query_vector AS vector)) AS distance 
+                    FROM merchant_knowledge 
+                    ORDER BY distance ASC 
+                    LIMIT 1
+                ''')
+                
+                try:
+                    result = session.execute(sql, {"query_vector": str(query_vector)}).fetchone()
+                except Exception as e:
+                    logger.warning(f"Vector search failed (pgvector might not be installed): {e}")
+                    unmatched_pools[account_id].append(tx)
+                    continue
+                
+                if result and result.distance is not None and result.distance < 0.2:
+                    matched_name = result.clean_merchant_name
+                    if matched_name not in matched_groups[account_id]:
+                        matched_groups[account_id][matched_name] = []
+                    matched_groups[account_id][matched_name].append(tx)
+                    
+                    # VECTOR OBSERVABILITY LOGGER
+                    try:
+                        target_vec = json.loads(result.target_vector_str)
+                        sim_score = 1.0 - float(result.distance)
+                        
+                        # Truncate 768-D vectors to 5 dimensions for safe JSONL logging
+                        trunc_A = [round(x, 4) for x in query_vector[:5]] + ["..."]
+                        trunc_B = [round(x, 4) for x in target_vec[:5]] + ["..."]
+                        
+                        log_payload = {
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "query_text_A": desc,
+                            "target_text_B": matched_name,
+                            "cosine_similarity": round(sim_score, 4),
+                            "distance": round(float(result.distance), 4),
+                            "vector_A_truncated": trunc_A,
+                            "vector_B_truncated": trunc_B
+                        }
+                        
+                        with open(log_file_path, "a") as f:
+                            f.write(json.dumps(log_payload) + "\n")
+                    except Exception as e:
+                        logger.error(f"Failed to write vector telemetry: {e}")
+                        
+                else:
+                    unmatched_pools[account_id].append(tx)
+                    
+        # Transform matched groups into valid clusters (mirroring Phase 3 output format)
+        rag_clusters = []
+        for acc_id, groups in matched_groups.items():
+            for m_name, cluster_txs in groups.items():
+                if len(cluster_txs) >= 2:
+                    dates = [t.date for t in cluster_txs]
+                    dates.sort()
+                    amounts = [abs(t.amount) for t in cluster_txs]
+                    time_gaps = [(dates[j] - dates[j-1]).days for j in range(1, len(dates))]
+                    median_gap = np.median(time_gaps)
+                    
+                    if median_gap >= 5:
+                        std_gap = np.std(time_gaps)
+                        if std_gap <= self.time_variance_threshold_days:
+                            rag_clusters.append({
+                                "anchor_tx": cluster_txs[0],
+                                "account_id": acc_id,
+                                "transactions": cluster_txs,
+                                "time_gaps": time_gaps,
+                                "amounts": amounts,
+                                "dates": dates,
+                                "median_gap": median_gap
+                            })
+                else:
+                    # Not enough txs for a cluster, throw back to unmatched
+                    unmatched_pools[acc_id].extend(cluster_txs)
+                    
+        logger.info(f"RAG Intercept yielded {len(rag_clusters)} immediate semantic clusters.")
+        return rag_clusters, unmatched_pools
 
     def generate_and_cluster(self, pools):
         logger = _get_logger()
@@ -309,5 +420,45 @@ class SubscriptionDetector:
             session.commit()
             logger.info(f"No new material subscription updates required.")
 
-        # Note: Database Storage Quantization (halfvec/bit integration for MerchantKnowledge) 
-        # is structurally reserved here for when pgvector is explicitly installed on the database.
+        # Phase 5: Continuous Vector Archiving
+        from models.database_models import MerchantKnowledge
+        from sqlalchemy.dialects.postgresql import insert
+        
+        new_knowledge_count = 0
+        for c in clusters:
+            anchor_tx = c["anchor_tx"]
+            
+            # Find the subscription we just created/updated to get the merchant name
+            sub_hash = hashlib.sha256(f"{c['account_id']}_{self._clean_structural_noise(anchor_tx.semi_cleaned_description or anchor_tx.description).strip().lower()}".encode('utf-8')).hexdigest()
+            sub = next((s for s in detected_subscriptions if s.cluster_signature_hash == sub_hash), None)
+            
+            if sub and sub.merchant_name and sub.merchant_name != "Unknown":
+                # Embed the clean merchant name
+                try:
+                    merchant_vector = self.embeddings.embed_query(sub.merchant_name)
+                    
+                    # Upsert into MerchantKnowledge
+                    stmt = insert(MerchantKnowledge).values(
+                        knowledge_uuid=str(uuid.uuid4()),
+                        clean_merchant_name=sub.merchant_name,
+                        category="Subscription",  # Baseline fallback
+                        embedding=merchant_vector,
+                        is_human_verified=False,
+                        created_at=datetime.utcnow()
+                    )
+                    
+                    # If it already exists by name, we just do nothing (ON CONFLICT DO NOTHING)
+                    # Assuming clean_merchant_name is unique, or we just insert it.
+                    # Wait, if clean_merchant_name is not unique, we might insert duplicates.
+                    # Let's just check if it exists first to be safe and ORM-agnostic
+                    exists = session.query(MerchantKnowledge).filter_by(clean_merchant_name=sub.merchant_name).first()
+                    if not exists:
+                        session.execute(stmt)
+                        new_knowledge_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to archive MerchantKnowledge for {sub.merchant_name}: {e}")
+                    
+        if new_knowledge_count > 0:
+            session.commit()
+            logger.info(f"Continuously Archived {new_knowledge_count} new merchant vectors into pgvector.")
+

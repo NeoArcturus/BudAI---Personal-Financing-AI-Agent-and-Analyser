@@ -6,7 +6,7 @@ from services.mcp_tools.shared_utils import (
     GenerateHypotheticalScenarioInput, ForecastBudgetImpactInput,
     _cache_chart_data, _parse_accounts
 )
-from services.Forecaster_Agent.ForecasterAgent import ForecasterAgent
+from agents.core_financial.Forecaster_Agent.ForecasterAgent import ForecasterAgent
 from services.logger_setup import get_core_logger
 
 logger = get_core_logger(__name__)
@@ -207,7 +207,7 @@ def forecast_budget_impact(user_uuid: str, account_ids: list[str], days: int = 3
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: forecast_budget_impact", "status_code": 200}))
     try:
-        from services.Analyser_Agent.budget_engine import BudgetEngine
+        from agents.core_financial.Analyser_Agent.budget_engine import BudgetEngine
         engine = BudgetEngine(user_uuid)
         budgets = engine.get_variance_for_category(None)
         

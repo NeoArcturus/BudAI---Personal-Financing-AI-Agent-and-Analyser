@@ -3,7 +3,7 @@ from fastapi import HTTPException, BackgroundTasks
 from sqlalchemy import text
 from models.database_models import User, Transaction
 from schemas.api_schema import TransactionLabelCorrectionRequest, RetrainCategorizerRequest
-from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
 from config import SessionLocal
 from services.logger_setup import get_core_logger
 import pandas as pd
@@ -13,90 +13,63 @@ import asyncio
 
 logger = get_core_logger(__name__)
 
-def background_retrain_and_recategorize(user_uuid: str, task_id: str):
+def background_retrain_and_recategorize(user_uuid: str, transaction_uuid: str, corrected_label: str, task_id: str):
     """
-    Background worker function that retrains the user's specific XGBoost categorization model
-    based on manual feedback, then recategorizes all historical transactions, updates memory indexes,
-    and refreshes dynamic forecasting parameters.
-    
-    Args:
-        user_uuid (str): The unique identifier of the user.
-        task_id (str): The UUID of the background task tracking this execution.
+    Background worker that uses RAG Fast-Learning.
+    It embeds the corrected merchant, upserts to merchant_knowledge,
+    and auto-sweeps past transactions using a Semantic Foreign Key.
     """
     try:
+        from langchain_openai import OpenAIEmbeddings
+        from datetime import datetime
+        
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
+        if not base_url.endswith("/v1"): 
+            base_url = f"{base_url}/v1"
+            
+        embeddings_model = OpenAIEmbeddings(
+            base_url=base_url,
+            model="text-embedding-nomic-embed-text-v1.5",
+            api_key="budai-local",
+            check_embedding_ctx_length=False
+        )
+        
         with SessionLocal() as session:
-            task = None
-            if task:
-                task.status = "processing"
-                session.commit()
-        agent = CategorizerAgent()
-        retrain_res = agent.retrain_from_feedback(user_uuid)
-        with SessionLocal() as session:
-            txs = session.query(Transaction).filter_by(user_uuid=user_uuid).all()
-            if not txs:
-                task = None
-                if task:
-                    task.status = "completed"
-                    session.commit()
+            tx = session.query(Transaction).filter_by(transaction_uuid=transaction_uuid, user_uuid=user_uuid).first()
+            if not tx or not tx.semi_cleaned_description:
                 return
-            df = pd.DataFrame([{
-                "transaction_uuid": t.transaction_uuid,
-                "description": t.description,
-                "amount": t.amount,
-                "date": t.date
-            } for t in txs])
-            from services.Categorizer_Agent.categorizer.preprocessor import Preprocessor
-            proc = Preprocessor(df, agent.local_st_path)
-            xgb_model_path = os.path.join(agent.model_dir, "gbm_model.joblib")
-            enc_path = os.path.join(agent.enc_dir, "label_encoder.joblib")
-            if os.path.exists(xgb_model_path) and os.path.exists(enc_path):
-                clean_df, embeddings = proc.preprocess_for_inference()
-                final_df = agent.categorizer.predict(clean_df, embeddings, xgb_model_path, enc_path)
-                category_map = final_df.set_index("transaction_uuid")["Category"].to_dict()
+            
+            merchant = tx.semi_cleaned_description
+            
+            # Embed the merchant
+            vec = embeddings_model.embed_documents([merchant])[0]
+            k_uuid = str(uuid.uuid4())
+            
+            # Upsert to merchant_knowledge (RAG Memory)
+            existing_k = session.execute(text("SELECT knowledge_uuid FROM merchant_knowledge WHERE clean_merchant_name = :name LIMIT 1"), {"name": merchant}).scalar()
+            if existing_k:
+                session.execute(text("UPDATE merchant_knowledge SET category = :cat, embedding = :vec, is_human_verified = TRUE WHERE knowledge_uuid = :k_uuid"), {"cat": corrected_label, "vec": str(vec), "k_uuid": existing_k})
+                returned_uuid = existing_k
             else:
-                logger.warning(json.dumps({"message": f"Model files not found, skipping prediction", "status_code": 400}))
-                category_map = {}
-            feedback_rows = session.execute(text("""
-                SELECT transaction_uuid, corrected_label
-                FROM transaction_label_feedback
-                WHERE user_uuid = :user_uuid
-            """), {"user_uuid": user_uuid}).fetchall()
-            feedback_map = {row[0]: row[1] for row in feedback_rows}
-            for t in txs:
-                new_cat = feedback_map.get(t.transaction_uuid) or category_map.get(t.transaction_uuid, t.category)
-                t.category = new_cat
+                session.execute(text("INSERT INTO merchant_knowledge (knowledge_uuid, clean_merchant_name, category, embedding, is_human_verified, created_at) VALUES (:uuid, :name, :cat, :vec, TRUE, :now)"), {"uuid": k_uuid, "name": merchant, "cat": corrected_label, "vec": str(vec), "now": datetime.utcnow()})
+                returned_uuid = k_uuid
+            
+            # Auto-sweep all transactions for this user + merchant
+            update_tx = text("""
+                UPDATE transactions 
+                SET category = :cat, merchant_knowledge_uuid = :k_uuid 
+                WHERE semi_cleaned_description = :name AND user_uuid = :user_uuid
+            """)
+            session.execute(update_tx, {
+                "cat": corrected_label, "k_uuid": returned_uuid, 
+                "name": merchant, "user_uuid": user_uuid
+            })
             session.commit()
-            from services.memory_service import MemoryService
-            try:
-                mem = MemoryService()
-                mem.index_transactions([{
-                    "transaction_uuid": t.transaction_uuid,
-                    "description": t.description,
-                    "category": t.category,
-                    "amount": t.amount,
-                    "date": t.date
-                } for t in txs], user_uuid)
-            except Exception as e:
-                logger.error(json.dumps({"message": f"Failed to update memory index: {e}", "status_code": 500}))
-            try:
-                from services.Forecaster_Agent.ForecasterAgent import ForecasterAgent
-                forecaster = ForecasterAgent()
-                accounts = session.execute(text("SELECT account_id FROM accounts WHERE user_uuid = :user_uuid"), {"user_uuid": user_uuid}).fetchall()
-                for (acc_id,) in accounts:
-                    forecaster.generate_dynamic_parameters(user_uuid, acc_id)
-            except Exception as e:
-                logger.error(json.dumps({"message": f"Failed to regenerate dynamic parameters: {e}", "status_code": 500}))
-            task = None
-            if task:
-                task.status = "completed"
-                session.commit()
+            
+            logger.info(json.dumps({"message": f"RAG Fast-Learning applied for {merchant} to {corrected_label}", "status_code": 200}))
+            
     except Exception as e:
         logger.error(json.dumps({"message": f"Task {task_id} failed with critical error: {e}", "status_code": 500}))
-        with SessionLocal() as session:
-            task = None
-            if task:
-                task.status = "failed"
-                session.commit()
 
 async def save_manual_label(payload: TransactionLabelCorrectionRequest, background_tasks: BackgroundTasks, current_user: User):
     """
@@ -146,7 +119,7 @@ async def save_manual_label(payload: TransactionLabelCorrectionRequest, backgrou
                 
         task_id = await asyncio.to_thread(_save_label_sync)
         if payload.retrain_model:
-            background_tasks.add_task(background_retrain_and_recategorize, current_user.user_uuid, task_id)
+            background_tasks.add_task(background_retrain_and_recategorize, current_user.user_uuid, payload.transaction_uuid, normalized_label, task_id)
         from utils.cache_utils import clear_user_cache
         clear_user_cache(str(current_user.user_uuid), namespace="transactions")
         clear_user_cache(str(current_user.user_uuid), namespace="categorizer")
@@ -185,7 +158,8 @@ async def retrain_categorizer(payload: RetrainCategorizerRequest, background_tas
                 pass
                 session.commit()
         await asyncio.to_thread(_queue_retrain)
-        background_tasks.add_task(background_retrain_and_recategorize, current_user.user_uuid, task_id)
+        # Global ML retraining is deprecated in favor of instant RAG Fast-Learning
+        logger.info(json.dumps({"message": "Global retraining skipped. RAG applies updates instantly.", "status_code": 200}))
         from utils.cache_utils import clear_user_cache
         clear_user_cache(str(current_user.user_uuid), namespace="transactions")
         clear_user_cache(str(current_user.user_uuid), namespace="categorizer")

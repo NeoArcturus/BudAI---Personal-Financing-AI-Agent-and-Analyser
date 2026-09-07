@@ -59,7 +59,7 @@ export const TransactionSplitterWidget = ({
 
   if (confirmed) {
     return (
-      <Card className="w-full max-w-sm bg-content2 backdrop-blur-md border border-success/30 shadow-sm my-2">
+      <Card className="w-full max-w-sm border-success/30 my-2">
         <div className="p-4 flex flex-row items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-success/20 flex items-center justify-center text-success">
             <Check size={16} />
@@ -74,7 +74,7 @@ export const TransactionSplitterWidget = ({
   }
 
   return (
-    <Card className="w-full max-w-md bg-content2 backdrop-blur-xl border border-white/5 shadow-2xl rounded-2xl overflow-hidden my-4">
+    <Card className="w-full max-w-md overflow-hidden my-4">
       <div className="flex flex-col items-start px-5 pt-5 pb-0">
         <div className="flex items-center gap-2 text-primary mb-1">
           <Split size={14} />

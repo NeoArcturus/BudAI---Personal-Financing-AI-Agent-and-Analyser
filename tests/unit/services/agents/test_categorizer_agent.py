@@ -14,7 +14,7 @@ async def test_categorizer_agent_expected_outputs(merchant_string, predicted_cat
     TDD: Asserts that the CategorizerAgent returns a strictly typed tuple containing 
     the resolved Category string and the mathematical confidence float.
     """
-    # Placeholder for: from services.Categorizer_Agent.CategorizerAgent import categorize_transaction
+    # Placeholder for: from agents.core_financial.Categorizer_Agent.CategorizerAgent import categorize_transaction
     async def mock_categorize_transaction(merchant):
         # Simulated agent logic
         if "TESCO" in merchant: return ("Groceries", 0.95)

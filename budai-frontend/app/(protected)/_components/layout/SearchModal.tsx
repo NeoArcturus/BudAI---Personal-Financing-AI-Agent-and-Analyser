@@ -145,11 +145,7 @@ export default function GlobalSearchModal() {
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onOpenChange={(open) => !open && closeSearch()}
-    >
-      <Modal.Backdrop className="bg-black/60 backdrop-blur-md fixed inset-0 z-[200]" />
+    <Modal.Backdrop isOpen={isOpen} onOpenChange={(open) => !open && closeSearch()} variant="blur">
       <Modal.Container className="fixed top-[15vh] left-1/2 -translate-x-1/2 z-[201] w-full max-w-2xl px-4 pointer-events-auto">
         <Modal.Dialog className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-2xl shadow-2xl overflow-hidden">
           <div className="p-4 border-b-[0.5px] border-white/5 flex items-center">
@@ -231,6 +227,6 @@ export default function GlobalSearchModal() {
           </div>
         </Modal.Dialog>
       </Modal.Container>
-    </Modal>
+    </Modal.Backdrop>
   );
 }

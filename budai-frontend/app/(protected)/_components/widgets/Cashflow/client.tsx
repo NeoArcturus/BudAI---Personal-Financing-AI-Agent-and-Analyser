@@ -20,7 +20,7 @@ import { useBudAI } from "@/app/context/AppContext";
 import { Transaction, BankChartData } from "@/types";
 import { today, getLocalTimeZone, DateValue } from "@internationalized/date";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
-import { useTransactions, usePersistedState } from "@/lib/hooks";
+import { useTransactions, usePersistedState, usePersistedDate } from "@/lib/hooks";
 import WidgetFlipCard, { FlipButton } from "../../internal/FlipCard";
 import { useRouter } from "next/navigation";
 import { WidgetContext } from "../../../home/DashboardClient";
@@ -49,11 +49,11 @@ export default function CashFlowWidgetClient({
     }
   }, [accounts, selectedAccountId, setSelectedAccountId]);
 
-  const [startDate, setStartDate] = useState<DateValue | null>(
+  const [startDate, setStartDate] = usePersistedDate(`cashflow_start_${instanceId || ""}`, 
     today(getLocalTimeZone()).subtract({ years: 1 }),
   );
 
-  const [endDate, setEndDate] = useState<DateValue | null>(
+  const [endDate, setEndDate] = usePersistedDate(`cashflow_end_${instanceId || ""}`, 
     today(getLocalTimeZone()),
   );
 
@@ -191,7 +191,7 @@ export default function CashFlowWidgetClient({
       isLoading={false}
       onDiscuss={handleDiscuss}
     >
-      <Card className="w-full h-full liquid-glass rounded-xl flex flex-col relative overflow-hidden">
+      <Card className="w-full h-full">
         <Card.Header className="flex flex-col gap-6 p-8 shrink-0 w-full z-10">
           <div className="flex justify-between items-start w-full">
             <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
@@ -201,7 +201,7 @@ export default function CashFlowWidgetClient({
               <FlipButton />
               <CloseButton
                 onPress={onRemove}
-                className="w-8 h-8 min-w-8 text-foreground/20 hover:text-foreground transition-all rounded-md"
+                className="w-8 h-8 min-w-8 opacity-50 hover:opacity-100 hover:bg-white/10 text-foreground transition-all rounded-full"
               />
             </div>
           </div>
@@ -220,7 +220,7 @@ export default function CashFlowWidgetClient({
                 fullWidth
                 className="bg-white/5 border-[0.5px] border-white/10 rounded-xl px-4 h-12 flex items-center transition-all focus-within:border-primary/50 shadow-inner"
               >
-                <DateField.Input className="flex-1 bg-transparent text-foreground text-[11px] font-mono outline-none">
+                <DateField.Input className="flex-1  text-foreground text-[11px] font-mono ">
                   {(segment) => (
                     <DateField.Segment
                       segment={segment}
@@ -234,7 +234,7 @@ export default function CashFlowWidgetClient({
                   </DatePicker.Trigger>
                 </DateField.Suffix>
               </DateField.Group>
-              <DatePicker.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-2xl p-6 shadow-2xl z-50">
+              <DatePicker.Popover className="popover min-w-max p-6">
                 <Calendar aria-label="From date" className="w-full min-w-65">
                   <Calendar.Header className="flex items-center gap-3 mb-6">
                     <Calendar.YearPickerTrigger className="flex items-center gap-2 mr-auto cursor-pointer hover:opacity-70 transition-opacity">
@@ -267,6 +267,16 @@ export default function CashFlowWidgetClient({
                       )}
                     </Calendar.GridBody>
                   </Calendar.Grid>
+                  <Calendar.YearPickerGrid>
+                    <Calendar.YearPickerGridBody>
+                      {({year}) => (
+                        <Calendar.YearPickerCell
+                          year={year}
+                          className="h-8 px-2 w-full flex items-center justify-center mx-auto text-xs font-mono text-foreground rounded-lg hover:bg-white/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-all"
+                        />
+                      )}
+                    </Calendar.YearPickerGridBody>
+                  </Calendar.YearPickerGrid>
                 </Calendar>
               </DatePicker.Popover>
             </DatePicker>
@@ -284,7 +294,7 @@ export default function CashFlowWidgetClient({
                 fullWidth
                 className="bg-white/5 border-[0.5px] border-white/10 rounded-xl px-4 h-12 flex items-center transition-all focus-within:border-primary/50 shadow-inner"
               >
-                <DateField.Input className="flex-1 bg-transparent text-foreground text-[11px] font-mono outline-none">
+                <DateField.Input className="flex-1  text-foreground text-[11px] font-mono ">
                   {(segment) => (
                     <DateField.Segment
                       segment={segment}
@@ -298,7 +308,7 @@ export default function CashFlowWidgetClient({
                   </DatePicker.Trigger>
                 </DateField.Suffix>
               </DateField.Group>
-              <DatePicker.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-2xl p-6 shadow-2xl z-50">
+              <DatePicker.Popover className="popover min-w-max p-6">
                 <Calendar aria-label="To date" className="w-full min-w-65">
                   <Calendar.Header className="flex items-center gap-3 mb-6">
                     <Calendar.YearPickerTrigger className="flex items-center gap-2 mr-auto cursor-pointer hover:opacity-70 transition-opacity">
@@ -331,6 +341,16 @@ export default function CashFlowWidgetClient({
                       )}
                     </Calendar.GridBody>
                   </Calendar.Grid>
+                  <Calendar.YearPickerGrid>
+                    <Calendar.YearPickerGridBody>
+                      {({year}) => (
+                        <Calendar.YearPickerCell
+                          year={year}
+                          className="h-8 px-2 w-full flex items-center justify-center mx-auto text-xs font-mono text-foreground rounded-lg hover:bg-white/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-all"
+                        />
+                      )}
+                    </Calendar.YearPickerGridBody>
+                  </Calendar.YearPickerGrid>
                 </Calendar>
               </DatePicker.Popover>
             </DatePicker>
@@ -349,7 +369,7 @@ export default function CashFlowWidgetClient({
                     className="text-foreground/30 shrink-0 pointer-events-none"
                   />
                 </Dropdown.Trigger>
-                <Dropdown.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-xl shadow-2xl w-64 z-50 p-2">
+                <Dropdown.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-xl shadow-2xl w-64 p-2">
                   <Dropdown.Menu
                     items={accounts.map(a => ({ ...a, id: a.account_id }))}
                     className="outline-none"

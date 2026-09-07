@@ -63,7 +63,7 @@ export const AdvisorSidebar = ({
       <div className="p-8">
         <Button
           onPress={handleNewChat}
-          variant="primary"
+          variant="ghost"
           className="w-full h-12 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 rounded-xl transition-all shadow-[0_0_20px_rgba(0,242,255,0.1)] hover:shadow-[0_0_30px_rgba(0,242,255,0.2)] group"
         >
           <div className="flex items-center justify-center gap-2">
@@ -87,7 +87,7 @@ export const AdvisorSidebar = ({
         </div>
       </div>
 
-      <ScrollShadow className="flex-1 px-4 pb-8 overflow-y-auto h-[calc(100vh-250px)]">
+      <ScrollShadow hideScrollBar className="flex-1 px-4 pb-8  h-[calc(100vh-250px)]">
         {sessionsLoading ? (
           <div className="flex flex-col gap-3 px-4">
             {[1, 2, 3].map((i) => (
@@ -159,14 +159,14 @@ export const AdvisorSidebar = ({
                   <Button
                     isIconOnly
                     size="sm"
-                    variant="primary"
-                    className="text-foreground/50 hover:text-foreground h-6 w-6 min-w-6 cursor-pointer data-[hover=true]:bg-transparent focus:outline-none data-[focus-visible=true]:outline-none data-[focus-visible=true]:ring-0"
+                    variant="ghost"
+                    className="text-foreground/50 hover:text-foreground h-6 w-6 min-w-6 cursor-pointer data-[hover=true]:bg-white/10 rounded-full focus:outline-none data-[focus-visible=true]:outline-none data-[focus-visible=true]:ring-0"
                   >
                     <MoreVertical size={14} />
                   </Button>
                   <Dropdown.Popover
                     placement="bottom end"
-                    className="bg-background/90 backdrop-blur-2xl border border-border/50 rounded-xl min-w-40 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 p-1"
+                    className="popover min-w-40 overflow-hidden animate-in fade-in zoom-in-95 duration-200 p-1"
                   >
                     <Dropdown.Menu
                       aria-label="Session Actions"
@@ -179,11 +179,11 @@ export const AdvisorSidebar = ({
                       <Dropdown.Item
                         id="rename"
                         textValue="Rename Session"
-                        className="text-foreground hover:bg-secondary data-[hover=true]:bg-secondary transition-colors w-full flex items-center px-3 py-2 rounded-lg"
+                        className="text-foreground hover:bg-white/10 data-[hover=true]:bg-white/10 transition-colors w-full flex items-center px-3 py-2 rounded-lg"
                       >
                         <div className="flex items-center gap-3">
                           <Pencil size={14} />
-                          <Label className="text-xs font-medium cursor-pointer">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest cursor-pointer">
                             Rename Session
                           </Label>
                         </div>
@@ -197,7 +197,7 @@ export const AdvisorSidebar = ({
                       >
                         <div className="flex items-center gap-3">
                           <Trash size={14} />
-                          <Label className="text-xs font-medium cursor-pointer">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest cursor-pointer">
                             Delete Session
                           </Label>
                         </div>
@@ -217,13 +217,13 @@ export const AdvisorSidebar = ({
           onOpenChange={(open) => {
             if (!open) setEditingId(null);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200"
         >
-          <Modal.Container className="relative w-full max-w-md bg-content1 border border-border rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 mx-4">
+          <Modal.Container className="modal relative w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 mx-4">
             <Modal.Dialog>
               <Modal.CloseTrigger
                 slot="close"
-                className="absolute right-4 top-4 text-foreground/50 hover:text-foreground transition-colors z-10"
+                className="absolute right-4 top-4 w-8 h-8 min-w-8 opacity-50 hover:opacity-100 hover:bg-white/10 text-foreground transition-all rounded-full flex items-center justify-center z-10 cursor-pointer"
               />
               <Modal.Header className="border-b border-border px-6 py-4 pr-12">
                 <Modal.Heading className="text-sm font-bold uppercase tracking-widest text-foreground">
@@ -246,7 +246,7 @@ export const AdvisorSidebar = ({
               <Modal.Footer className="border-t border-border px-6 py-4 flex justify-end gap-3">
                 <Button
                   slot="close"
-                  variant="primary"
+                  variant="ghost"
                   className="text-muted-foreground hover:bg-secondary hover:text-red-500 transition-all border-none h-10 rounded-xl px-4 text-xs font-semibold"
                 >
                   Cancel
@@ -254,7 +254,7 @@ export const AdvisorSidebar = ({
                 <Button
                   slot="close"
                   onPress={saveEdit}
-                  className="font-black uppercase tracking-widest text-[11px] h-10 rounded-xl px-6 transition-all cursor-pointer bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
+                  variant="secondary" className="font-black uppercase tracking-widest text-[11px] h-10 rounded-xl px-6 transition-all cursor-pointer "
                 >
                   Save Changes
                 </Button>

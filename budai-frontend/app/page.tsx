@@ -70,7 +70,7 @@ export default function LandingPage() {
 
   return (
     <div className="dark min-h-screen text-foreground selection:bg-primary/30 selection:text-primary relative overflow-x-hidden bg-transparent font-sans">
-      <nav className="fixed top-0 w-full z-50 h-24 bg-[#0c131d] border-b-[0.5px] border-white/5 flex justify-between items-center px-6 md:px-10 transition-all">
+      <nav className="fixed top-0 w-full h-24 bg-[#0c131d] border-b-[0.5px] border-white/5 flex justify-between items-center px-6 md:px-10 transition-all">
         <div className="flex items-center gap-2 shrink-0">
           <Image
             src="/FullLogo.jpg"
@@ -118,7 +118,7 @@ export default function LandingPage() {
           </Link>
           <Button
             onPress={() => router.push("/onboarding")}
-            className="font-extrabold text-xs tracking-wide px-6 h-9 rounded-md transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
+            variant="secondary" className="font-extrabold text-xs tracking-wide px-6 h-9 rounded-md transition-all "
           >
             Get Started
           </Button>
@@ -163,7 +163,7 @@ export default function LandingPage() {
             >
               <Button
                 onPress={() => router.push("/onboarding")}
-                className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl hover:scale-[1.02] transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
+                variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl "
               >
                 Get Started
               </Button>
@@ -909,7 +909,7 @@ export default function LandingPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-10 w-full">
                 <div className="flex items-start gap-5">
-                  <div className="p-3 rounded-2xl bg-primary/10 text-primary border border-primary/20">
+                  <div className="bg-primary/10 text-primary border border-primary/20 p-3 rounded-2xl ">
                     <Lock size={24} />
                   </div>
                   <div>
@@ -922,7 +922,7 @@ export default function LandingPage() {
                   </div>
                 </div>
                 <div className="flex items-start gap-5">
-                  <div className="p-3 rounded-2xl bg-primary/10 text-primary border border-primary/20">
+                  <div className="bg-primary/10 text-primary border border-primary/20 p-3 rounded-2xl ">
                     <EyeOff size={24} />
                   </div>
                   <div>

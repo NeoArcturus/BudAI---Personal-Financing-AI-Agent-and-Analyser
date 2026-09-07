@@ -166,7 +166,7 @@ def _parse_accounts(account_ids, user_uuid):
     return list(set(resolved_names)), ",".join(list(set(resolved_ids)))
 
 def _get_combined_categorized_data(accounts, suffix, user_uuid):
-    from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+    from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
     combined_df = pd.DataFrame()
     agent = CategorizerAgent()
     start_date = (datetime.now() - pd.Timedelta(days=730)).strftime("%Y-%m-%d")

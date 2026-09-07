@@ -134,7 +134,7 @@ export default function LoginPage() {
             <Button
               type="submit"
               isDisabled={isLoading}
-              className="w-full mt-4 font-extrabold tracking-widest rounded-2xl h-14 cursor-pointer transition-all flex items-center justify-center gap-3 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
+              variant="secondary" className="w-full mt-4 font-extrabold tracking-widest rounded-2xl h-14 cursor-pointer transition-all flex items-center justify-center gap-3 "
             >
               {isLoading && <Loader2 className="animate-spin" size={18} />}
               {isLoading ? "Authenticating..." : "Log In"}

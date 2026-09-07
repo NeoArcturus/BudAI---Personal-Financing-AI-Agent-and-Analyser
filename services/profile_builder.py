@@ -4,7 +4,7 @@ import os
 import asyncio
 from datetime import datetime, timedelta
 from services.api_integrator.account_reader import AccountReader
-from services.Forecaster_Agent.ForecasterAgent import ForecasterAgent
+from agents.core_financial.Forecaster_Agent.ForecasterAgent import ForecasterAgent
 from services.logger_setup import get_core_logger
 from services.mcp_bridge import MCPBridge
 

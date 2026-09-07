@@ -49,6 +49,12 @@ def background_fetch_async_results(results_uri: str, user_uuid: str, bank_uuid: 
                 sync_service = TrueLayerSync(user_id=user_uuid)
                 sync_service.process_and_store_transactions(session, tx_data, user_uuid, bank_uuid, acc_id)
                 
+                # PHASE 2: Trigger Event Bus Flow AFTER data is stored
+                from services.orchestration.prefect_flows import flow_event_bus_sync
+                flow_event_bus_sync(user_uuid)
+                logger.info(json.dumps({"message": f"Triggered Phase 2 Event Bus Flow for {user_uuid} post-sync.", "status_code": 200}))
+
+                
             else:
                 logger.error(json.dumps({"message": f"Failed to fetch results from {results_uri}. Status: {res.status_code}, Response: {res.text}", "status_code": 500}))
                 
@@ -58,26 +64,27 @@ def background_fetch_async_results(results_uri: str, user_uuid: str, bank_uuid: 
 async def handle_truelayer_webhook(payload: dict, background_tasks: BackgroundTasks, user_uuid: str, bank_uuid: str, acc_id: str):
     """
     Webhook endpoint to receive status updates for asynchronous TrueLayer data syncs.
-    If the sync succeeded, it queues a background task to retrieve and process the actual data.
-    
-    Args:
-        payload (dict): The webhook JSON payload from TrueLayer containing status and results_uri.
-        background_tasks (BackgroundTasks): FastAPI background tasks dependency.
-        user_uuid (str): The user UUID passed via query params during webhook registration.
-        bank_uuid (str): The bank UUID passed via query params.
-        acc_id (str): The account ID passed via query params.
-        
-    Returns:
-        dict: A standard 200 OK acknowledgment payload.
+    Implements Phase 2 Idempotency and triggers the Prefect Event Bus Sync flow.
     """
     status = payload.get("status")
     task_id = payload.get("task_id")
     
     logger.info(json.dumps({"message": f"Received TrueLayer Async Webhook for task {task_id} with status: {status}", "status_code": 200}))
     
+    # 1. Idempotency Lock
+    if task_id:
+        from config import redis_client
+        lock_key = f"webhook_lock:{task_id}"
+        if redis_client.get(lock_key):
+            logger.info(json.dumps({"message": f"Idempotency hit: Task {task_id} already processed. Dropping payload.", "status_code": 200}))
+            return {"status": "ok", "message": "Already processed"}
+        # Set lock for 24 hours
+        redis_client.setex(lock_key, 86400, "1")
+    
     if status == "Succeeded":
         results_uri = payload.get("results_uri")
         if results_uri and user_uuid and bank_uuid and acc_id:
+            # Traditional background task for fetching raw data
             background_tasks.add_task(
                 background_fetch_async_results, 
                 results_uri, 
@@ -85,7 +92,12 @@ async def handle_truelayer_webhook(payload: dict, background_tasks: BackgroundTa
                 bank_uuid, 
                 acc_id
             )
-            logger.info(json.dumps({"message": f"Offloaded results fetching for task {task_id} to background tasks.", "status_code": 200}))
+            
+            # PHASE 2: Trigger the Prefect Event Bus Flow to align buckets
+            # (Note: In a production setup, the Prefect flow should strictly run AFTER the fetch is complete, 
+            # so we could trigger it at the end of background_fetch_async_results, but triggering it here 
+            # illustrates the architecture handoff).
+            logger.info(json.dumps({"message": f"Background task for {user_uuid} queued.", "status_code": 200}))
         else:
             logger.warning(json.dumps({"message": f"Missing required query params (user_uuid, bank_uuid, acc_id) or results_uri.", "status_code": 400}))
             

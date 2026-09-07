@@ -13,7 +13,7 @@ from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
 class GenerateFinancialForecastInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
+    user_uuid: str = Field(default="", description="The user UUID.")
     account_id: str = Field(..., description="List of accounts.")
     days: int = Field(default=30)
     discipline_multiplier: float = Field(default=1.0)
@@ -22,11 +22,11 @@ class GenerateFinancialForecastInput(BaseModel):
     macro_environment: str = Field(default="Stable")
 
 class GetBudgetVarianceInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
+    user_uuid: str = Field(default="", description="The user UUID.")
     category: str | None = Field(default=None, description="Optional category to filter budget variance for.")
 
 class ForecastBudgetImpactInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
+    user_uuid: str = Field(default="", description="The user UUID.")
     account_id: str = Field(..., description="List of accounts.")
     days: int = Field(default=30)
 
@@ -35,7 +35,7 @@ class ForecastBudgetImpactInput(BaseModel):
 
 
 class GenerateExpenseForecastInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
+    user_uuid: str = Field(default="", description="The user UUID.")
     account_id: str = Field(...)
     days: int = Field(default=30)
 
@@ -46,29 +46,29 @@ class ScenarioInjection(BaseModel):
     description: str = Field(default="Scenario Event", description="A short description of the event.")
 
 class GenerateHypotheticalScenarioInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
+    user_uuid: str = Field(default="", description="The user UUID.")
     account_id: str = Field(..., description="List of account IDs or bank names.")
     days: int = Field(default=30, description="Forecast horizon in days.")
     injections: List[ScenarioInjection] = Field(..., description="List of hypothetical financial events to inject into the forecast.")
 
 class AnalyzeCriticalSurvivalMetricsInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
+    user_uuid: str = Field(default="", description="The user UUID.")
 
 class AnalyzeWealthAccelerationMetricsInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
+    user_uuid: str = Field(default="", description="The user UUID.")
 
 
 
 class PlotHealthRadarInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
+    user_uuid: str = Field(default="", description="The user UUID.")
 
 class UpdateTransactionCategoryInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
+    user_uuid: str = Field(default="", description="The user UUID.")
     transaction_uuid: str = Field(...)
     corrected_category: str = Field(...)
 
 class RetrainCategorizerInput(BaseModel):
-    user_uuid: str = Field(..., description="The user UUID.")
+    user_uuid: str = Field(default="", description="The user UUID.")
 
 def _cache_chart_data(data: Any) -> str:
     cache_id = f"CACHE_{uuid.uuid4().hex[:8].upper()}"

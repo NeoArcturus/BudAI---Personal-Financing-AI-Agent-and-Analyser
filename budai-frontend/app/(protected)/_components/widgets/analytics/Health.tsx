@@ -35,13 +35,13 @@ export function Health() {
   if (isLocked) {
     return (
       <WidgetFlipCard insight={undefined} isLoading={true} onDiscuss={() => {}}>
-        <Card className="w-full h-full liquid-glass rounded-xl flex flex-col relative overflow-hidden border border-primary/20 bg-primary/5">
+        <Card className="w-full h-full border border-primary/20 bg-primary/5">
           <div className="flex flex-col gap-6 p-8 shrink-0 w-full z-10">
             <div className="flex justify-between items-start w-full">
               <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0 animate-pulse">
                 [ ANALYSIS SYNCING ]
               </h3>
-              <CloseButton onPress={onRemove} className="opacity-50 hover:opacity-100 hover:bg-white/10 transition-all rounded-full" />
+              <CloseButton onPress={onRemove} className="w-8 h-8 min-w-8 opacity-50 hover:opacity-100 hover:bg-white/10 text-foreground transition-all rounded-full" />
             </div>
           </div>
           <div className="flex-1 w-full flex items-center justify-center p-8 pt-0 relative overflow-hidden">
@@ -57,13 +57,13 @@ export function Health() {
   if (isLoading) {
     return (
       <WidgetFlipCard insight={undefined} isLoading={true} onDiscuss={() => {}}>
-        <Card className="w-full h-full liquid-glass rounded-xl flex flex-col relative overflow-hidden">
+        <Card className="w-full h-full">
           <div className="flex flex-col gap-6 p-8 shrink-0 w-full z-10">
             <div className="flex justify-between items-start w-full">
               <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
                 Financial Health
               </h3>
-              <CloseButton onPress={onRemove} className="opacity-50 hover:opacity-100 hover:bg-white/10 transition-all rounded-full" />
+              <CloseButton onPress={onRemove} className="w-8 h-8 min-w-8 opacity-50 hover:opacity-100 hover:bg-white/10 text-foreground transition-all rounded-full" />
             </div>
           </div>
           <div className="flex-1 w-full flex items-center justify-center p-8 pt-0 relative overflow-hidden">
@@ -77,13 +77,13 @@ export function Health() {
   if (isError || !healthData) {
     return (
       <WidgetFlipCard insight={undefined} isLoading={false} onDiscuss={() => {}}>
-        <Card className="w-full h-full liquid-glass rounded-xl flex flex-col relative overflow-hidden">
+        <Card className="w-full h-full">
           <div className="flex flex-col gap-6 p-8 shrink-0 w-full z-10">
             <div className="flex justify-between items-start w-full">
               <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
                 Financial Health
               </h3>
-              <CloseButton onPress={onRemove} className="opacity-50 hover:opacity-100 hover:bg-white/10 transition-all rounded-full" />
+              <CloseButton onPress={onRemove} className="w-8 h-8 min-w-8 opacity-50 hover:opacity-100 hover:bg-white/10 text-foreground transition-all rounded-full" />
             </div>
           </div>
           <div className="flex-1 w-full flex flex-col items-center justify-center p-8 pt-0 relative overflow-hidden text-center">
@@ -96,13 +96,13 @@ export function Health() {
 
   return (
     <WidgetFlipCard insight={insights} isLoading={false} onDiscuss={() => {}}>
-      <Card className="w-full h-full liquid-glass rounded-xl flex flex-col relative overflow-hidden">
+      <Card className="w-full h-full">
         <div className="flex flex-col gap-6 p-8 shrink-0 w-full z-10">
           <div className="flex justify-between items-start w-full">
             <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
               Financial Health
             </h3>
-            <CloseButton onPress={onRemove} className="opacity-50 hover:opacity-100 hover:bg-white/10 transition-all rounded-full" />
+            <CloseButton onPress={onRemove} className="w-8 h-8 min-w-8 opacity-50 hover:opacity-100 hover:bg-white/10 text-foreground transition-all rounded-full" />
           </div>
         </div>
 

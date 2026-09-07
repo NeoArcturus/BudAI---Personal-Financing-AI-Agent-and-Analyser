@@ -10,7 +10,7 @@ async def test_forecaster_agent_30_day_projection_matrix():
     """
     current_balance = 1000.00
     
-    # Placeholder for: from services.Forecaster_Agent.ForecasterAgent import generate_30_day_projection
+    # Placeholder for: from agents.core_financial.Forecaster_Agent.ForecasterAgent import generate_30_day_projection
     async def mock_generate_projection(balance):
         # Simulating LSTM/Algorithmic output shape
         return np.array([balance - (i * 10) for i in range(30)])

@@ -1,8 +1,10 @@
 
 "use client";
+import { AnimatedNumber } from "@/app/(protected)/_components/ui/AnimatedNumber";
 
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { usePersistedState } from "@/lib/hooks";
 import { apiFetch } from "@/lib/api";
 import { Globe, TrendingUp, TrendingDown, ChevronDown } from "lucide-react";
 import {
@@ -39,10 +41,10 @@ export default function CommodityMarketWidgetClient({
   initialHistory,
 }: CommodityMarketWidgetProps) {
   const router = useRouter();
-  const { onRemove } = React.useContext(WidgetContext);
+  const { onRemove, instanceId } = React.useContext(WidgetContext);
   const { createNewSession } = useBudAI();
-  const [selectedSymbol, setSelectedSymbol] = useState<string>("GC=F");
-  const [selectedRange, setSelectedRange] = useState<string>("1M");
+  const [selectedSymbol, setSelectedSymbol] = usePersistedState<string>(`markets_symbol_${instanceId || ""}`, "GC=F");
+  const [selectedRange, setSelectedRange] = usePersistedState<string>(`markets_range_${instanceId || ""}`, "1M");
 
   const { data: historyData, isLoading: isHistoryLoading, isFetching: isHistoryFetching } = useQuery<{
     history: CommodityHistory[];
@@ -150,7 +152,7 @@ export default function CommodityMarketWidgetClient({
       isDataLoading={isHistoryLoading}
       onDiscuss={handleDiscuss}
     >
-      <Card className="w-full h-full liquid-glass border-none rounded-xl flex flex-col relative overflow-hidden">
+      <Card className="w-full h-full  border-none">
         <Card.Header className="p-8 border-b-[0.5px] border-white/5 shrink-0 flex items-center justify-between z-10">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-primary/10 border-[0.5px] border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(0,242,255,0.05)]">
@@ -169,7 +171,7 @@ export default function CommodityMarketWidgetClient({
             <FlipButton />
             <CloseButton
               onPress={onRemove}
-              className="w-8 h-8 min-w-8 text-foreground/20 hover:text-foreground transition-all rounded-md"
+              className="w-8 h-8 min-w-8 opacity-50 hover:opacity-100 hover:bg-white/10 text-foreground transition-all rounded-full"
             />
           </div>
         </Card.Header>
@@ -235,9 +237,7 @@ export default function CommodityMarketWidgetClient({
                       style={{ color: trendColor }}
                     >
                       £
-                      {activeHistory.history[
-                        activeHistory.history.length - 1
-                      ]?.Close.toFixed(2)}
+                      <AnimatedNumber value={activeHistory.history[activeHistory.history.length - 1]?.Close || 0} minimumFractionDigits={2} maximumFractionDigits={2} style="decimal" />
                     </span>
                   </div>
                 )}
@@ -274,7 +274,7 @@ export default function CommodityMarketWidgetClient({
                     {selectedRange}
                     <ChevronDown size={14} className="text-foreground/30" />
                   </Dropdown.Trigger>
-                  <Dropdown.Popover className="min-w-40 bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 shadow-2xl rounded-xl z-50">
+                  <Dropdown.Popover className="min-w-40 bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 shadow-2xl rounded-xl">
                     <Dropdown.Menu
                       selectionMode="single"
                       selectedKeys={new Set([selectedRange])}

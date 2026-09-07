@@ -62,11 +62,11 @@ export const UniversalWidgetContainer: React.FC<UniversalWidgetContainerProps> =
     >
       <div className="w-full h-full relative flex-1">
         {isLoading ? (
-          <div className="w-full h-full flex items-center justify-center liquid-glass rounded-xl">
+          <div className="w-full h-full flex items-center justify-center  rounded-xl">
             <Spinner size="lg" color="current" className="text-primary" />
           </div>
         ) : isError ? (
-          <div className="w-full h-full flex items-center justify-center text-danger text-xs uppercase tracking-wider font-bold text-center liquid-glass rounded-xl">
+          <div className="w-full h-full flex items-center justify-center text-danger text-xs uppercase tracking-wider font-bold text-center  rounded-xl">
             Failed to load data
             <br />
             <span className="text-[10px] font-mono mt-2 opacity-50">{String(error)}</span>

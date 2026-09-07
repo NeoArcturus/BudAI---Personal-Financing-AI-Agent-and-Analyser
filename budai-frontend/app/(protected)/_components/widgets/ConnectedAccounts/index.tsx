@@ -103,7 +103,7 @@ export default function ConnectedAccountsWidgetClient() {
 
   if (isLoading) {
     return (
-      <Card className="w-full h-full liquid-glass rounded-xl p-8 flex flex-col animate-pulse">
+      <Card className="w-full h-full rounded-2xl p-8 flex flex-col animate-pulse">
         <div className="h-4 w-32 bg-foreground/10 rounded mb-8"></div>
         <div className="flex-1 rounded-xl bg-foreground/5 border border-foreground/10"></div>
       </Card>
@@ -112,16 +112,15 @@ export default function ConnectedAccountsWidgetClient() {
 
   if (!accounts || accounts.length === 0) {
     return (
-      <Card className="w-full h-full liquid-glass rounded-xl p-10 flex flex-col justify-center items-center text-center">
+      <Card className="w-full h-full rounded-2xl p-10 flex flex-col justify-center items-center text-center">
         <CreditCard className="w-10 h-10 text-foreground/20 mb-4" />
         <span className="text-[10px] font-black text-foreground/40 uppercase tracking-[0.3em] mb-8">
           No bank connected
         </span>
         <Button
-          variant="primary"
           onPress={handleConnectAccount}
           isPending={isConnecting}
-          className="font-black text-[10px] uppercase tracking-widest px-8 h-12 rounded-lg cursor-pointer bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
+          variant="secondary" className="font-black text-[10px] uppercase tracking-widest px-8 h-12 rounded-lg cursor-pointer "
         >
           Connect Bank
         </Button>
@@ -130,7 +129,7 @@ export default function ConnectedAccountsWidgetClient() {
   }
 
   return (
-    <Card className="w-full h-full liquid-glass rounded-xl flex flex-col overflow-hidden">
+    <Card className="w-full h-full rounded-2xl flex flex-col overflow-hidden">
       <Card.Header className="flex justify-between items-center p-8 pb-4 shrink-0 z-20">
         <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0 flex items-center gap-2">
           Your Bank Accounts

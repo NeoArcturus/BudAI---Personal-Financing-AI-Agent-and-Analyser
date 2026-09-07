@@ -1,3 +1,5 @@
+from typing import Annotated
+from langgraph.prebuilt import InjectedState
 import json
 import logging
 import pandas as pd
@@ -12,7 +14,7 @@ logger = get_core_logger(__name__)
 
 
 @tool(args_schema=UpdateTransactionCategoryInput)
-def update_transaction_category(user_uuid: str, transaction_uuid: str, corrected_category: str) -> str:
+def update_transaction_category(transaction_uuid: str, corrected_category: str, user_uuid: Annotated[str, InjectedState("user_uuid")] = "") -> str:
     """
     Manually update the category of a specific transaction and trigger feedback learning.
     
@@ -26,7 +28,7 @@ def update_transaction_category(user_uuid: str, transaction_uuid: str, corrected
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: update_transaction_category", "status_code": 200}))
     try:
-        from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+        from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
         agent.save_manual_label(user_uuid, transaction_uuid, corrected_category)
         _res = f"Successfully updated transaction {transaction_uuid} to {corrected_category}."
@@ -39,7 +41,7 @@ def update_transaction_category(user_uuid: str, transaction_uuid: str, corrected
         return _res
 
 @tool(args_schema=RetrainCategorizerInput)
-def retrain_categorization_model(user_uuid: str) -> str:
+def retrain_categorization_model(user_uuid: Annotated[str, InjectedState("user_uuid")] = "") -> str:
     """
     Trigger the machine learning model to retrain based on all corrected manual feedback provided so far.
     
@@ -51,7 +53,7 @@ def retrain_categorization_model(user_uuid: str) -> str:
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: retrain_categorization_model", "status_code": 200}))
     try:
-        from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+        from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
         result = agent.retrain_from_feedback(user_uuid)
         if result.get("trained"):

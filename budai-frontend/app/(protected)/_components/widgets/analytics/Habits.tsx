@@ -68,7 +68,7 @@ export function Habits() {
         <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
           Spending Habits
         </h3>
-        <CloseButton onPress={onRemove} className="opacity-50 hover:opacity-100 hover:bg-white/10 transition-all rounded-full" />
+        <CloseButton onPress={onRemove} className="w-8 h-8 min-w-8 opacity-50 hover:opacity-100 hover:bg-white/10 text-foreground transition-all rounded-full" />
       </div>
     </Card.Header>
   );
@@ -76,7 +76,7 @@ export function Habits() {
   if (loading) {
     return (
       <WidgetFlipCard insight={undefined} isLoading={true} onDiscuss={() => {}}>
-        <Card className="w-full h-full liquid-glass rounded-xl flex flex-col relative overflow-hidden">
+        <Card className="w-full h-full">
           {headerContent}
           <Card.Content className="flex-1 w-full flex items-center justify-center p-8 pt-0 relative overflow-hidden">
             <Skeleton className="w-full h-full rounded-2xl bg-white/5" />
@@ -89,7 +89,7 @@ export function Habits() {
   if (error || !data || !chartConfig) {
     return (
       <WidgetFlipCard insight={undefined} isLoading={false} onDiscuss={() => {}}>
-        <Card className="w-full h-full liquid-glass rounded-xl flex flex-col relative overflow-hidden">
+        <Card className="w-full h-full">
           {headerContent}
           <Card.Content className="flex-1 w-full flex flex-col items-center justify-center p-8 pt-0 relative overflow-hidden text-center">
             <p className="text-foreground/40 text-[10px] font-mono uppercase tracking-[0.2em]">Analytics Unavailable</p>
@@ -101,7 +101,7 @@ export function Habits() {
 
   return (
     <WidgetFlipCard insight={undefined} isLoading={false} onDiscuss={() => {}}>
-      <Card className="w-full h-full liquid-glass rounded-xl flex flex-col relative overflow-hidden">
+      <Card className="w-full h-full">
         {headerContent}
 
         <Card.Content className="flex-1 w-full flex flex-col p-8 pt-0 relative overflow-hidden">

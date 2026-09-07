@@ -1,3 +1,4 @@
+import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Account, Transaction, BankChartData } from "@/types";
@@ -244,4 +245,25 @@ export function useUserProfile() {
     },
     staleTime: 1000 * 60 * 5,
   });
+}
+
+import { parseDate, DateValue, today, getLocalTimeZone } from "@internationalized/date";
+
+export function usePersistedDate(key: string, defaultDate: DateValue | null): [DateValue | null, (val: DateValue | null) => void] {
+  const [strValue, setStrValue] = usePersistedState<string | null>(key, defaultDate ? defaultDate.toString() : null);
+  
+  const dateValue = React.useMemo(() => {
+    if (!strValue) return null;
+    try {
+      return parseDate(strValue.split("T")[0]);
+    } catch (e) {
+      return defaultDate;
+    }
+  }, [strValue, defaultDate]);
+
+  const setDateValue = React.useCallback((val: DateValue | null) => {
+    setStrValue(val ? val.toString() : null);
+  }, [setStrValue]);
+
+  return [dateValue, setDateValue];
 }

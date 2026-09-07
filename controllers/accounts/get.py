@@ -23,6 +23,14 @@ async def fetch_user_accounts(user_uuid: str):
     try:
         user_acc = AccountReader(user_id=user_uuid)
         all_accounts = await asyncio.to_thread(user_acc.get_all_accounts)
+        
+        # Clamp negative physical account balances to 0 for the frontend.
+        # This prevents the frontend's totalWealth calculation from evaluating to negative,
+        # ensuring that the DEFAULT bucket displays 0 as per user requirements.
+        for acc in all_accounts:
+            if acc.get("balance") is not None and acc["balance"] < 0:
+                acc["balance"] = 0.0
+                
         return {"accounts": all_accounts}
     except Exception as e:
         logger.error(json.dumps({"message": f"Failed to fetch accounts for user {user_uuid}: {e}", "status_code": 500}))

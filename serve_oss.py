@@ -1,15 +1,17 @@
 from prefect import serve
 from prefect.events import DeploymentEventTrigger
+from services.orchestration.periodic_worker import run_periodic_evaluation
 from services.orchestration.cron_flows import (
     run_global_subscription_analytics_flow,
     run_global_hdbscan_clustering_flow,
     train_global_model_flow,
-    expire_stale_subscriptions_flow,
     oss_timescale_refresh_flow,
+    expire_stale_subscriptions_flow,
     oss_vector_optimizer_flow,
     oss_monte_carlo_sim_flow,
     oss_token_auditor_flow,
-    llm_categorization_sweep_flow
+    llm_categorization_sweep_flow,
+    oss_database_reconciliation_flow
 )
 
 if __name__ == "__main__":
@@ -75,6 +77,17 @@ if __name__ == "__main__":
         cron="*/10 * * * *"
     )
     
+    db_reconciliation = oss_database_reconciliation_flow.to_deployment(
+        name="oss-database-reconciliation",
+        cron="0 1 * * *" # Nightly at 1 AM
+    )
+    
+    periodic_evaluator = run_periodic_evaluation.to_deployment(
+        name="Periodic-Evaluator",
+        cron="*/5 * * * *",
+        tags=["ai-evaluation", "system-core"]
+    )
+    
     print("Serving Open Source Deployments...")
     serve(
         subscription_analytics, 
@@ -85,5 +98,7 @@ if __name__ == "__main__":
         vector_optimizer, 
         monte_carlo, 
         token_auditor,
-        categorization_sweeper
+        categorization_sweeper,
+        db_reconciliation,
+        periodic_evaluator
     )

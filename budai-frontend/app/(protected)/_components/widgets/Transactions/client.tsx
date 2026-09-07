@@ -26,7 +26,7 @@ import { useBudAI } from "@/app/context/AppContext";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { parseDate, CalendarDate } from "@internationalized/date";
-import { useTransactions, usePersistedState } from "@/lib/hooks";
+import { useTransactions, usePersistedState, usePersistedDate } from "@/lib/hooks";
 import WidgetFlipCard from "../../internal/FlipCard";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -39,21 +39,21 @@ interface LedgerTableWidgetProps {
 type ExtendedTx = Transaction;
 
 const STANDARD_CATEGORIES = [
-            "Income",
-            "Housing",
-            "Food & Dining",
-            "Transportation",
-            "Utilities",
-            "Entertainment & Lifestyle",
-            "Subscriptions & Digital Services",
-            "Shopping & Retail",
-            "Healthcare",
-            "Transfers & Payments",
-            "Fees & Charges",
-            "Savings & Investments",
-            "Taxes & Government Payments",
-            "Uncategorized"
-        ];
+  "Income",
+  "Housing",
+  "Food & Dining",
+  "Transportation",
+  "Utilities",
+  "Entertainment & Lifestyle",
+  "Subscriptions & Digital Services",
+  "Shopping & Retail",
+  "Healthcare",
+  "Transfers & Payments",
+  "Fees & Charges",
+  "Savings & Investments",
+  "Taxes & Government Payments",
+  "Uncategorized"
+];
 
 export default function LedgerTableWidgetClient({
   initialData,
@@ -76,21 +76,21 @@ export default function LedgerTableWidgetClient({
     }
   }, [accounts, selectedAccountId, setSelectedAccountId]);
 
-  const [fromDate, setFromDate] = useState<CalendarDate | null>(
+  const [fromDate, setFromDate] = usePersistedDate(`tx_start_${instanceId || ""}`,
     parseDate(
       new Date(new Date().setDate(new Date().getDate() - 180))
         .toISOString()
         .split("T")[0],
     ),
   );
-  const [toDate, setToDate] = useState<CalendarDate | null>(
+  const [toDate, setToDate] = usePersistedDate(`tx_end_${instanceId || ""}`,
     parseDate(new Date().toISOString().split("T")[0]),
   );
 
   const [selectedTx, setSelectedTx] = useState<ExtendedTx | null>(null);
   const [editCategory, setEditCategory] = useState<string>("");
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
-  const [isSurvivalMode, setIsSurvivalMode] = useState<boolean>(false);
+  const [isSurvivalMode, setIsSurvivalMode] = usePersistedState<boolean>(`tx_survival_${instanceId || ""}`, false);
 
   const { data: transactions = [], isLoading, isFetching } = useTransactions(
     selectedAccountId,
@@ -236,195 +236,20 @@ export default function LedgerTableWidgetClient({
       isDataLoading={isLoading}
       onDiscuss={handleDiscuss}
     >
-      <Card className="w-full h-full liquid-glass rounded-3xl flex flex-col overflow-hidden relative font-geist">
-        <Card.Header className="flex flex-col p-8 border-b-[0.5px] border-white/5 shrink-0 gap-6 w-full z-10">
+      <Card className="w-full h-full  font-geist">
+        <Card.Header className="flex flex-col p-6 border-b border-white/5 shrink-0 gap-4 w-full z-10">
           <div className="flex justify-between items-center w-full">
             <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
-              Transaction history
+              Recent Transactions
             </h3>
-            <CloseButton
-              onPress={onRemove}
-              className="text-foreground/20 hover:text-foreground transition-all rounded-md"
-            />
-          </div>
-
-          <div className="flex flex-wrap sm:flex-nowrap items-center justify-start gap-2 w-full pointer-events-auto">
-            <DatePicker
-              className="w-50 sm:min-w-35 sm:max-w-40"
-              name="From Date"
-              value={fromDate}
-              onChange={setFromDate}
-            >
-              <DateField.Group
-                fullWidth
-                className="bg-white/5 border border-white/10 rounded-xl px-3 h-10 flex items-center transition-colors focus-within:border-primary/50"
-              >
-                <DateField.Input className="flex-1 bg-transparent text-foreground text-sm outline-none">
-                  {(segment) => (
-                    <DateField.Segment
-                      segment={segment}
-                      className="focus:bg-primary/20 rounded px-0.5 outline-none"
-                    />
-                  )}
-                </DateField.Input>
-                <DateField.Suffix className="ml-2 flex items-center">
-                  <DatePicker.Trigger className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-                    <CalendarIcon size={14} />
-                  </DatePicker.Trigger>
-                </DateField.Suffix>
-              </DateField.Group>
-              <DatePicker.Popover className="bg-black/60 backdrop-blur-3xl border border-white/10 rounded-2xl p-4 shadow-2xl z-50">
-                <Calendar aria-label="From date" className="w-full min-w-65">
-                  <Calendar.Header className="flex items-center gap-2 mb-4">
-                    <Calendar.YearPickerTrigger className="flex items-center gap-1 mr-auto cursor-pointer hover:opacity-80 transition-opacity">
-                      <Calendar.YearPickerTriggerHeading className="text-base font-semibold text-primary" />
-                      <Calendar.YearPickerTriggerIndicator className="text-muted-foreground w-4 h-4" />
-                    </Calendar.YearPickerTrigger>
-                    <Calendar.NavButton
-                      slot="previous"
-                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
-                    />
-                    <Calendar.NavButton
-                      slot="next"
-                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
-                    />
-                  </Calendar.Header>
-                  <Calendar.Grid className="w-full border-collapse">
-                    <Calendar.GridHeader>
-                      {(day) => (
-                        <Calendar.HeaderCell className="text-xs font-medium text-muted-foreground pb-3 text-center">
-                          {day}
-                        </Calendar.HeaderCell>
-                      )}
-                    </Calendar.GridHeader>
-                    <Calendar.GridBody>
-                      {(date) => (
-                        <Calendar.Cell
-                          date={date}
-                          className="w-8 h-8 flex items-center justify-center mx-auto text-sm text-foreground rounded-full hover:bg-white/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-colors"
-                        />
-                      )}
-                    </Calendar.GridBody>
-                  </Calendar.Grid>
-                </Calendar>
-              </DatePicker.Popover>
-            </DatePicker>
-
-            <span className="text-muted-foreground">-</span>
-
-            <DatePicker
-              className="w-50 sm:min-w-35 sm:max-w-40"
-              name="To Date"
-              value={toDate}
-              onChange={setToDate}
-            >
-              <DateField.Group
-                fullWidth
-                className="bg-white/5 border border-white/10 rounded-xl px-3 h-10 flex items-center transition-colors focus-within:border-primary/50"
-              >
-                <DateField.Input className="flex-1 bg-transparent text-foreground text-sm outline-none">
-                  {(segment) => (
-                    <DateField.Segment
-                      segment={segment}
-                      className="focus:bg-primary/20 rounded px-0.5 outline-none"
-                    />
-                  )}
-                </DateField.Input>
-                <DateField.Suffix className="ml-2 flex items-center">
-                  <DatePicker.Trigger className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-                    <CalendarIcon size={14} />
-                  </DatePicker.Trigger>
-                </DateField.Suffix>
-              </DateField.Group>
-              <DatePicker.Popover className="bg-black/60 backdrop-blur-3xl border border-white/10 rounded-2xl p-4 shadow-2xl z-50">
-                <Calendar aria-label="To date" className="w-full min-w-65">
-                  <Calendar.Header className="flex items-center gap-2 mb-4">
-                    <Calendar.YearPickerTrigger className="flex items-center gap-1 mr-auto cursor-pointer hover:opacity-80 transition-opacity">
-                      <Calendar.YearPickerTriggerHeading className="text-base font-semibold text-primary" />
-                      <Calendar.YearPickerTriggerIndicator className="text-muted-foreground w-4 h-4" />
-                    </Calendar.YearPickerTrigger>
-                    <Calendar.NavButton
-                      slot="previous"
-                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
-                    />
-                    <Calendar.NavButton
-                      slot="next"
-                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors"
-                    />
-                  </Calendar.Header>
-                  <Calendar.Grid className="w-full border-collapse">
-                    <Calendar.GridHeader>
-                      {(day) => (
-                        <Calendar.HeaderCell className="text-xs font-medium text-muted-foreground pb-3 text-center">
-                          {day}
-                        </Calendar.HeaderCell>
-                      )}
-                    </Calendar.GridHeader>
-                    <Calendar.GridBody>
-                      {(date) => (
-                        <Calendar.Cell
-                          date={date}
-                          className="w-8 h-8 flex items-center justify-center mx-auto text-sm text-foreground rounded-full hover:bg-white/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-colors"
-                        />
-                      )}
-                    </Calendar.GridBody>
-                  </Calendar.Grid>
-                </Calendar>
-              </DatePicker.Popover>
-            </DatePicker>
-
-            <div className="ml-auto flex shrink-0">
-              <Dropdown>
-                <Dropdown.Trigger className="h-12 min-h-12 min-w-40 max-w-55 bg-white/5 hover:bg-white/10 border-[0.5px] border-white/10 text-[11px] text-foreground font-black uppercase tracking-widest rounded-xl px-5 flex items-center justify-between transition-all cursor-pointer outline-none focus:border-primary/50 shadow-inner">
-                  <span className="truncate pointer-events-none">
-                    {activeAccountName}
-                  </span>
-                  <ChevronDown
-                    size={14}
-                    className="text-foreground/30 shrink-0 pointer-events-none"
-                  />
-                </Dropdown.Trigger>
-                <Dropdown.Popover
-                  className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 shadow-2xl rounded-2xl min-w-50 z-50"
-                  placement="bottom left"
-                >
-                  <Dropdown.Menu
-                    items={dropdownItems}
-                    selectionMode="single"
-                    selectedKeys={new Set([selectedAccountId])}
-                    onSelectionChange={(keys: Selection) => {
-                      if (keys !== "all") {
-                        const selectedValue = Array.from(keys)[0];
-                        if (selectedValue)
-                          setSelectedAccountId(String(selectedValue));
-                      }
-                    }}
-                    className="p-2"
-                  >
-                    {(acc: Account) => (
-                      <Dropdown.Item
-                        key={acc.account_id}
-                        textValue={acc.bank_name}
-                        className="rounded-xl transition-all data-[hover=true]:bg-white/10 py-3 px-4 outline-none cursor-pointer w-full block border-[0.5px] border-transparent data-[hover=true]:border-primary/30"
-                      >
-                        <div className="flex flex-col w-full">
-                          <Badge.Anchor className="w-full relative flex items-center justify-between">
-                            <Label className="text-[11px] font-black text-foreground uppercase tracking-tight cursor-pointer pointer-events-none pr-4 italic">
-                              {acc.bank_name} ({acc.currency || "GBP"})
-                            </Label>
-                            {selectedAccountId === acc.account_id && (
-                              <Badge className="bg-primary border-none w-1.5 h-1.5 min-w-0 p-0 relative transform-none rounded-full shrink-0 shadow-[0_0_10px_rgba(0,242,255,0.6)]" />
-                            )}
-                          </Badge.Anchor>
-                          <Description className="text-[9px] text-foreground/30 font-mono tracking-[0.2em] pointer-events-none mt-1.5 uppercase">
-                            Account No: *{acc.account_number?.slice(-4) || "0000"}
-                          </Description>
-                        </div>
-                      </Dropdown.Item>
-                    )}
-                  </Dropdown.Menu>
-                </Dropdown.Popover>
-              </Dropdown>
+            <div className="flex items-center gap-4">
+              <Button size="sm" variant="ghost" className="text-[10px] font-black text-foreground/50 hover:text-foreground uppercase tracking-widest bg-transparent border-none">
+                View All
+              </Button>
+              <CloseButton
+                onPress={onRemove}
+                className="w-8 h-8 min-w-8 opacity-50 hover:opacity-100 hover:bg-white/10 text-foreground transition-all rounded-full"
+              />
             </div>
           </div>
         </Card.Header>
@@ -490,223 +315,157 @@ export default function LedgerTableWidgetClient({
                   </div>
                 </div>
               )}
-            <Table className="w-full h-full text-left relative table-fixed">
-              <Table.ScrollContainer className="h-full w-full overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] px-2 pb-4">
-                <Table.Content
-                  aria-label="Transaction Ledger"
-                  className="w-full"
-                >
-                  <Table.Header className="sticky top-0 bg-black/40 backdrop-blur-xl z-20 border-b-[0.5px] border-white/5 w-full">
-                    <Table.Column
-                      isRowHeader
-                      className="py-5 px-8 text-[9px] font-black uppercase tracking-[0.3em] text-foreground/30 w-[20%] sm:w-[50%]"
+              <div className="flex flex-col w-full h-full overflow-y-auto custom-scrollbar px-6 pb-6 pt-2">
+                {filteredTransactions.map((tx, i) => {
+                  const displayDesc = tx.merchant_name || tx.description || "Unknown";
+                  const amount = tx.amount ?? 0;
+                  const cat = tx.category || "Uncategorized";
+                  const initial = displayDesc.charAt(0).toUpperCase();
+                  const isPositive = amount > 0 || cat === "Income";
+
+                  const formattedAmount = new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: activeAccount?.currency || "USD",
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  }).format(Math.abs(amount));
+
+                  // Using standard colors to match image
+                  let iconColor = isPositive ? "text-green-500 bg-green-500/10" : "text-orange-500 bg-orange-500/10";
+
+                  // We'll mimic the brands based on initial for a closer match to the image
+                  if (displayDesc.toLowerCase().includes("netflix")) iconColor = "text-red-500 bg-red-500/10";
+                  if (displayDesc.toLowerCase().includes("spotify")) iconColor = "text-green-500 bg-green-500/10";
+                  if (displayDesc.toLowerCase().includes("amazon")) iconColor = "text-orange-500 bg-orange-500/10";
+
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => {
+                        setSelectedTx(tx);
+                        setEditCategory(cat);
+                      }}
+                      className="flex justify-between items-center py-4 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer transition-colors w-full group"
                     >
-                      Description
-                    </Table.Column>
-                    <Table.Column className="py-5 px-8 text-[9px] font-black uppercase tracking-[0.3em] text-foreground/30 w-[30%] sm:w-[15%]">
-                      Amount
-                    </Table.Column>
-                    <Table.Column className="py-5 px-8 text-[9px] font-black uppercase tracking-[0.3em] text-foreground/30 w-[25%] sm:w-[15%]">
-                      Date
-                    </Table.Column>
-                    <Table.Column className="py-5 px-8 text-[9px] font-black uppercase tracking-[0.3em] text-foreground/30 w-[25%] sm:w-[20%]">
-                      Category
-                    </Table.Column>
-                  </Table.Header>
-                  <Table.Body className="w-full divide-y-[0.5px] divide-white/5">
-                    {filteredTransactions.map((tx, i) => {
-                      const displayDesc = tx.merchant_name || tx.description || "UNDEFINED_ENTITY";
-                      const amount = tx.amount ?? 0;
-                      const cat = tx.category || "UNCATEGORIZED";
-                      const initial = displayDesc.charAt(0).toUpperCase();
-                      const isPositive = amount > 0 || cat === "Income";
-
-                      const formattedAmount = new Intl.NumberFormat("en-GB", {
-                        style: "currency",
-                        currency: activeAccount?.currency || "GBP",
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      }).format(Math.abs(amount));
-
-                      return (
-                        <Table.Row
-                          key={i}
-                          className="hover:bg-white/3 transition-all group border-b-[0.5px] border-white/5 last:border-0 w-full"
+                      <div className="flex items-center gap-4">
+                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shadow-sm", iconColor)}>
+                          {initial}
+                        </div>
+                        <div className="flex flex-col gap-1 text-left">
+                          <span className="font-bold text-sm tracking-wide text-foreground group-hover:text-primary transition-colors">
+                            {displayDesc}
+                          </span>
+                          <span className="text-[10px] font-mono text-foreground/50 uppercase tracking-widest">
+                            {formatShortDate(tx.timestamp || tx.date || "")}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span
+                          className={cn(
+                            "font-mono text-sm tracking-tighter font-bold",
+                            isPositive ? "text-green-500" : "text-red-500",
+                          )}
                         >
-                          <Table.Cell className="py-5 px-8 w-[20%] sm:w-[50%]">
-                            <div 
-                              className="flex items-center gap-5 w-full cursor-pointer"
-                              onClick={() => {
-                                setSelectedTx(tx);
-                                setEditCategory(cat);
-                              }}
-                            >
-                              <div
-                                className={cn(
-                                  "w-8 h-8 shrink-0 rounded-lg flex items-center justify-center border-[0.5px] text-[11px] font-black shadow-sm",
-                                  isPositive
-                                    ? "border-green-500/40 bg-green-500/10 text-green-500"
-                                    : "border-primary/40 bg-primary/10 text-primary",
-                                )}
-                              >
-                                {initial}
-                              </div>
-                              <span className="hidden sm:block text-foreground text-[11px] font-black uppercase tracking-tight truncate w-full group-hover:text-primary transition-colors italic hover:underline">
-                                {displayDesc}
-                              </span>
-                            </div>
-                          </Table.Cell>
-                          <Table.Cell className="py-5 px-8 w-[30%] sm:w-[15%]">
-                            <span
-                              className={cn(
-                                "text-[12px] font-black font-mono tracking-tighter",
-                                isPositive
-                                  ? "text-green-500/60"
-                                  : "text-red-500/60",
-                              )}
-                            >
-                              {isPositive ? "+" : "-"}
-                              {formattedAmount}
-                            </span>
-                          </Table.Cell>
-                          <Table.Cell className="py-5 px-8 text-[10px] font-bold font-mono text-foreground/30 uppercase tracking-widest whitespace-nowrap w-[25%] sm:w-[15%]">
-                            {new Date(
-                              tx.timestamp || tx.date || "",
-                            ).toLocaleDateString("en-GB", {
-                              day: "2-digit",
-                              month: "2-digit",
-                              year: "2-digit",
-                            })}
-                          </Table.Cell>
-                          <Table.Cell className="py-5 px-8 w-[25%] sm:w-[20%]">
-                            <div className="flex flex-col gap-1.5 items-start">
-                              <div
-                                className={cn(
-                                  "px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border-[0.5px] w-fit shadow-sm",
-                                  getCategoryTheme(cat),
-                                )}
-                              >
-                                {cat}
-                              </div>
-                              {tx.sub_category && (
-                                <span className="text-[9px] text-foreground/40 uppercase tracking-widest font-mono">
-                                  {tx.sub_category}
-                                </span>
-                              )}
-                              {tx.tags && tx.tags.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                  {tx.tags.map((tag: string, idx: number) => {
-                                    let tagClass = "bg-white/5 text-foreground/50 border-white/10";
-                                    if (tag === "#recurring") tagClass = "bg-purple-500/20 text-purple-400 border-purple-500/40";
-                                    if (tag === "#essential" || tag === "#housing") tagClass = "bg-green-500/20 text-green-400 border-green-500/40";
-                                    if (tag === "#price-hike") tagClass = "bg-red-500/20 text-red-500 border-red-500/40 animate-pulse";
-                                    
-                                    return (
-                                      <span key={idx} className={cn("px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border-[0.5px]", tagClass)}>
-                                        {tag}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          </Table.Cell>
-                        </Table.Row>
-                      );
-                    })}
-                  </Table.Body>
-                </Table.Content>
-              </Table.ScrollContainer>
-            </Table>
+                          {isPositive ? "+" : "-"}{formattedAmount}
+                        </span>
+                        <span className="text-[9px] font-mono uppercase tracking-widest font-black text-green-500/80">
+                          Completed
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </Card.Content>
 
-        <Modal
+        <Modal.Backdrop
           isOpen={!!selectedTx}
           onOpenChange={(isOpen) => {
             if (!isOpen) setSelectedTx(null);
           }}
+          variant="blur"
         >
-          <Modal.Backdrop className="fixed inset-0 z-100 bg-black/40 backdrop-blur-md">
-            <Modal.Container className="fixed inset-0 z-101 flex items-center justify-center p-4">
-              <Modal.Dialog className="liquid-glass border-cyan-400/60 border rounded-xl shadow-2xl p-6 relative max-w-md w-full pointer-events-auto">
-                <Modal.CloseTrigger className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors cursor-pointer" />
-                <Modal.Header className="mb-6">
-                  <Modal.Heading className="text-2xl font-bold text-foreground tracking-tight">
-                    Transaction Details
+            <Modal.Container placement="center" >
+              <Modal.Dialog className="modal p-8 relative max-w-md w-full pointer-events-auto bg-black/90 border border-white/5 shadow-2xl rounded-2xl flex flex-col">
+                <Modal.CloseTrigger className="absolute top-6 right-6 text-foreground/40 hover:text-foreground transition-colors cursor-pointer" />
+                <Modal.Header className="mb-6 flex justify-center">
+                  <Modal.Heading className="text-[10px] font-black uppercase tracking-[0.4em] italic text-primary text-center">
+                    Transactions Details
                   </Modal.Heading>
                 </Modal.Header>
-                <Modal.Body className="space-y-6">
+                <Modal.Body className="space-y-0 p-0">
                   {selectedTx && (
                     <>
-                      <div className="flex flex-col gap-1">
-                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                          Description
-                        </Label>
-                        <p className="text-foreground text-base font-medium">
-                          {selectedTx.merchant_name || selectedTx.description || "Unknown"}
+                      <div className="flex flex-col items-center justify-center border-b border-white/5 pb-8 mb-6">
+                        <p
+                          className={cn(
+                            "text-4xl font-mono tracking-tighter font-bold",
+                            (selectedTx.amount ?? 0) > 0 || selectedTx.category === "Income"
+                              ? "text-white"
+                              : "text-foreground/80",
+                          )}
+                        >
+                          {(selectedTx.amount ?? 0) > 0 || selectedTx.category === "Income" ? "+" : "-"}{" "}
+                          {new Intl.NumberFormat("en-GB", {
+                            style: "currency",
+                            currency: activeAccount?.currency || "GBP",
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          }).format(Math.abs(selectedTx.amount ?? 0))}
                         </p>
-                        {selectedTx.merchant_name && selectedTx.description && selectedTx.merchant_name !== selectedTx.description && (
-                          <p className="text-muted-foreground text-xs mt-1 font-mono">
-                            Raw: {selectedTx.description}
-                          </p>
-                        )}
                       </div>
-                      <div className="flex justify-between items-center bg-secondary/50 p-4 rounded-lg border border-border">
+
+                      <div className="grid grid-cols-2 gap-y-6 gap-x-4 mb-8">
                         <div className="flex flex-col gap-1">
-                          <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                            Amount
+                          <Label className="text-[9px] font-black uppercase tracking-[0.3em] text-foreground/40 block">
+                            Date
                           </Label>
-                          <p
-                            className={cn(
-                              "text-2xl font-bold tracking-tight",
-                              (selectedTx.amount ?? 0) > 0 ||
-                                selectedTx.category === "Income"
-                                ? "text-green-500"
-                                : "text-destructive",
-                            )}
-                          >
-                            {(selectedTx.amount ?? 0) > 0 ||
-                            selectedTx.category === "Income"
-                              ? "+"
-                              : "-"}{" "}
-                            {new Intl.NumberFormat("en-GB", {
-                              style: "currency",
-                              currency: activeAccount?.currency || "GBP",
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            }).format(Math.abs(selectedTx.amount ?? 0))}
+                          <p className="font-mono text-sm tracking-tight text-foreground font-medium">
+                            {formatShortDate(selectedTx.timestamp || selectedTx.date || "")}
                           </p>
                         </div>
                         <div className="flex flex-col gap-1 text-right">
-                          <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                            Date
+                          <Label className="text-[9px] font-black uppercase tracking-[0.3em] text-foreground/40 block">
+                            Status
                           </Label>
-                          <p className="text-foreground font-medium text-sm">
-                            {formatShortDate(
-                              selectedTx.timestamp || selectedTx.date || "",
-                            )}
+                          <p className="font-mono text-sm tracking-tight text-foreground font-medium text-green-500/80">
+                            CLEARED
                           </p>
+                        </div>
+                        <div className="flex flex-col gap-1 col-span-2">
+                          <Label className="text-[9px] font-black uppercase tracking-[0.3em] text-foreground/40 block">
+                            Merchant
+                          </Label>
+                          <p className="font-mono text-sm tracking-tight text-foreground font-medium">
+                            {selectedTx.merchant_name || selectedTx.description || "Unknown"}
+                          </p>
+                          {selectedTx.merchant_name && selectedTx.description && selectedTx.merchant_name !== selectedTx.description && (
+                            <p className="text-[10px] font-mono text-foreground/20 mt-1 uppercase tracking-wider">
+                              RAW: {selectedTx.description}
+                            </p>
+                          )}
                         </div>
                       </div>
 
-                      <div className="flex flex-col gap-2 pt-2">
-                        <Label className="text-sm font-bold text-foreground">
-                          Edit Category
+                      <div className="flex flex-col gap-2 pt-2 border-t border-white/5 mt-2">
+                        <Label className="text-[9px] font-black uppercase tracking-[0.3em] text-foreground/40 mt-4 block">
+                          Category
                         </Label>
                         <Dropdown>
-                          <Dropdown.Trigger className="w-50 relative flex items-center justify-center bg-transparent hover:bg-secondary/50 border border-primary/70 text-foreground rounded-md h-12 px-4 cursor-pointer transition-colors outline-none">
-                            <ChevronDown
-                              size={16}
-                              className="absolute left-4 text-muted-foreground pointer-events-none"
-                            />
-                            <span className="font-medium pointer-events-none">
+                          <Dropdown.Trigger className="w-56 relative flex items-center justify-between bg-white/5 hover:bg-white/10 border border-white/10 text-foreground rounded-lg h-12 px-4 cursor-pointer transition-colors outline-none">
+                            <span className="font-mono text-xs font-bold tracking-tight pointer-events-none">
                               {editCategory || "Select Category"}
                             </span>
+                            <ChevronDown
+                              size={14}
+                              className="text-foreground/40 pointer-events-none"
+                            />
                           </Dropdown.Trigger>
                           <Dropdown.Popover
-                            className="bg-popover border border-primary/70 shadow-2xl rounded-xl w-50 min-w-50"
+                            className="bg-black/95 backdrop-blur-3xl border border-white/10 shadow-2xl rounded-xl w-56"
                             placement="bottom"
                           >
                             <Dropdown.Menu
@@ -730,46 +489,44 @@ export default function LedgerTableWidgetClient({
                                   key={cat.id}
                                   id={cat.id}
                                   textValue={cat.name}
-                                  className="rounded-xl transition-all data-[hover=true]:bg-secondary py-3 px-4 outline-none cursor-pointer focus:ring-0 focus:outline-none w-full block"
+                                  className="rounded-lg transition-all data-[hover=true]:bg-white/10 py-3 px-4 outline-none cursor-pointer focus:ring-0 focus:outline-none w-full block"
                                 >
-                                  <Badge.Anchor className="w-full relative flex items-center justify-between">
-                                    <Label className="text-sm font-medium text-foreground cursor-pointer block w-full text-left pointer-events-none pr-4">
+                                  <div className="w-full relative flex items-center justify-between pointer-events-none">
+                                    <span className="text-xs font-mono font-bold text-foreground">
                                       {cat.name}
-                                    </Label>
+                                    </span>
                                     {editCategory === cat.name && (
-                                      <Badge className="bg-green-500 border-none w-2.5 h-2.5 min-w-0 p-0 relative transform-none rounded-full shrink-0" />
+                                      <div className="bg-primary w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,242,255,0.8)]" />
                                     )}
-                                  </Badge.Anchor>
+                                  </div>
                                 </Dropdown.Item>
                               )}
                             </Dropdown.Menu>
                           </Dropdown.Popover>
                         </Dropdown>
                       </div>
+
+                      <div className="mt-8 pt-4 border-t border-white/5 flex flex-col gap-4">
+                        <Button
+                          variant="primary"
+                          onPress={handleUpdateCategory}
+                          isDisabled={isUpdating}
+                          className="w-full bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-mono text-xs font-bold tracking-widest px-8 h-12 rounded-lg transition-all cursor-pointer shadow-[0_0_15px_rgba(0,242,255,0.1)]"
+                        >
+                          {isUpdating ? "PROCESSING..." : "CHANGE CATEGORY"}
+                        </Button>
+                        <div className="flex justify-center w-full">
+                          <span className="text-[8px] font-mono tracking-widest text-foreground/20 uppercase">
+                            TXN-UUID: {selectedTx.transaction_id || "N/A"}
+                          </span>
+                        </div>
+                      </div>
                     </>
                   )}
                 </Modal.Body>
-                <Modal.Footer className="flex justify-center gap-4 mt-6 pb-2">
-                  <Button
-                    variant="ghost"
-                    onPress={() => setSelectedTx(null)}
-                    className="text-muted-foreground hover:text-foreground font-medium px-6 h-11 cursor-pointer bg-transparent border-none"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onPress={handleUpdateCategory}
-                    isDisabled={isUpdating}
-                    className="bg-primary hover:bg-primary/80 text-primary-foreground font-bold px-8 h-11 rounded-xl transition-colors cursor-pointer border-none shadow-[0_0_15px_rgba(0,242,255,0.4)]"
-                  >
-                    {isUpdating ? "Retraining..." : "Update & Retrain"}
-                  </Button>
-                </Modal.Footer>
               </Modal.Dialog>
             </Modal.Container>
           </Modal.Backdrop>
-        </Modal>
       </Card>
     </WidgetFlipCard>
   );

@@ -81,8 +81,27 @@ def run_global_hdbscan_clustering_flow():
 
 @task(retries=2, retry_delay_seconds=120)
 def generate_proactive_insights_task():
-    from services.analytics.proactive_insights import generate_proactive_insights_for_all_users
-    generate_proactive_insights_for_all_users()
+    from agents.core_financial.Analyser_Agent.AnalyserAgent import AnalyserAgent
+    from langchain_core.messages import SystemMessage, HumanMessage
+    from config import SessionLocal
+    from models.database_models import User
+    
+    agent = AnalyserAgent()
+    
+    with SessionLocal() as session:
+        user_uuids = [u[0] for u in session.query(User.user_uuid).all()]
+        
+    for user_id in user_uuids:
+        messages = [
+            SystemMessage(content="You are the Analyser Agent. Review the user's spending trends and decide whether to send a system alert. Use tools."),
+            HumanMessage(content=f"Please analyze spending trends for user {user_id}.")
+        ]
+        try:
+            agent.app.invoke({"messages": messages, "user_id": user_id})
+        except Exception as e:
+            from services.logger_setup import get_core_logger
+            logger = get_core_logger(__name__)
+            logger.error(f"Failed to generate proactive insights for {user_id}: {e}")
 
 @flow(name="Nightly Proactive Insights")
 def generate_proactive_insights_flow():
@@ -110,7 +129,7 @@ def train_global_model_task():
         raise e
         
     try:
-        from services.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+        from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
         res = agent.train_global()
         if res.get("trained"):
@@ -125,6 +144,7 @@ def train_global_model_task():
 def train_global_model_flow():
     train_global_model_task()
 
+
 @flow(name="Nightly Maintenance Routine")
 def nightly_maintenance_flow():
     # Consolidating these to stay under the Prefect Free Tier deployment limit
@@ -137,7 +157,14 @@ def nightly_maintenance_flow():
 def cloud_failsafe_sync_flow():
     logger = get_run_logger()
     logger.info("Executing daily catch-all TrueLayer sync...")
-    # TODO: Implement catch-all sync
+    try:
+        from agents.infrastructure.CloudFailsafe_Agent.CloudFailsafeAgent import CloudFailsafeAgent
+        from langchain_core.messages import HumanMessage
+        agent = CloudFailsafeAgent()
+        # Use SYSTEM as user_uuid to sweep all missing webhooks
+        agent.app.invoke({"messages": [HumanMessage(content="Trigger failsafe sync for all missing webhook data.")], "user_uuid": "SYSTEM"})
+    except Exception as e:
+        logger.error(f"Failsafe sync failed: {e}")
 
 @flow(name="Timescale Aggregate Refresh")
 def oss_timescale_refresh_flow():
@@ -155,111 +182,118 @@ def oss_timescale_refresh_flow():
 def oss_vector_optimizer_flow():
     logger = get_run_logger()
     logger.info("Optimizing pgvector indexes...")
-    # TODO: Implement VACUUM ANALYZE for vector tables
+    from agents.infrastructure.VectorMaintenance_Agent.VectorMaintenanceAgent import VectorMaintenanceAgent
+    agent = VectorMaintenanceAgent()
+    agent.optimize_rag_memory()
+
+@flow(name="Database Reconciliation")
+def oss_database_reconciliation_flow():
+    logger = get_run_logger()
+    logger.info("Auditing zero-sum math...")
+    from agents.infrastructure.Reconciliation_Agent.ReconciliationAgent import DatabaseReconciliationAgent
+    agent = DatabaseReconciliationAgent()
+    agent.audit_zero_sum_math()
 
 @flow(name="Monte Carlo Simulator")
 def oss_monte_carlo_sim_flow():
     logger = get_run_logger()
     logger.info("Running Monte Carlo simulations...")
-    # TODO: Implement stress tests
+    try:
+        from agents.intelligence.MonteCarloSimulation_Agent.MonteCarloSimulationAgent import MonteCarloSimulationAgent
+        from langchain_core.messages import HumanMessage
+        agent = MonteCarloSimulationAgent()
+        agent.app.invoke({"messages": [HumanMessage(content="Run 1000 Monte Carlo simulations to stress test runway.")], "user_uuid": "SYSTEM"})
+    except Exception as e:
+        logger.error(f"Monte Carlo sim failed: {e}")
 
 @flow(name="Token Auditor")
 def oss_token_auditor_flow():
     logger = get_run_logger()
     logger.info("Auditing LLM token usage...")
-    # TODO: Implement token audit
+    try:
+        from agents.infrastructure.TokenAuditing_Agent.TokenAuditingAgent import TokenAuditingAgent
+        from langchain_core.messages import HumanMessage
+        agent = TokenAuditingAgent()
+        agent.app.invoke({"messages": [HumanMessage(content="Audit system-wide LLM token usage.")] , "user_uuid": "SYSTEM"})
+    except Exception as e:
+        logger.error(f"Token audit failed: {e}")
 
-@task(retries=2, retry_delay_seconds=30, tags=["alienware-llm"])
+@task(retries=1, tags=["alienware-llm"])
 def llm_categorization_sweep_task():
     logger = get_run_logger()
-    logger.info("Starting LLM Categorization Sweep...")
-    import os
-    import json
-    import uuid
-    from datetime import datetime
-    from sqlalchemy import text
-    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-    from config import SessionLocal
+    logger.info("Starting Agentic Categorization Sweep...")
     
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-    if not base_url.endswith("/v1"): 
-        base_url = f"{base_url}/v1"
-        
-    chat_model = ChatOpenAI(
-        base_url=base_url,
-        model="qwen2.5-coder:7b",
-        api_key="budai-local",
-        temperature=0.0
-    )
-    embeddings_model = OpenAIEmbeddings(
-        base_url=base_url,
-        model="text-embedding-nomic-embed-text-v1.5",
-        api_key="budai-local",
-        check_embedding_ctx_length=False
-    )
+    from sqlalchemy import text
+    from config import SessionLocal
+    from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+    from langchain_core.messages import SystemMessage, HumanMessage
+    
+    agent = CategorizerAgent()
     
     with SessionLocal() as session:
-        # Get Uncategorised transactions
-        query = text("SELECT transaction_uuid, semi_cleaned_description FROM transactions WHERE category = 'Uncategorised' LIMIT 50")
+        # Get orphans missing their Semantic Foreign Key
+        query = text("SELECT transaction_uuid, semi_cleaned_description FROM transactions WHERE merchant_knowledge_uuid IS NULL LIMIT 10")
         results = session.execute(query).fetchall()
         
         if not results:
-            logger.info("No uncategorised transactions found.")
+            logger.info("No uncategorized transactions found.")
             return
             
-        # Deduplicate to save LLM tokens
-        tx_dict = {}
         for row in results:
             tx_id, desc = row[0], row[1]
-            if desc not in tx_dict:
-                tx_dict[desc] = []
-            tx_dict[desc].append(tx_id)
+            logger.info(f"Delegating categorization of '{desc}' to CategorizerAgent...")
             
-        unique_merchants = list(tx_dict.keys())
-        
-        # Batch LLM Prompt
-        prompt = f"""
-You are a financial classification engine. Map the following merchants to this strict taxonomy list: 
-['Food & Dining', 'Shopping & Retail', 'Transport', 'Utilities', 'Entertainment & Lifestyle', 'Healthcare', 'Subscriptions & Digital Services']. 
-Return ONLY a valid JSON object matching this schema exactly: {{"classifications": [{{"merchant": "name", "category": "Category"}}]}}
-Merchants: {json.dumps(unique_merchants)}
-"""
-        
-        try:
-            response = chat_model.invoke(prompt)
-            data = json.loads(response.content.strip().strip("```json").strip("```"))
-            classifications = data.get("classifications", [])
+            messages = [
+                SystemMessage(content="You are the Categorization Agent. You must investigate the merchant and save the correct category. Use tools."),
+                HumanMessage(content=f"Please categorize transaction {tx_id} for merchant: {desc}")
+            ]
+            agent.app.invoke({"messages": messages, "transaction_uuid": tx_id, "merchant_name": desc})
             
-            for item in classifications:
-                merchant = item.get("merchant")
-                category = item.get("category")
-                
-                if merchant in tx_dict:
-                    # Update transactions optimistically
-                    tx_ids = tx_dict[merchant]
-                    update_query = text("UPDATE transactions SET category = :cat WHERE transaction_uuid = ANY(:tx_ids) AND category = 'Uncategorised'")
-                    session.execute(update_query, {"cat": category, "tx_ids": tx_ids})
-                    
-                    # Embed and Upsert into MerchantKnowledge
-                    vec = embeddings_model.embed_documents([merchant])[0]
-                    k_uuid = str(uuid.uuid4())
-                    
-                    upsert_query = text("""
-                        INSERT INTO merchant_knowledge (knowledge_uuid, clean_merchant_name, category, embedding, is_human_verified, created_at)
-                        VALUES (:uuid, :name, :cat, :vec, FALSE, :now)
-                    """)
-                    session.execute(upsert_query, {
-                        "uuid": k_uuid, "name": merchant, "cat": category, 
-                        "vec": str(vec), "now": datetime.utcnow()
-                    })
-                    
-            session.commit()
-            logger.info(f"Successfully swept and categorized {len(classifications)} unique merchants.")
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Failed LLM categorization sweep: {e}")
+        logger.info("Agentic categorization sweep complete.")
 
 @flow(name="LLM Categorization Sweeper")
 def llm_categorization_sweep_flow():
     llm_categorization_sweep_task()
 
+@task(retries=1, retry_delay_seconds=60)
+def autonomous_fiduciary_patrol_task():
+    logger = get_run_logger()
+    logger.info("Executing 10-Minute Autonomous Fiduciary Patrol...")
+    try:
+        from services.orchestrator_graph import get_orchestrator_app
+        from langchain_core.messages import HumanMessage
+        from config import SessionLocal
+        from models.database_models import User
+        
+        app = get_orchestrator_app()
+        
+        with SessionLocal() as session:
+            user_uuids = [u[0] for u in session.query(User.user_uuid).all()]
+            
+        for user_id in user_uuids:
+            from langfuse.callback import CallbackHandler
+            import time
+            
+            logger.info(f"Patrolling user {user_id}")
+            
+            langfuse_handler = CallbackHandler(
+                session_id=f"patrol_{user_id}_{int(time.time())}",
+                user_id=str(user_id),
+                tags=["10-minute-patrol", "autonomous"]
+            )
+            
+            # This triggers the Langfuse-backed system prompt to evaluate Liability Horizon and Pending TXs
+            app.invoke({
+                "messages": [HumanMessage(content="Wake up. Execute the 10-minute patrol. Fetch the Liability Horizon, check Pending Transactions, and perform any necessary Virtual PIS Sweeps to protect Tier 1 and Tier 2 goals.")],
+                "user_uuid": user_id
+            }, {
+                "configurable": {"thread_id": f"patrol_{user_id}"},
+                "callbacks": [langfuse_handler]
+            })
+            
+    except Exception as e:
+        logger.error(f"Fiduciary Patrol failed: {e}")
+
+@flow(name="10-Minute Autonomous Patroller")
+def autonomous_fiduciary_patrol_flow():
+    autonomous_fiduciary_patrol_task()

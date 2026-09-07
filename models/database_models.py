@@ -1,10 +1,11 @@
-from typing import Optional, List, Any, Dict
+from typing import Optional, List, Any
 from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import UniqueConstraint, Column, JSON
+from sqlalchemy import UniqueConstraint, Column, JSON, CheckConstraint
 from pgvector.sqlalchemy import Vector
 from datetime import datetime
+from enum import Enum
 from services.logger_setup import get_core_logger
-from models.status_codes import OpenBankingStatus, PipelineStatus, TaskStatus
+from models.status_codes import PipelineStatus
 
 logger = get_core_logger(__name__)
 
@@ -19,6 +20,7 @@ class User(SQLModel, table=True):
     country_of_tax_residence: Optional[str] = Field(default="UK")
     persona: Optional[str] = None
     is_onboarded: bool = Field(default=False)
+    last_evaluated_at: Optional[datetime] = None
     
     banks: List["Bank"] = Relationship(back_populates="user")
     accounts: List["Account"] = Relationship(back_populates="user")
@@ -78,7 +80,9 @@ class Transaction(SQLModel, table=True):
     semi_cleaned_description: Optional[str] = None
     fully_cleaned_description: Optional[str] = None
     is_semantic_anomaly: Optional[bool] = Field(default=False)
+    is_pending: bool = Field(default=False)
     tags: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
+    merchant_knowledge_uuid: Optional[str] = Field(default=None, foreign_key="merchant_knowledge.knowledge_uuid")
     
     user: Optional["User"] = Relationship(back_populates="transactions")
     account: Optional["Account"] = Relationship(back_populates="transactions")
@@ -164,3 +168,47 @@ class MerchantKnowledge(SQLModel, table=True):
     embedding: Any = Field(sa_column=Column(Vector(768)))
     is_human_verified: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class BucketType(str, Enum):
+    DEFAULT = "DEFAULT"
+    RECURRING = "RECURRING"
+    ACCUMULATING = "ACCUMULATING"
+    TARGET_DATE = "TARGET_DATE"
+    LIABILITY = "LIABILITY"
+
+class Bucket(SQLModel, table=True):
+    __tablename__ = "buckets"
+    id: str = Field(primary_key=True, index=True)
+    user_id: str = Field(foreign_key="users.user_uuid", index=True)
+    type: BucketType
+    name: str
+    target_amount: Optional[float] = None
+    target_date: Optional[datetime] = None
+    priority_index: float = Field(default=100.0)
+    cached_balance: float = Field(default=0.0)
+    is_active: bool = Field(default=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Note: Ensuring the default bucket rule can be handled in service layer or DB constraint (partial index).
+
+class VirtualTransfer(SQLModel, table=True):
+    __tablename__ = "virtual_transfers"
+    id: str = Field(primary_key=True, index=True)
+    source_bucket_id: str = Field(foreign_key="buckets.id")
+    target_bucket_id: str = Field(foreign_key="buckets.id")
+    amount: float
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        CheckConstraint('amount > 0', name='check_amount_positive'),
+    )
+
+class SystemAlert(SQLModel, table=True):
+    __tablename__ = "system_alerts"
+    id: str = Field(primary_key=True, index=True)
+    user_id: str = Field(foreign_key="users.user_uuid", index=True)
+    event_type: str
+    message: str
+    is_read: bool = Field(default=False)
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+

@@ -302,7 +302,7 @@ export default function OnboardingPage() {
                       </CheckboxGroup>
 
                       <div className="flex justify-end mt-4">
-                        <Button onPress={nextStep} isDisabled={goals.length === 0} className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl hover:scale-[1.02] transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg flex items-center justify-center gap-2 whitespace-nowrap">
+                        <Button onPress={nextStep} isDisabled={goals.length === 0} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
                           <span>CONTINUE</span>
                           <ArrowRight size={16} />
                         </Button>
@@ -364,7 +364,7 @@ export default function OnboardingPage() {
                           <ArrowLeft size={16} />
                           <span>BACK</span>
                         </Button>
-                        <Button onPress={nextStep} isDisabled={incomePattern.length === 0} className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl hover:scale-[1.02] transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg flex items-center justify-center gap-2 whitespace-nowrap">
+                        <Button onPress={nextStep} isDisabled={incomePattern.length === 0} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
                           <span>CONTINUE</span>
                           <ArrowRight size={16} />
                         </Button>
@@ -418,7 +418,7 @@ export default function OnboardingPage() {
                           <ArrowLeft size={16} />
                           <span>BACK</span>
                         </Button>
-                        <Button onPress={nextStep} className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl hover:scale-[1.02] transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg flex items-center justify-center gap-2 whitespace-nowrap">
+                        <Button onPress={nextStep} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
                           <span>CONTINUE</span>
                           <ArrowRight size={16} />
                         </Button>
@@ -465,7 +465,7 @@ export default function OnboardingPage() {
                           <ArrowLeft size={16} />
                           <span>BACK</span>
                         </Button>
-                        <Button onPress={nextStep} className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl hover:scale-[1.02] transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg flex items-center justify-center gap-2 whitespace-nowrap">
+                        <Button onPress={nextStep} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
                           <span>CONTINUE</span>
                         </Button>
                       </div>
@@ -546,7 +546,7 @@ export default function OnboardingPage() {
                             <ArrowLeft size={16} />
                             <span>BACK</span>
                           </Button>
-                          <Button type="submit" isPending={processingState !== "idle"} className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl hover:scale-[1.02] transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg flex items-center justify-center gap-2 whitespace-nowrap">
+                          <Button type="submit" isPending={processingState !== "idle"} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
                             <span>CONNECT YOUR BANK ACCOUNT</span>
                           </Button>
                         </div>

@@ -33,7 +33,7 @@ async def parse_dashboard_intent(request: IntentRequest, current_user: User = De
     """
     try:
         llm = ChatOpenAI(
-            model="lmstudio-community/Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit", 
+            model="Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit", 
             base_url=OLLAMA_BASE_URL,
             api_key="budai-local",
             temperature=0

@@ -1,10 +1,12 @@
 "use client";
+import { AnimatedNumber } from "@/app/(protected)/_components/ui/AnimatedNumber";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { TrendingUp, TrendingDown, Clock, ShieldCheck, Target, ChevronDown } from "lucide-react";
 import { Settings } from "lucide-react";
 import { Card, Button, Skeleton, Dropdown, CloseButton, Badge, Label, Description } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
+import { usePersistedState } from "@/lib/hooks";
 import { apiFetch } from "@/lib/api";
 import CoreChartEngine from "../../internal/ChartEngine";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
@@ -21,7 +23,7 @@ export default function BalanceForecastWidgetClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [wealthForecast, setWealthForecast] = useState<any>(null);
 
-  const [localAccountId, setLocalAccountId] = useState<string>("");
+  const [localAccountId, setLocalAccountId] = usePersistedState<string>(`balance_account_${instanceId || ""}`, "");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [simulationOverrides, setSimulationOverrides] = useState<SimulationOverrides>({
     discipline_multiplier: 1.0,
@@ -94,7 +96,7 @@ export default function BalanceForecastWidgetClient() {
   const activeAccount = accounts.find(a => a.account_id === localAccountId);
 
   const frontContent = (
-    <Card className="w-full h-full liquid-glass border-none rounded-xl flex flex-col relative overflow-hidden">
+    <Card className="w-full h-full  border-none">
       <Card.Header className="flex flex-col gap-6 p-8 shrink-0 w-full z-10">
         <div className="flex justify-between items-start w-full">
           <h3 className="text-[10px] font-black text-primary uppercase tracking-[0.4em] italic m-0">
@@ -105,7 +107,7 @@ export default function BalanceForecastWidgetClient() {
             {onRemove && (
               <CloseButton
                 onPress={onRemove}
-                className="w-8 h-8 min-w-8 text-foreground/20 hover:text-foreground transition-all rounded-md"
+                className="w-8 h-8 min-w-8 opacity-50 hover:opacity-100 hover:bg-white/10 text-foreground transition-all rounded-full"
               />
             )}
           </div>
@@ -126,7 +128,7 @@ export default function BalanceForecastWidgetClient() {
                   className="text-foreground/30 shrink-0 pointer-events-none"
                 />
               </Dropdown.Trigger>
-              <Dropdown.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-xl shadow-2xl w-64 z-50 p-2">
+              <Dropdown.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-xl shadow-2xl w-64 p-2">
                 <Dropdown.Menu
                   items={accounts.map(a => ({ ...a, id: a.account_id }))}
                   className="outline-none"
@@ -192,13 +194,13 @@ export default function BalanceForecastWidgetClient() {
             Projected End
           </p>
           <p className="text-xl font-normal text-primary tracking-tighter font-mono leading-none">
-            £{stats.projected.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            £<AnimatedNumber value={stats.projected} minimumFractionDigits={0} maximumFractionDigits={0} />
           </p>
         </div>
         <div className={`text-right flex flex-col items-end`}>
           <p className={`text-[10px] flex items-center gap-1 font-black uppercase tracking-widest ${stats.change >= 0 ? "text-green-500" : "text-red-500"}`}>
             {stats.change >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            {stats.change >= 0 ? "+" : ""}{stats.change.toFixed(1)}%
+            {stats.change >= 0 ? "+" : ""}<AnimatedNumber value={stats.change} style="decimal" minimumFractionDigits={1} maximumFractionDigits={1} />%
           </p>
           <p className="text-[8px] text-foreground/30 uppercase tracking-[0.2em] mt-1">Growth Rate</p>
         </div>

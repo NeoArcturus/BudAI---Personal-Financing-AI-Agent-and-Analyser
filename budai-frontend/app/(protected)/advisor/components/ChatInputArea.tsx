@@ -62,7 +62,7 @@ export const ChatInputArea = ({
         <Button
           isIconOnly
           onPress={() => stop()}
-          className="bg-danger/20 text-danger w-10 h-10 min-w-10 rounded-full hover:bg-danger/30 shrink-0 cursor-pointer transition-all"
+          className="w-10 h-10 min-w-10 rounded-full shrink-0 cursor-pointer transition-all bg-danger/20 text-danger hover:bg-danger/30 border border-danger/30 shadow-[0_0_15px_rgba(243,18,96,0.1)] hover:shadow-[0_0_20px_rgba(243,18,96,0.2)]"
         >
           <Square size={14} fill="currentColor" />
         </Button>
@@ -70,9 +70,9 @@ export const ChatInputArea = ({
         <Button
           isIconOnly
           onPress={handleSend}
-          className="w-10 h-10 min-w-10 rounded-full shrink-0 cursor-pointer transition-all"
+          className="w-10 h-10 min-w-10 rounded-full shrink-0 cursor-pointer transition-all bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 shadow-[0_0_15px_rgba(0,242,255,0.1)] hover:shadow-[0_0_20px_rgba(0,242,255,0.2)]"
         >
-          <Send size={16} className="ml-1" />
+          <Send size={16} />
         </Button>
       )}
     </div>

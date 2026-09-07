@@ -8,8 +8,8 @@ from services.mcp_tools.shared_utils import (
     GetBudgetVarianceInput,
     _cache_chart_data, _parse_accounts, _get_combined_categorized_data
 )
-from services.Analyser_Agent.expense_analysis import ExpenseAnalysis
-from services.Analyser_Agent.budget_engine import BudgetEngine
+from agents.core_financial.Analyser_Agent.expense_analysis import ExpenseAnalysis
+from agents.core_financial.Analyser_Agent.budget_engine import BudgetEngine
 from services.logger_setup import get_core_logger
 
 logger = get_core_logger(__name__)

@@ -5,7 +5,7 @@ from services.mcp_tools.shared_utils import (
     AnalyzeCriticalSurvivalMetricsInput, AnalyzeWealthAccelerationMetricsInput,
     PlotHealthRadarInput, _cache_chart_data
 )
-from services.Analyser_Agent.financial_health import FinancialHealthAnalyzer
+from agents.core_financial.Analyser_Agent.financial_health import FinancialHealthAnalyzer
 from services.logger_setup import get_core_logger
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any

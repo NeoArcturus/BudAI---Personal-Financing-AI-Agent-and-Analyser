@@ -531,7 +531,7 @@ export const BudAIProvider = ({
           <Modal.Dialog>
             <Modal.Header>
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                <div className="bg-primary/10 text-primary border border-primary/20 p-2 rounded-xl ">
                   <Wallet size={20} />
                 </div>
                 <h3 className="text-foreground font-black uppercase tracking-[0.4em] text-xs">
@@ -605,7 +605,7 @@ export const BudAIProvider = ({
                 Cancel
               </Button>
               <Button
-                className="flex-2 font-black uppercase tracking-widest text-[11px] h-12 rounded-xl transition-all bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-lg"
+                variant="secondary" className="flex-2 font-black uppercase tracking-widest text-[11px] h-12 rounded-xl transition-all "
                 onPress={async () => {
                   if (selectedAccountIds.length > 0) {
                     setIsAccountSelectorOpen(false);
