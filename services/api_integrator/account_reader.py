@@ -1,3 +1,4 @@
+from models.status_codes import OpenBankingStatus
 import json
 import pandas as pd
 from typing import Any
@@ -37,7 +38,7 @@ class AccountReader:
                     logo_url = provider_logos.get(b.truelayer_provider_id, "")
                     display_name = provider_names.get(
                         b.truelayer_provider_id, b.bank_name)
-                    if b.consent_status == 'revoked':
+                    if b.consent_status == OpenBankingStatus.BANK_REVOKED_CONSENT.value:
                         all_accounts.append({
                             "account_id": b.truelayer_provider_id,
                             "bank_name": display_name,
@@ -105,8 +106,11 @@ class AccountReader:
 
     def get_transactions(self, account_id: str, user_uuid, start_date=None, end_date=None, expense_only=False):
         try:
+            from models.database_models import MerchantKnowledge
             with SessionLocal() as session:
-                query = session.query(Transaction).filter_by(account_id=account_id, user_uuid=user_uuid)
+                query = session.query(Transaction, MerchantKnowledge).outerjoin(
+                    MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid
+                ).filter(Transaction.account_id == account_id, Transaction.user_uuid == user_uuid)
 
                 if start_date:
                     query = query.filter(Transaction.date >= start_date)
@@ -115,12 +119,12 @@ class AccountReader:
                 if expense_only:
                     query = query.filter(Transaction.amount < 0)
                 
-                txs = query.order_by(Transaction.date.desc()).all()
-                if not txs:
+                results = query.order_by(Transaction.date.desc()).all()
+                if not results:
                     return pd.DataFrame()
                 
                 transactions = []
-                for tx in txs:
+                for tx, mk in results:
                     transactions.append({
                         "transaction_id": tx.transaction_uuid,
                         "timestamp": tx.date.isoformat() if tx.date else None,
@@ -128,9 +132,9 @@ class AccountReader:
                         "amount": tx.amount,
                         "currency": tx.currency,
                         "description": tx.description,
-                        "category": tx.category,
-                        "sub_category": tx.sub_category,
-                        "tags": tx.tags or [],
+                        "category": mk.category if mk else "Uncategorized",
+                        "sub_category": mk.sub_category if mk else None,
+                        "tags": mk.tags if mk else [],
                         "bank_uuid": tx.bank_uuid,
                         "account_id": tx.account_id
                     })
@@ -141,21 +145,27 @@ class AccountReader:
 
     def get_transactions_by_account(self, account_id):
         try:
+            from models.database_models import MerchantKnowledge
             with SessionLocal() as session:
-                txs = session.query(Transaction).filter_by(
-                    account_id=account_id, user_uuid=self.user_id).order_by(Transaction.date.desc()).all()
-                if not txs:
+                query_results = session.query(Transaction, MerchantKnowledge).outerjoin(
+                    MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid
+                ).filter(
+                    Transaction.account_id == account_id, 
+                    Transaction.user_uuid == self.user_id
+                ).order_by(Transaction.date.desc()).all()
+                
+                if not query_results:
                     return []
                 results = []
-                for tx in txs:
+                for tx, mk in query_results:
                     results.append({
                         "transaction_id": tx.transaction_uuid,
                         "timestamp": tx.date.isoformat() if tx.date else None,
                         "amount": tx.amount,
                         "description": tx.description,
-                        "category": tx.category,
-                        "sub_category": tx.sub_category,
-                        "tags": tx.tags or []
+                        "category": mk.category if mk else "Uncategorized",
+                        "sub_category": mk.sub_category if mk else None,
+                        "tags": mk.tags if mk else []
                     })
                 return results
         except Exception:

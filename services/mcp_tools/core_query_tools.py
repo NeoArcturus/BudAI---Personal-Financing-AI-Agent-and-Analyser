@@ -66,7 +66,9 @@ def _apply_transaction_filters(query: Any, user_uuid: str, account_id: Optional[
 
     # Categories
     if categories:
-        query = query.where(Transaction.category.in_(categories))
+        from models.database_models import MerchantKnowledge
+        query = query.join(MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid, isouter=True)
+        query = query.where(MerchantKnowledge.category.in_(categories))
 
     # Amount & Type filters
     if transaction_type == "income":
@@ -144,12 +146,13 @@ def aggregate_financial_data(group_by: str, metric: str = "sum", account_id: Opt
     try:
         with SessionLocal() as session:
             # Determine grouping column
+            from models.database_models import MerchantKnowledge
             if group_by == "day":
                 group_col = func.time_bucket(text("'1 day'"), Transaction.date)
             elif group_by == "month":
                 group_col = func.time_bucket(text("'1 month'"), Transaction.date)
             elif group_by == "category":
-                group_col = Transaction.category
+                group_col = MerchantKnowledge.category
             else:
                 return json.dumps({"status": "error", "message": "Invalid group_by parameter. Use 'day', 'month', or 'category'."})
 
@@ -163,7 +166,9 @@ def aggregate_financial_data(group_by: str, metric: str = "sum", account_id: Opt
             else:
                 return json.dumps({"status": "error", "message": "Invalid metric parameter."})
 
-            query = select(group_col.label('group_key'), metric_col)
+            query = select(group_col.label('group_key'), metric_col).select_from(Transaction)
+            if group_by == "category":
+                query = query.join(MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid, isouter=True)
             query = _apply_transaction_filters(query, user_uuid, account_id, start_date, end_date, categories, None, None, transaction_type, session)
             
             query = query.group_by(group_col)

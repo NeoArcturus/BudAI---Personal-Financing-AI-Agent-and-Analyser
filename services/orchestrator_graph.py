@@ -268,16 +268,6 @@ Direct Tools:
 """
 
 def get_orchestrator_prompt():
-    try:
-        langfuse = get_client()
-        prompt_obj = langfuse.get_prompt("orchestrator_system")
-        if prompt_obj:
-            compiled = prompt_obj.compile(current_date_str=current_date_str)
-            if isinstance(compiled, list) and len(compiled) > 0 and isinstance(compiled[0], dict):
-                return compiled[0].get("content", default_orchestrator_prompt)
-            return str(compiled)
-    except Exception as e:
-        logger.warning(f"Failed to fetch prompt from Langfuse, using fallback: {e}")
     return default_orchestrator_prompt
 
 budai_app = create_react_agent(

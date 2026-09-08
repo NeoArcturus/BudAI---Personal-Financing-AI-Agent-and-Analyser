@@ -306,7 +306,6 @@ class TrueLayerSync:
                 "description": raw_string,
                 "semi_cleaned_description": semi_cleaned,
                 "fully_cleaned_description": fully_cleaned,
-                "category": "Uncategorized",
                 "is_pending": is_pending
             })
             seen_in_batch.add(tx_id)
@@ -349,12 +348,15 @@ class TrueLayerSync:
                     """)
                     result_dist = session.execute(query_with_dist, {"vec": str(v)}).first()
                     if result_dist and result_dist.distance < 0.05:
-                        tx["category"] = result_dist.category
                         tx["merchant_knowledge_uuid"] = result_dist.knowledge_uuid
         except Exception as e:
             from services.logger_setup import get_core_logger
             logger = get_core_logger(__name__)
             logger.error(f"RAG Intercept Fast Path failed: {e}")
+
+        for tx in new_txs:
+            if "merchant_knowledge_uuid" not in tx:
+                tx["merchant_knowledge_uuid"] = None
 
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         
@@ -368,7 +370,6 @@ class TrueLayerSync:
             "semi_cleaned_description": stmt.excluded.semi_cleaned_description,
             "fully_cleaned_description": stmt.excluded.fully_cleaned_description,
             "is_pending": stmt.excluded.is_pending,
-            "category": stmt.excluded.category,
             "merchant_knowledge_uuid": stmt.excluded.merchant_knowledge_uuid
         }
         

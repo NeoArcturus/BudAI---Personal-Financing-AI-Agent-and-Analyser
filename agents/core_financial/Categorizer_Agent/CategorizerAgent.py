@@ -14,8 +14,10 @@ from langchain_openai import OpenAIEmbeddings
 
 logger = get_core_logger(__name__)
 
+from langgraph.graph.message import add_messages
+
 class CategorizerState(TypedDict):
-    messages: Sequence[BaseMessage]
+    messages: Annotated[Sequence[BaseMessage], add_messages]
     user_uuid: str
     transaction_uuid: str
     merchant_name: str
@@ -33,55 +35,113 @@ def get_embeddings_model():
     )
 
 @tool
-def search_merchant_knowledge(merchant_name: str) -> str:
+def bulk_search_merchant_knowledge(merchant_names: list[str]) -> str:
     """
-    Search the vector database for historically verified categories for similar merchants.
-    Provides the best matching merchant and its category.
+    Search the vector database for historically verified categories for a list of merchants.
+    Provides the best matching merchant and its category for each.
     """
+    if not merchant_names:
+        return "No merchants provided."
+
     embeddings = get_embeddings_model()
-    try:
-        vector = embeddings.embed_query(merchant_name)
-    except Exception as e:
-        logger.error(f"Embedding failed: {e}")
-        return "Error generating embeddings."
-        
+    unique_names = list(set(merchant_names))
+    output = "Search Results:\n"
+    
     with SessionLocal() as session:
-        # pgvector query (using <=> for cosine distance)
-        query = text("""
-            SELECT knowledge_uuid, clean_merchant_name, category, (embedding <=> :vector) as distance
-            FROM merchant_knowledge
-            ORDER BY embedding <=> :vector
-            LIMIT 3
-        """)
-        results = session.execute(query, {"vector": str(vector)}).fetchall()
-        
-        if not results:
-            return "No similar merchants found."
-            
-        output = "Similar merchants found:\n"
-        for row in results:
-            output += f"- Merchant: {row.clean_merchant_name}, Category: {row.category}, Distance: {row.distance:.4f}, UUID: {row.knowledge_uuid}\n"
-            
-        return output
+        for name in unique_names:
+            try:
+                vector = embeddings.embed_query(name)
+                query = text("""
+                    SELECT knowledge_uuid, clean_merchant_name, category, sub_category, tags, (embedding <=> :vector) as distance
+                    FROM merchant_knowledge
+                    ORDER BY embedding <=> :vector
+                    LIMIT 1
+                """)
+                res = session.execute(query, {"vector": str(vector)}).first()
+                if res and res.distance < 0.15:
+                    output += f"- '{name}' matches '{res.clean_merchant_name}' (UUID: {res.knowledge_uuid}, Category: {res.category}, Sub-Category: {res.sub_category}, Tags: {res.tags}, Distance: {res.distance:.4f})\n"
+                else:
+                    output += f"- '{name}': No close match found.\n"
+            except Exception as e:
+                output += f"- '{name}': Search failed ({str(e)}).\n"
+    return output
 
 @tool
-def save_category(transaction_uuid: str, category: str, merchant_knowledge_uuid: str = None) -> str:
+def bulk_save_categories(transactions: list[dict]) -> str:
     """
-    Save the chosen category and merchant_knowledge_uuid to the transaction in the database.
+    Save the chosen categories and merchant_knowledge_uuids for a batch of transactions.
+    'transactions' must be a list of dictionaries with keys:
+    - 'transaction_uuid' (str)
+    - 'category' (str)
+    - 'sub_category' (str)
+    - 'tags' (list of str)
+    - 'merchant_name' (str)
+    - 'merchant_knowledge_uuid' (str, optional, empty string if none)
     """
+    import uuid
+    import json
+    from datetime import datetime
+    
+    success_count = 0
+    embeddings = None
+    
     with SessionLocal() as session:
-        update_query = text("""
-            UPDATE transactions 
-            SET category = :category, merchant_knowledge_uuid = :knowledge_uuid 
-            WHERE transaction_uuid = :transaction_uuid
-        """)
-        session.execute(update_query, {
-            "category": category, 
-            "knowledge_uuid": merchant_knowledge_uuid,
-            "transaction_uuid": transaction_uuid
-        })
+        for tx in transactions:
+            tx_uuid = tx.get("transaction_uuid")
+            category = tx.get("category")
+            sub_category = tx.get("sub_category", "")
+            tags = tx.get("tags", [])
+            merchant_name = tx.get("merchant_name")
+            mk_uuid = tx.get("merchant_knowledge_uuid")
+            
+            if str(mk_uuid).strip().lower() in ["", "none", "null", "undefined"]:
+                mk_uuid = None
+                
+            if not tx_uuid or not category or not merchant_name:
+                continue
+                
+            if not mk_uuid:
+                try:
+                    if not embeddings:
+                        embeddings = get_embeddings_model()
+                    vec = embeddings.embed_query(merchant_name)
+                    mk_uuid = str(uuid.uuid4())
+                    
+                    insert_query = text("""
+                        INSERT INTO merchant_knowledge (knowledge_uuid, clean_merchant_name, category, sub_category, tags, embedding, is_human_verified, created_at)
+                        VALUES (:uuid, :name, :cat, :sub_cat, :tags, :vec, FALSE, :now)
+                    """)
+                    session.execute(insert_query, {
+                        "uuid": mk_uuid,
+                        "name": merchant_name,
+                        "cat": category,
+                        "sub_cat": sub_category,
+                        "tags": json.dumps(tags),
+                        "vec": str(vec),
+                        "now": datetime.utcnow()
+                    })
+                except Exception as e:
+                    logger.error(f"Failed to create new merchant knowledge for {merchant_name}: {e}")
+                    mk_uuid = None
+                    
+            update_query = text("""
+                UPDATE transactions 
+                SET merchant_knowledge_uuid = :knowledge_uuid 
+                WHERE transaction_uuid = :transaction_uuid
+                   OR semi_cleaned_description = (
+                    SELECT semi_cleaned_description 
+                    FROM transactions 
+                    WHERE transaction_uuid = :transaction_uuid
+                )
+            """)
+            session.execute(update_query, {
+                "knowledge_uuid": mk_uuid,
+                "transaction_uuid": tx_uuid
+            })
+            success_count += 1
+            
         session.commit()
-        return f"Successfully saved category '{category}' for transaction {transaction_uuid}."
+    return f"Successfully saved {success_count} transactions."
 
 class CategorizerAgent:
     """
@@ -91,7 +151,7 @@ class CategorizerAgent:
         self.app = self._build_graph()
         
     def _build_graph(self):
-        tools = [search_merchant_knowledge, save_category]
+        tools = [bulk_search_merchant_knowledge, bulk_save_categories]
         tool_node = ToolNode(tools)
         
         base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
@@ -115,10 +175,26 @@ class CategorizerAgent:
                     "### ROLE: Categorization Specialist\n"
                     "You are the Categorizer Agent for BudAI. Your sole responsibility is to accurately classify financial transactions into the correct spending categories.\n\n"
                     "\n\n### STRICT ROLE BOUNDARIES & EXPERTISE ###\nYou are a highly specialized autonomous agent within the BudAI multi-agent network. Your role is strictly isolated to your specific domain of expertise. Do not attempt to execute actions outside your purview. You possess hyper-focused tools designed exclusively for your analytical tasks. Communicate professionally, mathematically, and directly. Avoid conversational filler.\n\n### STRICT ANTI-HALLUCINATION PROTOCOL ###\n"
-                    "1. DO NOT guess categories blindly. You MUST use the `search_merchant_knowledge` tool to query the RAG vector database for historically verified categories for similar merchants.\n"
-                    "2. Once you have retrieved the historical context and determined the correct category, you MUST use the `save_category` tool to save the category and the associated merchant_knowledge_uuid to the transaction.\n"
-                    "3. Do not invent new categories outside of the standard budget groups.\n"
-                    "4. If you absolutely cannot determine a category, default to 'Uncategorised'.\n"
+                    "1. DO NOT guess categories blindly. You MUST extract all unique merchant names from the batch and pass them as a list to the `bulk_search_merchant_knowledge` tool.\n"
+                    "2. Once you have retrieved the historical context, you MUST use the `bulk_save_categories` tool to save ALL transactions in the batch simultaneously.\n"
+                    "3. You MUST map EVERY transaction to one of these EXACT categories. Do not invent new ones:\n"
+                    "   - Income\n"
+                    "   - Housing\n"
+                    "   - Food & Dining\n"
+                    "   - Transportation\n"
+                    "   - Utilities\n"
+                    "   - Entertainment & Lifestyle\n"
+                    "   - Subscriptions & Digital Services\n"
+                    "   - Shopping & Retail\n"
+                    "   - Healthcare\n"
+                    "   - Transfers & Payments\n"
+                    "   - Fees & Charges\n"
+                    "   - Savings & Investments\n"
+                    "   - Taxes & Government Payments\n"
+                    "   - Uncategorized\n"
+                    "4. If you absolutely cannot determine a category, default to 'Uncategorized'.\n"
+                    "5. You MUST also generate an appropriate `sub_category` (string) and `tags` (list of strings) for EVERY transaction based on its nature.\n"
+                    "6. If you do not have a merchant_knowledge_uuid for a transaction, pass exactly \"\" (empty string) for its merchant_knowledge_uuid. Do not pass 'null' or 'None'.\n"
                 )
                 messages.insert(0, SystemMessage(content=detailed_prompt))
                 
@@ -155,16 +231,62 @@ class CategorizerAgent:
     
     @property
     def valid_categories(self):
-        # Stub valid categories so legacy save_manual_label doesn't crash if it checks them
-        return ["Groceries", "Transport", "Entertainment", "Bills", "Dining", "Shopping", "Uncategorised"]
+        return [
+            "Income", "Housing", "Food & Dining", "Transportation", "Utilities", 
+            "Entertainment & Lifestyle", "Subscriptions & Digital Services", 
+            "Shopping & Retail", "Healthcare", "Transfers & Payments", 
+            "Fees & Charges", "Savings & Investments", "Taxes & Government Payments", 
+            "Uncategorized"
+        ]
 
     def save_manual_label(self, user_uuid, transaction_uuid, corrected_label):
         with SessionLocal() as session:
-            from models.database_models import Transaction
+            from models.database_models import Transaction, MerchantKnowledge
+            import uuid
+            from datetime import datetime
+            
             tx = session.query(Transaction).filter_by(transaction_uuid=transaction_uuid).first()
             if not tx: return
             
-            tx.category = corrected_label
+            # Find the current merchant_name from the description
+            merchant_name = tx.semi_cleaned_description
+            if not merchant_name:
+                return
+
+            # Check if there is an existing merchant_knowledge row for this name AND this category
+            query = text("""
+                SELECT knowledge_uuid 
+                FROM merchant_knowledge 
+                WHERE clean_merchant_name = :name AND category = :cat
+                LIMIT 1
+            """)
+            res = session.execute(query, {"name": merchant_name, "cat": corrected_label}).first()
+            
+            if res:
+                # Target exists, just point to it
+                tx.merchant_knowledge_uuid = res.knowledge_uuid
+            else:
+                # We need to create a new row for this specific merchant name and category combo
+                from agents.core_financial.Categorizer_Agent.lazy_ml import get_embeddings_model
+                embeddings = get_embeddings_model()
+                vec = embeddings.embed_query(merchant_name)
+                
+                new_mk_uuid = str(uuid.uuid4())
+                
+                insert_query = text("""
+                    INSERT INTO merchant_knowledge (knowledge_uuid, clean_merchant_name, category, sub_category, tags, embedding, is_human_verified, created_at)
+                    VALUES (:uuid, :name, :cat, NULL, '[]'::json, :vec, TRUE, :now)
+                """)
+                session.execute(insert_query, {
+                    "uuid": new_mk_uuid,
+                    "name": merchant_name,
+                    "cat": corrected_label,
+                    "vec": str(vec),
+                    "now": datetime.utcnow()
+                })
+                
+                tx.merchant_knowledge_uuid = new_mk_uuid
+                
             session.commit()
 
     def train_global(self):

@@ -70,7 +70,7 @@ export default function LandingPage() {
 
   return (
     <div className="dark min-h-screen text-foreground selection:bg-primary/30 selection:text-primary relative overflow-x-hidden bg-transparent font-sans">
-      <nav className="fixed top-0 w-full h-24 bg-[#0c131d] border-b-[0.5px] border-white/5 flex justify-between items-center px-6 md:px-10 transition-all">
+      <nav className="fixed top-0 z-50 w-full h-24 bg-[#0c131d] border-b-[0.5px] border-white/5 flex justify-between items-center px-6 md:px-10 transition-all">
         <div className="flex items-center gap-2 shrink-0">
           <Image
             src="/FullLogo.jpg"

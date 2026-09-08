@@ -1,3 +1,4 @@
+from langfuse.langchain import CallbackHandler
 from prefect import flow, task, get_run_logger
 from schemas.api_schema import OnboardingLLMResult
 from models.database_models import User
@@ -45,7 +46,7 @@ Data:
     chain = prompt | onboarding_llm | parser
     logger.info("Invoking LLM for onboarding extraction...")
     
-    llm_analysis_dict = chain.invoke({"form_data": form_context})
+    llm_analysis_dict = chain.invoke({"form_data": form_context}, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_tags": ["onboarding"]}})
     return llm_analysis_dict
 
 @task
@@ -59,6 +60,24 @@ def commit_onboarding_db_task(user_uuid: str, llm_analysis_dict: dict):
         if user:
             user.persona = llm_analysis.persona
             user.is_onboarded = True
+            
+            # Seed the mandatory DEFAULT bucket for the zero-sum ledger system
+            from models.database_models import Bucket
+            import uuid
+            
+            existing_bucket = db.query(Bucket).filter(Bucket.user_id == user_uuid, Bucket.type == "DEFAULT").first()
+            if not existing_bucket:
+                default_bucket = Bucket(
+                    id=str(uuid.uuid4()),
+                    user_id=user_uuid,
+                    type="DEFAULT",
+                    name="Unallocated Funds",
+                    priority_index=100.0,
+                    cached_balance=0.0
+                )
+                db.add(default_bucket)
+                logger.info("Seeded default Unallocated Funds bucket.")
+                
             db.commit()
             logger.info("Successfully updated user profile in database.")
         else:

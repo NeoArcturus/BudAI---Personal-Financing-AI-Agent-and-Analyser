@@ -40,15 +40,16 @@ async def get_review_candidates(account_id: str | None, limit: int, current_user
         def _fetch_candidates():
             with SessionLocal() as session:
                 base_query = """
-                    SELECT transaction_uuid, account_id, date, amount, description, category
-                    FROM transactions
-                    WHERE user_uuid = :user_uuid AND lower(category) = 'needs review'
+                    SELECT t.transaction_uuid, t.account_id, t.date, t.amount, t.description, m.category
+                    FROM transactions t
+                    LEFT JOIN merchant_knowledge m ON t.merchant_knowledge_uuid = m.knowledge_uuid
+                    WHERE t.user_uuid = :user_uuid AND lower(m.category) = 'needs review'
                 """
                 params = {"user_uuid": current_user.user_uuid, "limit": limit}
                 if account_id:
-                    base_query += " AND account_id = :account_id"
+                    base_query += " AND t.account_id = :account_id"
                     params["account_id"] = account_id
-                base_query += " ORDER BY date DESC LIMIT :limit"
+                base_query += " ORDER BY t.date DESC LIMIT :limit"
                 rows = session.execute(text(base_query), params).fetchall()
             data = []
             for row in rows:

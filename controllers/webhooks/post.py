@@ -5,6 +5,7 @@ from services.logger_setup import get_core_logger
 from services.api_integrator.truelayer_sync import TrueLayerSync
 from config import SessionLocal, ENCRYPTION_KEY
 from models.database_models import Bank, Account
+from models.status_codes import OpenBankingStatus
 from cryptography.fernet import Fernet
 
 logger = get_core_logger(__name__)
@@ -105,11 +106,21 @@ async def handle_truelayer_webhook(payload: dict, background_tasks: BackgroundTa
         error_desc = payload.get("error_description", "Unknown error")
         logger.error(json.dumps({"message": f"TrueLayer async task {task_id} failed: {error_desc}", "status_code": 500}))
         
-        # Self-Healing Fallback for strict SCA banks (e.g. Revolut)
+        # SCA Lock detected from TrueLayer
         if "sca" in error_desc.lower() or "psu authentication" in error_desc.lower():
+            logger.info(json.dumps({"message": f"SCA exemption expired for {acc_id}. Changing consent_status to CONNECTION_EXPIRED immediately.", "status_code": 200}))
+            
+            with SessionLocal() as session:
+                bank = session.query(Bank).filter_by(bank_uuid=bank_uuid, user_uuid=user_uuid).first()
+                if bank:
+                    bank.consent_status = OpenBankingStatus.CONNECTION_EXPIRED.value
+                    session.commit()
+                    logger.info(json.dumps({"message": f"Consent status updated to CONNECTION_EXPIRED for bank {bank_uuid}", "status_code": 200}))
+            
+            # The fallback sync can still be attempted for the last 89 days (Open Banking rules),
+            # but the UI will now properly reflect the REAUTH_REQUIRED state.
             from datetime import datetime, timedelta
             fallback_from = (datetime.utcnow() - timedelta(days=89)).strftime("%Y-%m-%d")
-            logger.info(json.dumps({"message": f"SCA exemption expired for {acc_id}. Triggering self-healing fallback sync from {fallback_from}.", "status_code": 200}))
             
             def fallback_sync_task():
                 try:

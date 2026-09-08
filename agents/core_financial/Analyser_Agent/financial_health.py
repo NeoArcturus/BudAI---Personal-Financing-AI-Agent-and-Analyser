@@ -36,13 +36,14 @@ class FinancialHealthAnalyzer:
 
     def calculate_subsistence_floor(self):
         query = text("""
-            SELECT sum(abs(amount)) as monthly_floor
-            FROM transactions
-            WHERE user_uuid = :user_uuid
-              AND category IN ('Rent', 'Mortgage', 'Utilities', 'Insurance', 'Groceries', 'Debt_Min')
-              AND amount < 0
-            GROUP BY time_bucket('1 month', date)
-            ORDER BY time_bucket('1 month', date) DESC
+            SELECT sum(abs(t.amount)) as monthly_floor
+            FROM transactions t
+            LEFT JOIN merchant_knowledge m ON t.merchant_knowledge_uuid = m.knowledge_uuid
+            WHERE t.user_uuid = :user_uuid
+              AND m.category IN ('Rent', 'Mortgage', 'Utilities', 'Insurance', 'Groceries', 'Debt_Min')
+              AND t.amount < 0
+            GROUP BY time_bucket('1 month', t.date)
+            ORDER BY time_bucket('1 month', t.date) DESC
             LIMIT 3
         """)
         with SessionLocal() as session:

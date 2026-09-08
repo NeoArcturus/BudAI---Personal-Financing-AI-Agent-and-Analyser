@@ -134,8 +134,9 @@ export default function ConnectionsPage() {
     setIsSyncing(true);
     try {
       toast.success("Syncing all accounts...");
-      // Simulate sync delay for UX
-      await new Promise(r => setTimeout(r, 1500));
+      const res = await apiFetch("/api/auth/connections/metadata", {}, true);
+      if (!res.ok) throw new Error("Failed to sync");
+      
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       toast.success("All connections updated.");
     } catch (e) {
@@ -147,14 +148,21 @@ export default function ConnectionsPage() {
 
   const selectedAccount = accounts.find((a) => a.account_id === selectedAccountId);
 
+  // OpenBankingStatus definitions
+  const STATUS_ACTIVE = "200-200";
+  const STATUS_EXPIRED = "200-401";
+  const STATUS_REVOKED = "200-403";
+
   // Determine health status helper
   const getAccountHealth = (acc: any) => {
-    const isHardRevoked = acc.consent_status === "200-403" || revokedUuids.has(acc.bank_uuid!);
-    const isExpiredStatus = acc.consent_status === "200-401" || isHardRevoked || failedExtendUuids.has(acc.bank_uuid!);
+    const isHardRevoked = acc.consent_status === STATUS_REVOKED || revokedUuids.has(acc.bank_uuid!);
+    const isExpiredStatus = acc.consent_status === STATUS_EXPIRED || isHardRevoked || failedExtendUuids.has(acc.bank_uuid!);
+    const isActive = acc.consent_status === STATUS_ACTIVE && !isExpiredStatus;
 
     if (isHardRevoked) return "red";
     if (isExpiredStatus) return "yellow";
-    return "green";
+    if (isActive) return "green";
+    return "green"; // fallback
   };
 
   const filteredAccounts = useMemo(() => {

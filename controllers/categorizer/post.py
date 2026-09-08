@@ -16,52 +16,25 @@ logger = get_core_logger(__name__)
 def background_retrain_and_recategorize(user_uuid: str, transaction_uuid: str, corrected_label: str, task_id: str):
     """
     Background worker that uses RAG Fast-Learning.
-    It embeds the corrected merchant, upserts to merchant_knowledge,
-    and auto-sweeps past transactions using a Semantic Foreign Key.
+    It auto-sweeps past transactions using the newly assigned Semantic Foreign Key from the manual override.
     """
     try:
-        from langchain_openai import OpenAIEmbeddings
-        from datetime import datetime
-        
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-        if not base_url.endswith("/v1"): 
-            base_url = f"{base_url}/v1"
-            
-        embeddings_model = OpenAIEmbeddings(
-            base_url=base_url,
-            model="text-embedding-nomic-embed-text-v1.5",
-            api_key="budai-local",
-            check_embedding_ctx_length=False
-        )
-        
         with SessionLocal() as session:
             tx = session.query(Transaction).filter_by(transaction_uuid=transaction_uuid, user_uuid=user_uuid).first()
-            if not tx or not tx.semi_cleaned_description:
+            if not tx or not tx.semi_cleaned_description or not tx.merchant_knowledge_uuid:
                 return
             
             merchant = tx.semi_cleaned_description
+            k_uuid = tx.merchant_knowledge_uuid
             
-            # Embed the merchant
-            vec = embeddings_model.embed_documents([merchant])[0]
-            k_uuid = str(uuid.uuid4())
-            
-            # Upsert to merchant_knowledge (RAG Memory)
-            existing_k = session.execute(text("SELECT knowledge_uuid FROM merchant_knowledge WHERE clean_merchant_name = :name LIMIT 1"), {"name": merchant}).scalar()
-            if existing_k:
-                session.execute(text("UPDATE merchant_knowledge SET category = :cat, embedding = :vec, is_human_verified = TRUE WHERE knowledge_uuid = :k_uuid"), {"cat": corrected_label, "vec": str(vec), "k_uuid": existing_k})
-                returned_uuid = existing_k
-            else:
-                session.execute(text("INSERT INTO merchant_knowledge (knowledge_uuid, clean_merchant_name, category, embedding, is_human_verified, created_at) VALUES (:uuid, :name, :cat, :vec, TRUE, :now)"), {"uuid": k_uuid, "name": merchant, "cat": corrected_label, "vec": str(vec), "now": datetime.utcnow()})
-                returned_uuid = k_uuid
-            
-            # Auto-sweep all transactions for this user + merchant
+            # Auto-sweep all transactions for this user + merchant to the new UUID
             update_tx = text("""
                 UPDATE transactions 
-                SET category = :cat, merchant_knowledge_uuid = :k_uuid 
+                SET merchant_knowledge_uuid = :k_uuid 
                 WHERE semi_cleaned_description = :name AND user_uuid = :user_uuid
             """)
             session.execute(update_tx, {
-                "cat": corrected_label, "k_uuid": returned_uuid, 
+                "k_uuid": k_uuid, 
                 "name": merchant, "user_uuid": user_uuid
             })
             session.commit()

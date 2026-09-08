@@ -94,7 +94,7 @@ def _parse_accounts(account_id, user_uuid):
                 SELECT a.account_id, b.bank_name
                 FROM accounts a
                 JOIN banks b ON a.bank_uuid = b.bank_uuid
-                WHERE a.user_uuid = :user_uuid AND (b.consent_status != 'revoked' OR b.consent_status IS NULL)
+                WHERE a.user_uuid = :user_uuid AND (b.consent_status != '200-403' OR b.consent_status IS NULL)
             """), {"user_uuid": user_uuid}).fetchall()
             for r in rows:
                 resolved_ids.append(r[0])
@@ -125,8 +125,9 @@ def _get_combined_categorized_data(accounts, suffix, user_uuid, from_date=None, 
     try:
         with SessionLocal() as session:
             query = """
-                SELECT t.transaction_uuid as transaction_id, t.date as timestamp, t.amount, t.description, t.category as "Category", b.bank_name
+                SELECT t.transaction_uuid as transaction_id, t.date as timestamp, t.amount, t.description, m.category as "Category", b.bank_name
                 FROM transactions t
+                LEFT JOIN merchant_knowledge m ON t.merchant_knowledge_uuid = m.knowledge_uuid
                 JOIN accounts a ON t.account_id = a.account_id
                 JOIN banks b ON a.bank_uuid = b.bank_uuid
                 WHERE t.user_uuid = :user_uuid

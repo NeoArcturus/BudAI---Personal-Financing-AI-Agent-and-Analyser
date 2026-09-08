@@ -34,9 +34,9 @@ def build_evaluation_context(session: Session, user_uuid: str, masked_state: lis
     if not subs and not utils:
         discovery_block += "None.\n"
     if subs:
-        discovery_block += f"- Subscriptions: {json.dumps(subs)}\n"
+        discovery_block += f"- Subscriptions: {json.dumps(subs, default=str)}\n"
     if utils:
-        discovery_block += f"- Utilities: {json.dumps(utils)}\n"
+        discovery_block += f"- Utilities: {json.dumps(utils, default=str)}\n"
         
     # 3.5 System Warnings (Broken Connections)
     from models.database_models import Bank

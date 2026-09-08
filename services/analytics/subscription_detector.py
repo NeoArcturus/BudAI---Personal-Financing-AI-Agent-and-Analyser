@@ -1,3 +1,4 @@
+from langfuse.langchain import CallbackHandler
 import json
 import os
 import numpy as np
@@ -87,11 +88,13 @@ class SubscriptionDetector:
     def extract_and_partition(self, session, user_uuid):
         logger = _get_logger()
         # Strictly filter data to reduce O(N^2) load
+        from models.database_models import MerchantKnowledge
         txs = session.execute(
             select(Transaction)
+            .join(MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid, isouter=True)
             .where(Transaction.user_uuid == user_uuid)
             .where(Transaction.amount < 0)
-            .where(Transaction.category.in_([
+            .where(MerchantKnowledge.category.in_([
                 "Subscriptions & Digital Services", 
                 "Utilities", 
                 "Entertainment & Lifestyle",
@@ -324,7 +327,7 @@ class SubscriptionDetector:
             prompt = f"Extract the core commercial merchant brand name from these transaction descriptions. Output ONLY the brand name, nothing else. No punctuation.\nStrings: {cluster_descs}"
             
             try:
-                response = self.chat_model.invoke(prompt)
+                response = self.chat_model.invoke(prompt, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_tags": ["subscription-detector"]}})
                 pretty_merchant_name = response.content.strip().title()
                 
                 # Failsafe if LLM hallucinated a whole paragraph

@@ -1,3 +1,4 @@
+from langfuse.langchain import CallbackHandler
 import os
 import re
 import hdbscan
@@ -194,7 +195,7 @@ class LifestyleClusteringService:
             """
             
             try:
-                response = self.llm.invoke(prompt)
+                response = self.llm.invoke(prompt, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_tags": ["lifestyle-clustering"]}})
                 
                 raw_content = response.content
                 if "```json" in raw_content:

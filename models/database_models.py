@@ -74,14 +74,11 @@ class Transaction(SQLModel, table=True):
     date: Optional[datetime] = None
     amount: Optional[float] = None
     currency: str = Field(default="GBP")
-    category: Optional[str] = Field(default="Uncategorised")
-    sub_category: Optional[str] = None
     description: Optional[str] = None
     semi_cleaned_description: Optional[str] = None
     fully_cleaned_description: Optional[str] = None
     is_semantic_anomaly: Optional[bool] = Field(default=False)
     is_pending: bool = Field(default=False)
-    tags: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
     merchant_knowledge_uuid: Optional[str] = Field(default=None, foreign_key="merchant_knowledge.knowledge_uuid")
     
     user: Optional["User"] = Relationship(back_populates="transactions")
@@ -165,6 +162,9 @@ class MerchantKnowledge(SQLModel, table=True):
     knowledge_uuid: str = Field(primary_key=True, index=True)
     clean_merchant_name: str = Field(index=True)
     category: str
+    sub_category: Optional[str] = None
+
+    tags: Optional[list[str]] = Field(default=None, sa_column=Column(JSON))
     embedding: Any = Field(sa_column=Column(Vector(768)))
     is_human_verified: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)

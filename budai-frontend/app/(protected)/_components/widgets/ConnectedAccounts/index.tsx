@@ -86,9 +86,13 @@ export default function ConnectedAccountsWidgetClient() {
         };
       }
       acc[bankName].accounts.push(account);
-      if (account.consent_status === "200-401" || account.consent_status === "200-403") {
+      // OpenBankingStatus definitions
+      const STATUS_EXPIRED = "200-401";
+      const STATUS_REVOKED = "200-403";
+
+      if (account.consent_status === STATUS_EXPIRED || account.consent_status === STATUS_REVOKED) {
         acc[bankName].isExpired = true;
-        if (account.consent_status === "200-403") {
+        if (account.consent_status === STATUS_REVOKED) {
           acc[bankName].isHardRevoked = true;
         }
         if (account.bank_uuid) acc[bankName].bankUuid = account.bank_uuid;

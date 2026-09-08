@@ -45,8 +45,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
       - REDIS_URL=redis://budai-redis:6379/0
-      - OLLAMA_BASE_URL=http://100.74.150.48:1234/v1
-      - VLLM_SUMMARY_URL=http://100.74.150.48:1234/v1
+      - OLLAMA_BASE_URL=http://ai-loadbalancer:4000/v1
+      - VLLM_SUMMARY_URL=http://ai-loadbalancer:4000/v1
       - NEWSDATA_API_KEY=${NEWSDATA_API_KEY}
       - CLIENT_ID=${CLIENT_ID}
       - CLIENT_SECRET=${CLIENT_SECRET}
@@ -56,8 +56,8 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
       - HF_TOKEN=${HF_TOKEN}
       - WEBHOOK_BASE_URL=${WEBHOOK_BASE_URL}
-      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
-      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=sk-lf-2378a41f-3adf-4c82-99d6-805190d46f73
+      - LANGFUSE_PUBLIC_KEY=pk-lf-1f672f40-d754-429b-9506-eb098b631da5
       - LANGFUSE_HOST=http://langfuse-web:3000
       - LANGFUSE_BASE_URL=http://langfuse-web:3000
       - PREFECT_API_URL=${PREFECT_CLOUD_API_URL}
@@ -105,13 +105,13 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
       - REDIS_URL=redis://budai-redis:6379/0
-      - OLLAMA_BASE_URL=http://100.74.150.48:1234/v1
-      - VLLM_SUMMARY_URL=http://100.74.150.48:1234/v1
+      - OLLAMA_BASE_URL=http://ai-loadbalancer:4000/v1
+      - VLLM_SUMMARY_URL=http://ai-loadbalancer:4000/v1
       - HF_TOKEN=${HF_TOKEN}
       - PREFECT_API_URL=${PREFECT_CLOUD_API_URL}
       - PREFECT_API_KEY=${PREFECT_CLOUD_API_KEY}
-      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
-      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=sk-lf-2378a41f-3adf-4c82-99d6-805190d46f73
+      - LANGFUSE_PUBLIC_KEY=pk-lf-1f672f40-d754-429b-9506-eb098b631da5
       - LANGFUSE_HOST=http://langfuse-web:3000
       - LANGFUSE_BASE_URL=http://langfuse-web:3000
       - PREFECT_LOGGING_EXTRA_LOGGERS=sqlalchemy.engine,httpx,langchain,uvicorn
@@ -140,12 +140,12 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@budai-db:5432/${POSTGRES_DB:-budai}
       - REDIS_URL=redis://budai-redis:6379/0
-      - OLLAMA_BASE_URL=http://100.74.150.48:1234/v1
-      - VLLM_SUMMARY_URL=http://100.74.150.48:1234/v1
+      - OLLAMA_BASE_URL=http://ai-loadbalancer:4000/v1
+      - VLLM_SUMMARY_URL=http://ai-loadbalancer:4000/v1
       - HF_TOKEN=${HF_TOKEN}
       - PREFECT_API_URL=http://prefect-server:4200/api
-      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
-      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=sk-lf-2378a41f-3adf-4c82-99d6-805190d46f73
+      - LANGFUSE_PUBLIC_KEY=pk-lf-1f672f40-d754-429b-9506-eb098b631da5
       - LANGFUSE_HOST=http://langfuse-web:3000
       - LANGFUSE_BASE_URL=http://langfuse-web:3000
       - PREFECT_LOGGING_EXTRA_LOGGERS=sqlalchemy.engine,httpx,langchain,uvicorn
@@ -207,6 +207,7 @@ services:
   langfuse-web:
     image: langfuse/langfuse:latest
     container_name: langfuse-web
+    restart: always
     depends_on:
       budai-db:
         condition: service_healthy
@@ -278,6 +279,16 @@ services:
     networks:
       - default
 
+
+  ai-loadbalancer:
+    image: nginx:alpine
+    container_name: ai-loadbalancer
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - default
 
 volumes:
   postgres_data:

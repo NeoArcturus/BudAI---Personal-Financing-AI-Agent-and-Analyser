@@ -16,11 +16,20 @@ async def categorize_specific_transactions_bg(tx_uuids, user_uuid):
     try:
         from models.database_models import Transaction
         with SessionLocal() as session:
-            txs = session.query(Transaction).filter(
+            from models.database_models import MerchantKnowledge
+            txs_query = session.query(Transaction).outerjoin(
+                MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid
+            ).filter(
                 Transaction.transaction_uuid.in_(tx_uuids),
                 Transaction.user_uuid == str(user_uuid),
-                (Transaction.category == 'Uncategorized') | (Transaction.category == None) | (Transaction.category == '') | (Transaction.sub_category == None) | (Transaction.tags == None) | (text("tags::text = '[]'"))
-            ).all()
+                (MerchantKnowledge.category == 'Uncategorized') | 
+                (MerchantKnowledge.category == None) | 
+                (MerchantKnowledge.category == '') | 
+                (MerchantKnowledge.sub_category == None) | 
+                (MerchantKnowledge.tags == None) | 
+                (text("merchant_knowledge.tags::text = '[]'"))
+            )
+            txs = txs_query.all()
             
             if not txs:
                 logger.info(json.dumps({"message": f"No uncategorized transactions found for the given UUIDs.", "status_code": 200}))

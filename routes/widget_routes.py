@@ -84,15 +84,16 @@ async def get_expense_distribution(
         to_date = datetime.now().strftime("%Y-%m-%d")
 
     query = text("""
-        SELECT category, sum(abs(amount)) as total
-        FROM transactions
-        WHERE user_uuid = :user_uuid 
-          AND account_id = :account_id
-          AND date >= :start_date 
-          AND date <= :end_date
-          AND amount < 0
-          AND category IS NOT NULL
-        GROUP BY category
+        SELECT m.category, sum(abs(t.amount)) as total
+        FROM transactions t
+        LEFT JOIN merchant_knowledge m ON t.merchant_knowledge_uuid = m.knowledge_uuid
+        WHERE t.user_uuid = :user_uuid 
+          AND t.account_id = :account_id
+          AND t.date >= :start_date 
+          AND t.date <= :end_date
+          AND t.amount < 0
+          AND m.category IS NOT NULL
+        GROUP BY m.category
         ORDER BY total DESC
     """)
 

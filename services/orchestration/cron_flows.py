@@ -1,3 +1,5 @@
+from langfuse.langchain import CallbackHandler
+
 from prefect import flow, task, get_run_logger
 from config import SessionLocal
 from models.database_models import Bank, User
@@ -97,7 +99,7 @@ def generate_proactive_insights_task():
             HumanMessage(content=f"Please analyze spending trends for user {user_id}.")
         ]
         try:
-            agent.app.invoke({"messages": messages, "user_id": user_id})
+            agent.app.invoke({"messages": messages, "user_id": user_id}, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_session_id": user_id, "langfuse_tags": ["proactive-insights"]}})
         except Exception as e:
             from services.logger_setup import get_core_logger
             logger = get_core_logger(__name__)
@@ -162,7 +164,7 @@ def cloud_failsafe_sync_flow():
         from langchain_core.messages import HumanMessage
         agent = CloudFailsafeAgent()
         # Use SYSTEM as user_uuid to sweep all missing webhooks
-        agent.app.invoke({"messages": [HumanMessage(content="Trigger failsafe sync for all missing webhook data.")], "user_uuid": "SYSTEM"})
+        agent.app.invoke({"messages": [HumanMessage(content="Trigger failsafe sync for all missing webhook data.")], "user_uuid": "SYSTEM"}, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_session_id": "SYSTEM", "langfuse_tags": ["failsafe-sync"]}})
     except Exception as e:
         logger.error(f"Failsafe sync failed: {e}")
 
@@ -202,7 +204,7 @@ def oss_monte_carlo_sim_flow():
         from agents.intelligence.MonteCarloSimulation_Agent.MonteCarloSimulationAgent import MonteCarloSimulationAgent
         from langchain_core.messages import HumanMessage
         agent = MonteCarloSimulationAgent()
-        agent.app.invoke({"messages": [HumanMessage(content="Run 1000 Monte Carlo simulations to stress test runway.")], "user_uuid": "SYSTEM"})
+        agent.app.invoke({"messages": [HumanMessage(content="Run 1000 Monte Carlo simulations to stress test runway.")], "user_uuid": "SYSTEM"}, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_session_id": "SYSTEM", "langfuse_tags": ["monte-carlo"]}})
     except Exception as e:
         logger.error(f"Monte Carlo sim failed: {e}")
 
@@ -214,7 +216,7 @@ def oss_token_auditor_flow():
         from agents.infrastructure.TokenAuditing_Agent.TokenAuditingAgent import TokenAuditingAgent
         from langchain_core.messages import HumanMessage
         agent = TokenAuditingAgent()
-        agent.app.invoke({"messages": [HumanMessage(content="Audit system-wide LLM token usage.")] , "user_uuid": "SYSTEM"})
+        agent.app.invoke({"messages": [HumanMessage(content="Audit system-wide LLM token usage.")] , "user_uuid": "SYSTEM"}, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_session_id": "SYSTEM", "langfuse_tags": ["token-audit"]}})
     except Exception as e:
         logger.error(f"Token audit failed: {e}")
 
@@ -232,22 +234,26 @@ def llm_categorization_sweep_task():
     
     with SessionLocal() as session:
         # Get orphans missing their Semantic Foreign Key
-        query = text("SELECT transaction_uuid, semi_cleaned_description FROM transactions WHERE merchant_knowledge_uuid IS NULL LIMIT 10")
+        query = text("SELECT transaction_uuid, semi_cleaned_description FROM transactions WHERE merchant_knowledge_uuid IS NULL LIMIT 50")
         results = session.execute(query).fetchall()
         
         if not results:
             logger.info("No uncategorized transactions found.")
             return
             
-        for row in results:
-            tx_id, desc = row[0], row[1]
-            logger.info(f"Delegating categorization of '{desc}' to CategorizerAgent...")
-            
-            messages = [
-                SystemMessage(content="You are the Categorization Agent. You must investigate the merchant and save the correct category. Use tools."),
-                HumanMessage(content=f"Please categorize transaction {tx_id} for merchant: {desc}")
-            ]
-            agent.app.invoke({"messages": messages, "transaction_uuid": tx_id, "merchant_name": desc})
+        
+        batch_data = [{"transaction_uuid": r[0], "merchant_name": r[1]} for r in results]
+        import json
+        
+        logger.info(f"Delegating categorization of {len(batch_data)} transactions to CategorizerAgent in a single batch...")
+        messages = [
+            HumanMessage(content=f"Please categorize the following batch of {len(batch_data)} transactions:\n{json.dumps(batch_data, indent=2)}")
+        ]
+        
+        agent.app.invoke(
+            {"messages": messages, "transaction_uuid": "batch", "merchant_name": "batch"}, 
+            config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_session_id": "SYSTEM", "langfuse_tags": ["categorization-sweep"]}}
+        )
             
         logger.info("Agentic categorization sweep complete.")
 
@@ -271,25 +277,19 @@ def autonomous_fiduciary_patrol_task():
             user_uuids = [u[0] for u in session.query(User.user_uuid).all()]
             
         for user_id in user_uuids:
-            from langfuse.callback import CallbackHandler
+            from langfuse.langchain import CallbackHandler
             import time
             
             logger.info(f"Patrolling user {user_id}")
             
-            langfuse_handler = CallbackHandler(
-                session_id=f"patrol_{user_id}_{int(time.time())}",
-                user_id=str(user_id),
-                tags=["10-minute-patrol", "autonomous"]
-            )
+            langfuse_handler = CallbackHandler()
+            app_config = {"callbacks": [langfuse_handler], "metadata": {"langfuse_session_id": f"patrol_{user_id}_{int(time.time())}", "langfuse_user_id": str(user_id), "langfuse_tags": ["10-minute-patrol", "autonomous"]}}
             
             # This triggers the Langfuse-backed system prompt to evaluate Liability Horizon and Pending TXs
             app.invoke({
                 "messages": [HumanMessage(content="Wake up. Execute the 10-minute patrol. Fetch the Liability Horizon, check Pending Transactions, and perform any necessary Virtual PIS Sweeps to protect Tier 1 and Tier 2 goals.")],
                 "user_uuid": user_id
-            }, {
-                "configurable": {"thread_id": f"patrol_{user_id}"},
-                "callbacks": [langfuse_handler]
-            })
+            }, {"configurable": {"thread_id": f"patrol_{user_id}"}, **app_config})
             
     except Exception as e:
         logger.error(f"Fiduciary Patrol failed: {e}")

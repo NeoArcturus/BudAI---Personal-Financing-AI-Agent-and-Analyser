@@ -71,6 +71,8 @@ from routes.widget_routes import router as widget_router
 from routes.intent_routes import router as intent_router
 from routes.dashboard_routes import router as dashboard_router
 from routes.onboarding_routes import router as onboarding_router
+from routes.bucket_routes import router as bucket_router
+from routes.websocket_routes import router as websocket_router
 
 app.include_router(auth_router)
 app.include_router(callback_router)
@@ -87,6 +89,8 @@ app.include_router(widget_router)
 app.include_router(intent_router)
 app.include_router(dashboard_router)
 app.include_router(onboarding_router)
+app.include_router(bucket_router)
+app.include_router(websocket_router)
 
 if __name__ == "__main__":
     import uvicorn

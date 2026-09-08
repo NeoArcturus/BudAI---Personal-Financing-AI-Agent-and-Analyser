@@ -68,5 +68,7 @@ class UserService:
                 country_of_tax_residence=country_of_tax_residence
             )
             session.add(new_user)
+            
+
             session.commit()
             return new_uuid

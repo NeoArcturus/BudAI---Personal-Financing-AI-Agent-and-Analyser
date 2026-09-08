@@ -5,7 +5,7 @@ from schemas.api_schema import LoginRequest, RegisterRequest, ExtendConnectionRe
 from middleware.auth_middleware import get_current_user
 from models.database_models import User
 
-from controllers.auth.get import get_user_profile, get_truelayer_status, handle_truelayer_callback
+from controllers.auth.get import get_user_profile, get_truelayer_status, handle_truelayer_callback, get_truelayer_metadata
 from controllers.auth.post import login_user, refresh_user_token, register_user, extend_connections, revoke_access, generate_reauth_link_controller
 
 auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -54,3 +54,7 @@ async def revoke_truelayer_access_route(request: RevokeConnectionRequest, curren
 @auth_router.post("/banks/{bank_uuid}/reauth")
 async def generate_bank_reauth_link_route(bank_uuid: str, current_user: User = Depends(get_current_user)):
     return await generate_reauth_link_controller(bank_uuid, current_user.user_uuid)
+
+@auth_router.get("/connections/metadata")
+async def get_connection_metadata_route(current_user: User = Depends(get_current_user)):
+    return await get_truelayer_metadata(current_user)

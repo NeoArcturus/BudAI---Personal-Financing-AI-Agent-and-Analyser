@@ -92,16 +92,19 @@ def fetch_widget_data(payload: DataRequestPayload, current_user: User = Depends(
         }
         
     elif tool_name == "expense_distribution":
+        from models.database_models import MerchantKnowledge
         # Get category breakdown for last 30 days
         stmt = select(
-            Transaction.category,
+            MerchantKnowledge.category,
             func.sum(func.abs(Transaction.amount))
+        ).join(
+            MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid, isouter=True
         ).where(
             Transaction.user_uuid == current_user.user_uuid,
             Transaction.amount < 0,
             Transaction.date >= thirty_days_ago,
-            Transaction.category.isnot(None)
-        ).group_by(Transaction.category).order_by(func.sum(func.abs(Transaction.amount)).desc()).limit(10)
+            MerchantKnowledge.category.isnot(None)
+        ).group_by(MerchantKnowledge.category).order_by(func.sum(func.abs(Transaction.amount)).desc()).limit(10)
         
         rows = db.execute(stmt).all()
         labels = [str(r[0]) for r in rows]

@@ -1,3 +1,4 @@
+from langfuse.langchain import CallbackHandler
 import os
 import json
 from typing import Annotated, TypedDict, Sequence
@@ -88,7 +89,7 @@ def execute_llm_chain(user_uuid: str, compiled_brief: str, reverse_map: dict):
     }
     
     try:
-        engine.invoke(state)
+        engine.invoke(state, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_session_id": user_uuid, "langfuse_tags": ["decision-engine"]}})
         logger.info(json.dumps({"message": "Decision Engine completed execution.", "status_code": 200}))
     except Exception as e:
         logger.error(json.dumps({"message": f"Decision Engine failed: {e}", "status_code": 500}))
