@@ -40,8 +40,8 @@ export default function ConnectedAccountsWidgetClient() {
       const res = await apiFetch(`/api/auth/banks/${bankUuid}/reauth`, { method: "POST" }, true);
       if (res.ok) {
         const data = await res.json() as any;
-        if (data.auth_url) {
-          router.push(data.auth_url); 
+        if (data.reauth_url) {
+          router.push(data.reauth_url);
         }
       } else {
         toast.danger("Failed to initialize secure connection");
@@ -200,12 +200,12 @@ export default function ConnectedAccountsWidgetClient() {
                       {group.isExpired ? (
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center gap-2 mb-2">
-                             <div className="bg-red-500/20 text-red-500 border border-red-500/50 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
-                               <span className="animate-pulse">⚠️</span> {group.isHardRevoked ? "Access Revoked" : "Connection Expired"}
-                             </div>
+                            <div className="bg-red-500/20 text-red-500 border border-red-500/50 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                              <span className="animate-pulse">⚠️</span> {group.isHardRevoked ? "Access Revoked" : "Connection Expired"}
+                            </div>
                           </div>
                           <span className="text-[12px] font-mono text-red-500/80 uppercase tracking-widest mt-1">
-                             {isReauthenticating ? "Reconnecting..." : "Tap to Reconnect"}
+                            {isReauthenticating ? "Reconnecting..." : "Tap to Reconnect"}
                           </span>
                         </div>
                       ) : (
