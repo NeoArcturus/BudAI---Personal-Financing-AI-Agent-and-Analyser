@@ -37,7 +37,7 @@ export default function ConnectedAccountsWidgetClient() {
     if (!bankUuid) return;
     setIsReauthenticating(true);
     try {
-      const res = await apiFetch(`/api/banks/${bankUuid}/reauth`, { method: "POST" }, true);
+      const res = await apiFetch(`/api/auth/banks/${bankUuid}/reauth`, { method: "POST" }, true);
       if (res.ok) {
         const data = await res.json() as any;
         if (data.auth_url) {

@@ -109,65 +109,67 @@ async def get_truelayer_metadata(current_user: User):
                         enc_refresh = enc_refresh.tobytes()
                     refresh_token = token_gen.cipher_suite.decrypt(enc_refresh).decode()
                     
-                    # 1. Try GET /me
-                    headers = {"Authorization": f"Bearer {access_token}"}
-                    response = await client.get("https://api.truelayer.com/data/v1/me", headers=headers)
-                    
-                    needs_reauth = False
                     reauth_link = None
                     me_data = {}
+                    
+                    # 1. Evaluate /extend FIRST to detect SCA locks
+                    extend_payload = {
+                        "user_has_reconfirmed_consent": False,
+                        "client_id": TRUELAYER_CLIENT_ID,
+                        "client_secret": TRUELAYER_CLIENT_SECRET,
+                        "refresh_token": refresh_token,
+                        "redirect_uri": TRUELAYER_REDIRECT_URI,
+                        "user": {
+                            "id": current_user.user_uuid,
+                            "name": getattr(current_user, "name", "User"),
+                            "email": getattr(current_user, "email", "user@example.com")
+                        }
+                    }
+                    ext_res = await client.post("https://api.truelayer.com/connections/extend", json=extend_payload)
+                    action_needed = None
+                    
+                    if ext_res.status_code == 200:
+                        ext_data = ext_res.json()
+                        action_needed = ext_data.get("action_needed")
+                        if action_needed in ["authentication_needed", "reconfirmation_of_consent_needed"]:
+                            bank.consent_status = OpenBankingStatus.CONNECTION_EXPIRED.value
+                            reauth_link = ext_data.get("user_input_link")
+                        elif action_needed == "no_action_needed":
+                            bank.consent_status = OpenBankingStatus.CONNECTION_ACTIVE.value
+                            # Update tokens if new ones were provided
+                            if ext_data.get("access_token"):
+                                bank.access_token = token_gen.cipher_suite.encrypt(ext_data["access_token"].encode())
+                            if ext_data.get("refresh_token"):
+                                bank.refresh_token = token_gen.cipher_suite.encrypt(ext_data["refresh_token"].encode())
+                    else:
+                        logger.warning(f"Extend connection failed for {bank.bank_name}: {ext_res.text}")
+                    
+                    # 2. Evaluate /me SECOND for timestamps and hard revocations
+                    headers = {"Authorization": f"Bearer {access_token}"}
+                    response = await client.get("https://api.truelayer.com/data/v1/me", headers=headers)
                     
                     if response.status_code == 200:
                         data = response.json()
                         me_data = data.get("results", [{}])[0]
-                    elif response.status_code in [401, 403]:
-                        # SCA likely expired, fallback to /connections/extend
-                        needs_reauth = True
-                    
-                    # 2. If needed, call /connections/extend to check for reauth
-                    if needs_reauth:
-                        extend_payload = {
-                            "user_has_reconfirmed_consent": False,
-                            "client_id": TRUELAYER_CLIENT_ID,
-                            "client_secret": TRUELAYER_CLIENT_SECRET,
-                            "refresh_token": refresh_token,
-                            "redirect_uri": TRUELAYER_REDIRECT_URI,
-                            "user": {
-                                "id": current_user.user_uuid,
-                                "name": getattr(current_user, "name", "User"),
-                                "email": getattr(current_user, "email", "user@example.com")
-                            }
-                        }
-                        ext_res = await client.post("https://api.truelayer.com/connections/extend", json=extend_payload)
-                        if ext_res.status_code == 200:
-                            ext_data = ext_res.json()
-                            action_needed = ext_data.get("action_needed")
-                            if action_needed in ["authentication_needed", "reconfirmation_of_consent_needed"]:
-                                bank.consent_status = OpenBankingStatus.CONNECTION_EXPIRED.value
-                                reauth_link = ext_data.get("user_input_link")
-                            elif action_needed == "no_action_needed":
-                                bank.consent_status = OpenBankingStatus.CONNECTION_ACTIVE.value
-                                # Update tokens if new ones were provided
-                                if ext_data.get("access_token"):
-                                    bank.access_token = token_gen.cipher_suite.encrypt(ext_data["access_token"].encode())
-                                if ext_data.get("refresh_token"):
-                                    bank.refresh_token = token_gen.cipher_suite.encrypt(ext_data["refresh_token"].encode())
-                        else:
-                            logger.warning(f"Extend connection failed for {bank.bank_name}: {ext_res.text}")
-                            bank.consent_status = OpenBankingStatus.BANK_REVOKED_CONSENT.value
-                    else:
                         if me_data:
-                            status_str = me_data.get("consent_status", "").lower()
-                            if status_str == "authorised":
-                                bank.consent_status = OpenBankingStatus.CONNECTION_ACTIVE.value
-                            elif status_str == "revoked":
-                                bank.consent_status = OpenBankingStatus.BANK_REVOKED_CONSENT.value
-                            elif status_str == "expired":
-                                bank.consent_status = OpenBankingStatus.CONNECTION_EXPIRED.value
                             if me_data.get("consent_expires_at"):
                                 bank.consent_expires_at = dateutil.parser.parse(me_data.get("consent_expires_at")).replace(tzinfo=None)
                             if me_data.get("consent_status_updated_at"):
                                 bank.consent_status_updated_at = dateutil.parser.parse(me_data.get("consent_status_updated_at")).replace(tzinfo=None)
+                                
+                            status_str = me_data.get("consent_status", "").lower()
+                            if status_str == "revoked":
+                                bank.consent_status = OpenBankingStatus.BANK_REVOKED_CONSENT.value
+                            elif status_str == "expired":
+                                bank.consent_status = OpenBankingStatus.CONNECTION_EXPIRED.value
+                            elif status_str == "authorised":
+                                # Guardrail: ONLY upgrade if extend explicitly allowed it, 
+                                # and we aren't locked in EXPIRED or REVOKED states.
+                                if action_needed == "no_action_needed" and bank.consent_status not in [
+                                    OpenBankingStatus.CONNECTION_EXPIRED.value, 
+                                    OpenBankingStatus.BANK_REVOKED_CONSENT.value
+                                ]:
+                                    bank.consent_status = OpenBankingStatus.CONNECTION_ACTIVE.value
                     
                     # Compile result payload
                     results.append({
