@@ -176,7 +176,7 @@ def oss_timescale_refresh_flow():
         from config import engine
         from sqlalchemy import text
         with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            conn.execute(text("CALL refresh_continuous_aggregate('rolling_user_stats', NULL, NULL);"))
+            # conn.execute(text("CALL refresh_continuous_aggregate('rolling_user_stats', NULL, NULL);"))  # Temporarily disabled: view does not exist
     except Exception as e:
         logger.error(f"Failed to refresh aggregates: {e}")
 

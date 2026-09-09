@@ -35,6 +35,10 @@ services:
       context: .
       dockerfile: Dockerfile.api
     container_name: budai-api
+    dns:
+      - 100.100.100.100
+      - 8.8.8.8
+      - 1.1.1.1
     depends_on:
       budai-db:
         condition: service_healthy
