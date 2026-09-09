@@ -100,6 +100,14 @@ def bulk_save_categories(transactions: list[dict]) -> str:
             if not tx_uuid or not category or not merchant_name:
                 continue
                 
+            if mk_uuid:
+                # LLM Anti-Hallucination Guardrail: Verify the UUID actually exists
+                check_query = text("SELECT 1 FROM merchant_knowledge WHERE knowledge_uuid = :uuid")
+                exists = session.execute(check_query, {"uuid": mk_uuid}).fetchone()
+                if not exists:
+                    logger.warning(json.dumps({"message": f"LLM hallucinated/invalid mk_uuid {mk_uuid} for {merchant_name}. Generating new one.", "status_code": 400}))
+                    mk_uuid = None
+                    
             if not mk_uuid:
                 try:
                     if not embeddings:

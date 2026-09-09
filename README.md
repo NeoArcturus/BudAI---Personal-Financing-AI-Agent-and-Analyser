@@ -72,3 +72,13 @@ npm run dev
 ```
 
 The frontend will be available at `http://localhost:3000` and the backend API documentation at `http://localhost:8000/docs`.
+
+---
+
+## Recent Updates & Bug Fixes
+
+- **Frontend Authentication Flow:** Corrected routing mismatches and data parsing bugs in the TrueLayer Re-authentication flow. The `ConnectedAccounts` widget now flawlessly handles the API response (`data.reauth_url`) and routes requests to the correct `/api/auth/banks/` prefix.
+- **Dynamic Docker Environments:** Added shell parameter expansion fallbacks (`FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}`) to `docker-compose.yml`, enabling seamless switching between local testing and Vercel production hosting without code changes.
+- **AI Anti-Hallucination Guardrails:** Hardened the `CategorizerAgent`. Added a SQL existence check before executing foreign-key updates to ensure the pipeline safely recovers if the LLM hallucinates or truncates a `merchant_knowledge_uuid`.
+- **Subscription Pipeline Normalization:** Fixed the `analyze_subscriptions_task` crash by rewriting the tag mutation logic. It now correctly lazy-loads and updates the normalized `MerchantKnowledge` JSON structure via `flag_modified`, rather than attempting to mutate raw `Transaction` rows.
+- **Nginx Load Balancer Telemetry:** Enabled the `stub_status` module in `nginx.conf` to provide a real-time, zero-downtime dashboard (`/status`) for monitoring GPU cluster failover and active connection metrics.

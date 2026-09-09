@@ -4,7 +4,9 @@ import axios, { AxiosRequestConfig } from "axios";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
-  "http://localhost:8080";
+  (process.env.NODE_ENV === "development"
+    ? "http://localhost:8080"
+    : "https://delicate-limit-4d2a.neo-arcturus07.workers.dev");
 
 export const getApiUrl = (path: string): string => {
   const normalized = path.startsWith("/") ? path : `/${path}`;

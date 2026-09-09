@@ -404,15 +404,26 @@ class SubscriptionDetector:
                 session.add(new_sub)
                 detected_subscriptions.append(new_sub)
                 
-            # Tag Mutation on Raw Transactions
+            # Tag Mutation on Normalized Merchant Knowledge
+            from models.database_models import MerchantKnowledge
+            from sqlalchemy.orm.attributes import flag_modified
             for tx in cluster_txs:
-                existing_tags = tx.tags or []
-                if "#recurring" not in existing_tags:
-                    existing_tags.append("#recurring")
-                if is_hike and tx.transaction_uuid == cluster_txs[-1].transaction_uuid:
-                    if "#price-hike" not in existing_tags:
-                        existing_tags.append("#price-hike")
-                tx.tags = existing_tags
+                if not tx.merchant_knowledge_uuid:
+                    continue
+                mk = session.query(MerchantKnowledge).filter_by(knowledge_uuid=tx.merchant_knowledge_uuid).first()
+                if mk:
+                    existing_tags = list(mk.tags) if mk.tags else []
+                    changed = False
+                    if "#recurring" not in existing_tags:
+                        existing_tags.append("#recurring")
+                        changed = True
+                    if is_hike and tx.transaction_uuid == cluster_txs[-1].transaction_uuid:
+                        if "#price-hike" not in existing_tags:
+                            existing_tags.append("#price-hike")
+                            changed = True
+                    if changed:
+                        mk.tags = existing_tags
+                        flag_modified(mk, "tags")
                 
         # Final Atomic Commit
         if detected_subscriptions:

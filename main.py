@@ -16,7 +16,7 @@ def patched_convert_delta(_dict, default_class):
     return chunk
 
 base._convert_delta_to_message_chunk = patched_convert_delta
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from fastapi_cache import FastAPICache
@@ -53,6 +53,24 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="BudAI API Core", version="2.0.0", lifespan=lifespan)
+
+EDGE_SECRET = os.getenv("EDGE_SECRET", "BudAI-Super-Secret-Key-778899!")
+
+@app.middleware("http")
+async def verify_edge_secret(request: Request, call_next):
+    client_host = request.client.host if request.client else ""
+    
+    # Bypass verification for local machine traffic (Tailscale/Localhost)
+    if client_host in ["127.0.0.1", "localhost", "::1"]:
+        return await call_next(request)
+        
+    # Strictly enforce the Secret Edge Handshake for all external traffic
+    secret = request.headers.get("X-BudAI-Edge-Secret")
+    if secret != EDGE_SECRET:
+        return Response(content="Unauthorized Edge Traffic", status_code=403)
+        
+    return await call_next(request)
+
 
 
 app.add_middleware(StripCacheControlMiddleware)
@@ -91,6 +109,11 @@ app.include_router(dashboard_router)
 app.include_router(onboarding_router)
 app.include_router(bucket_router)
 app.include_router(websocket_router)
+
+
+@app.get("/")
+async def root():
+    return {"message": "BudAI Secure Edge is active. System routing operational."}
 
 if __name__ == "__main__":
     import uvicorn

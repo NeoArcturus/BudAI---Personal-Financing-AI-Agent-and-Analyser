@@ -25,7 +25,7 @@ TRUELAYER_CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 TRUELAYER_REDIRECT_URI = os.getenv("REDIRECT_URI")
 NEWSDATA_API_KEY = os.getenv("NEWSDATA_API_KEY")
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").strip("\"\'")
 raw_origins = os.getenv("ALLOWED_ORIGINS", FRONTEND_URL)
 if "bud-ai-platform.vercel.app" not in raw_origins:
     raw_origins = f"{raw_origins},https://bud-ai-platform.vercel.app"
