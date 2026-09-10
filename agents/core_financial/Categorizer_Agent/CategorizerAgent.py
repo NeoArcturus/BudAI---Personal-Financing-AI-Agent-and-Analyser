@@ -275,7 +275,6 @@ class CategorizerAgent:
                 tx.merchant_knowledge_uuid = res.knowledge_uuid
             else:
                 # We need to create a new row for this specific merchant name and category combo
-                from agents.core_financial.Categorizer_Agent.lazy_ml import get_embeddings_model
                 embeddings = get_embeddings_model()
                 vec = embeddings.embed_query(merchant_name)
                 
