@@ -151,7 +151,7 @@ class TrueLayerSync:
                             
                         to_date = datetime.now().strftime('%Y-%m-%d')
                         import os
-                        webhook_base = os.getenv("WEBHOOK_BASE_URL", "https://api.budai.app")
+                        webhook_base = os.getenv("WEBHOOK_BASE_URL", "https://api.budai.app").strip("\"'").rstrip("/").strip("\"'").rstrip("/")
                         webhook_url = f"{webhook_base}/api/webhooks/truelayer?user_uuid={user_uuid}&bank_uuid={bank_uuid}&acc_id={acc_id}"
                         
                         tx_params = {
@@ -230,7 +230,7 @@ class TrueLayerSync:
                 else:
                     pass
                 import os
-                webhook_base = os.getenv("WEBHOOK_BASE_URL", "https://api.budai.app")
+                webhook_base = os.getenv("WEBHOOK_BASE_URL", "https://api.budai.app").strip("\"'").rstrip("/").strip("\"'").rstrip("/")
                 params["async"] = "true"
                 params["webhook_uri"] = f"{webhook_base}/api/webhooks/truelayer?user_uuid={user_uuid}&bank_uuid={b_uuid}&acc_id={acc_id}"
 
