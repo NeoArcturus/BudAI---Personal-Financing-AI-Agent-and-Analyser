@@ -321,7 +321,7 @@ export default function DashboardClient({
 
   // Load manual widgets from local storage on mount
   useEffect(() => {
-    if (!userName || userName === "User") return;
+    if (!userName) return;
     const storageKey = `budai_manual_widgets_${userName}`;
     const saved = localStorage.getItem(storageKey);
     if (saved) {
@@ -349,7 +349,7 @@ export default function DashboardClient({
 
   // Save manual widgets to local storage when they change
   useEffect(() => {
-    if (!manualLoaded || !userName || userName === "User") return;
+    if (!manualLoaded || !userName) return;
     const manualWidgets = localWidgets.filter(w => w.isManual);
     const storageKey = `budai_manual_widgets_${userName}`;
     localStorage.setItem(storageKey, JSON.stringify(manualWidgets));
