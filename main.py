@@ -58,6 +58,10 @@ EDGE_SECRET = os.getenv("EDGE_SECRET", "BudAI-Super-Secret-Key-778899!")
 
 @app.middleware("http")
 async def verify_edge_secret(request: Request, call_next):
+    # Public health check and documentation endpoints bypass Edge Secret
+    if request.url.path in ["/healthz", "/", "/docs", "/openapi.json", "/api/neon/status"]:
+        return await call_next(request)
+
     client_host = request.client.host if request.client else ""
     
     # Bypass verification for local machine traffic (Tailscale/Localhost/TestClient)
