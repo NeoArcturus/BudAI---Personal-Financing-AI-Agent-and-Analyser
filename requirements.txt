@@ -4,6 +4,7 @@ jinja2
 fastapi-cache2
 requests
 python-jose[cryptography]
+pyjwt[crypto]
 passlib[bcrypt]
 bcrypt
 cryptography
@@ -18,6 +19,7 @@ psycopg[binary]
 alembic
 pgvector
 asyncpg
+boto3
 
 
 mcp
