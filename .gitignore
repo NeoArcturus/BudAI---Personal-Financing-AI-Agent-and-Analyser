@@ -1,6 +1,7 @@
 saved_model/
 saved_label_enc/
 agent_cache/
+embedding_cache/
 
 *.pt
 *.pth
@@ -10,14 +11,20 @@ agent_cache/
 __pycache__/
 *.pyc
 .venv/
+ml_env/
+venv/
 
 *.csv
-*.env
-*.env.test
+.env*
+render_env.txt
 *.db
+*.db-shm
+*.db-wal
+*.sqlite*
 *.png
 *.ipynb
 .gemini/
+.agents/
 gha-creds-*.json
 .github/
 
@@ -51,5 +58,6 @@ dist/
 build/
 
 1787576173713.gif
-allure-results
-logs
+allure-results/
+logs/
+.neon

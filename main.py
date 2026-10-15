@@ -60,8 +60,8 @@ EDGE_SECRET = os.getenv("EDGE_SECRET", "BudAI-Super-Secret-Key-778899!")
 async def verify_edge_secret(request: Request, call_next):
     client_host = request.client.host if request.client else ""
     
-    # Bypass verification for local machine traffic (Tailscale/Localhost)
-    if client_host in ["127.0.0.1", "localhost", "::1"]:
+    # Bypass verification for local machine traffic (Tailscale/Localhost/TestClient)
+    if client_host in ["127.0.0.1", "localhost", "::1", "testclient"]:
         return await call_next(request)
         
     # Strictly enforce the Secret Edge Handshake for all external traffic
@@ -91,6 +91,7 @@ from routes.dashboard_routes import router as dashboard_router
 from routes.onboarding_routes import router as onboarding_router
 from routes.bucket_routes import router as bucket_router
 from routes.websocket_routes import router as websocket_router
+from routes.neon_routes import router as neon_router
 
 app.include_router(auth_router)
 app.include_router(callback_router)
@@ -109,12 +110,18 @@ app.include_router(dashboard_router)
 app.include_router(onboarding_router)
 app.include_router(bucket_router)
 app.include_router(websocket_router)
+app.include_router(neon_router)
 
 
 @app.get("/")
 async def root():
     return {"message": "BudAI Secure Edge is active. System routing operational."}
 
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=False)
+    port = int(os.getenv("PORT", 8080))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)

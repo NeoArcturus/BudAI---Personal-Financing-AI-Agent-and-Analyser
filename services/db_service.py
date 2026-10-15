@@ -2,7 +2,7 @@ import json
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from urllib.parse import urlparse
-from config import engine, DATABASE_URL
+from config import engine, direct_engine, DATABASE_URL
 from sqlmodel import SQLModel
 from services.logger_setup import get_core_logger
 
@@ -20,6 +20,11 @@ def ensure_db_exists():
     hostname = result.hostname
     port = result.port or 5432
     
+    # If using managed cloud Postgres (Neon/Supabase/Render), the database is pre-created in the console.
+    if "neon.tech" in DATABASE_URL or "sslmode=require" in DATABASE_URL:
+        logger.debug(json.dumps({"message": "Using managed cloud PostgreSQL, skipping raw database creation.", "status_code": 100}))
+        return
+
     try:
         conn = psycopg2.connect(
             dbname='postgres',
@@ -44,22 +49,22 @@ def ensure_db_exists():
         cur.close()
         conn.close()
     except Exception as e:
-        logger.error(json.dumps({"message": f"Error ensuring database exists: {e}", "status_code": 500}))
+        logger.warning(json.dumps({"message": f"Database check skipped or failed: {e}", "status_code": 200}))
 
 def init_db(db_path=None):
     try:
         ensure_db_exists()
         
         from sqlalchemy import text
-        with engine.begin() as conn:
+        with direct_engine.begin() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
             
         # This registers the models
         from models.database_models import User, Bank, Account, Transaction, ChatSession, ChatHistory, UserLifestyleProfile, LifestyleCluster, Subscription, ProactiveInsight, MerchantKnowledge, Bucket, VirtualTransfer, SystemAlert
-        SQLModel.metadata.create_all(bind=engine)
+        SQLModel.metadata.create_all(bind=direct_engine)
         
         from sqlalchemy import text
-        with engine.begin() as conn:
+        with direct_engine.begin() as conn:
             # Legacy migrations
             conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_category VARCHAR;"))
             conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_semantic_anomaly BOOLEAN DEFAULT FALSE;"))

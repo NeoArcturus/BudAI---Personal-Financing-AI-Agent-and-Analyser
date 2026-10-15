@@ -10,9 +10,32 @@ logger = get_core_logger(__name__)
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/budai")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+DATABASE_URL_UNPOOLED = os.getenv("DATABASE_URL_UNPOOLED", DATABASE_URL)
+if DATABASE_URL_UNPOOLED.startswith("postgres://"):
+    DATABASE_URL_UNPOOLED = DATABASE_URL_UNPOOLED.replace("postgres://", "postgresql://", 1)
 
 if os.path.exists("/.dockerenv") and ("localhost" in DATABASE_URL or "127.0.0.1" in DATABASE_URL):
     DATABASE_URL = DATABASE_URL.replace("localhost", "budai-db").replace("127.0.0.1", "budai-db")
+
+# Neon Platform Services configuration
+NEON_BRANCH = os.getenv("NEON_BRANCH", "production")
+NEON_AUTH_BASE_URL = os.getenv("NEON_AUTH_BASE_URL")
+NEON_AUTH_JWKS_URL = os.getenv("NEON_AUTH_JWKS_URL")
+NEON_FUNCTION_HELLO_BASE_URL = os.getenv("NEON_FUNCTION_HELLO_BASE_URL")
+
+# Neon Object Storage (S3-compatible)
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_ENDPOINT_URL_S3 = os.getenv("AWS_ENDPOINT_URL_S3")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+NEON_STORAGE_BUCKET = os.getenv("NEON_STORAGE_BUCKET", "assets")
+
+# Qdrant Vector Cloud
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
 import secrets
 SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_hex(32))
@@ -33,13 +56,26 @@ ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins.split(",") if origin
 
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", b'cw_8H_1M4bX_3nF8vO5n3Y7A8xQ3_1m8aT2vP5_v5r8=')
 
+# Pooled engine for normal application query traffic (PgBouncer)
 engine = create_engine(
     DATABASE_URL,
-    pool_size=20,
-    max_overflow=40,
+    pool_size=10,
+    max_overflow=20,
     pool_timeout=60,
     pool_recycle=1800,
+    pool_pre_ping=True,
     connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+)
+
+# Direct (unpooled) engine for migrations, DDL, and session-level operations
+direct_engine = create_engine(
+    DATABASE_URL_UNPOOLED,
+    pool_size=5,
+    max_overflow=10,
+    pool_timeout=60,
+    pool_recycle=1800,
+    pool_pre_ping=True,
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL_UNPOOLED else {}
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
