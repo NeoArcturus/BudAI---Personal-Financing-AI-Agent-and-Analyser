@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlmodel import Session
 from models.database_models import Bucket
@@ -94,7 +94,7 @@ def update_bucket_details(
     if priority_index is not None:
         bucket.priority_index = priority_index
         
-    bucket.updated_at = datetime.utcnow()
+    bucket.updated_at = datetime.now(timezone.utc)
         
     logger.info(json.dumps({"message": f"Updated bucket {bucket_id} for user {user_uuid}.", "status_code": 200}))
     return bucket

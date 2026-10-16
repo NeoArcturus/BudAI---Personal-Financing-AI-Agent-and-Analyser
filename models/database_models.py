@@ -2,10 +2,14 @@ from typing import Optional, List, Any
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import UniqueConstraint, Column, JSON, CheckConstraint
 from pgvector.sqlalchemy import Vector
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from services.logger_setup import get_core_logger
 from models.status_codes import PipelineStatus
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
 
 logger = get_core_logger(__name__)
 
@@ -89,7 +93,7 @@ class ChatSession(SQLModel, table=True):
     session_id: str = Field(primary_key=True, index=True)
     user_uuid: Optional[str] = Field(default=None, foreign_key="users.user_uuid", index=True)
     title: Optional[str] = None
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=utc_now)
     context_data: Optional[Any] = Field(default=None, sa_column=Column(JSON))
     
     messages: List["ChatHistory"] = Relationship(back_populates="session", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
@@ -101,7 +105,7 @@ class ChatHistory(SQLModel, table=True):
     session_id: Optional[str] = Field(default=None, foreign_key="chat_sessions.session_id", index=True)
     role: Optional[str] = None
     content: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utc_now)
     ttft_ms: Optional[int] = None
     compute_time_ms: Optional[int] = None
     tokens: Optional[int] = None
@@ -116,7 +120,7 @@ class UserLifestyleProfile(SQLModel, table=True):
     macro_persona: Optional[str] = None
     last_cluster_hash: Optional[str] = None
     hidden_widgets: str = Field(default="")
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=utc_now)
     
 class LifestyleCluster(SQLModel, table=True):
     __tablename__ = "lifestyle_clusters"
@@ -127,7 +131,7 @@ class LifestyleCluster(SQLModel, table=True):
     behavioral_summary: Optional[str] = None
     total_spend: Optional[float] = None
     transaction_count: Optional[int] = None
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=utc_now)
 
 class Subscription(SQLModel, table=True):
     __tablename__ = "subscriptions"
@@ -144,7 +148,7 @@ class Subscription(SQLModel, table=True):
     is_price_hike: bool = Field(default=False)
     status: str = Field(default=PipelineStatus.SUBSCRIPTION_DETECTED.value)
     cluster_signature_hash: Optional[str] = Field(default=None, unique=True, index=True)
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=utc_now)
     
     user: Optional["User"] = Relationship(back_populates="subscriptions")
 
@@ -155,7 +159,7 @@ class ProactiveInsight(SQLModel, table=True):
     insight_text: str
     insight_type: str = Field(default="opportunity") # "warning", "opportunity", "info"
     urgency_level: int = Field(default=1) # 1=low, 5=high
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 class MerchantKnowledge(SQLModel, table=True):
     __tablename__ = "merchant_knowledge"
@@ -167,7 +171,7 @@ class MerchantKnowledge(SQLModel, table=True):
     tags: Optional[list[str]] = Field(default=None, sa_column=Column(JSON))
     embedding: Any = Field(sa_column=Column(Vector(768)))
     is_human_verified: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 class BucketType(str, Enum):
     DEFAULT = "DEFAULT"
@@ -187,7 +191,7 @@ class Bucket(SQLModel, table=True):
     priority_index: float = Field(default=100.0)
     cached_balance: float = Field(default=0.0)
     is_active: bool = Field(default=True)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     # Note: Ensuring the default bucket rule can be handled in service layer or DB constraint (partial index).
 
@@ -197,7 +201,7 @@ class VirtualTransfer(SQLModel, table=True):
     source_bucket_id: str = Field(foreign_key="buckets.id")
     target_bucket_id: str = Field(foreign_key="buckets.id")
     amount: float
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utc_now)
 
     __table_args__ = (
         CheckConstraint('amount > 0', name='check_amount_positive'),
@@ -210,5 +214,5 @@ class SystemAlert(SQLModel, table=True):
     event_type: str
     message: str
     is_read: bool = Field(default=False)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utc_now)
 
