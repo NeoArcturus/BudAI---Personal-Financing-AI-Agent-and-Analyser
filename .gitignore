@@ -17,6 +17,8 @@ venv/
 *.csv
 .env*
 render_env.txt
+gcp_env.txt
+gcp_env_yaml.txt
 *.db
 *.db-shm
 *.db-wal
