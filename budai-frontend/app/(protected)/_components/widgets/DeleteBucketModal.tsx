@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { toast, Modal } from "@heroui/react";
+import { toast, Modal, Button } from "@heroui/react";
 import { AlertTriangle } from "lucide-react";
 
 interface DeleteBucketModalProps {
@@ -46,12 +46,12 @@ export function DeleteBucketModal({ isOpen, onOpenChange, bucket }: DeleteBucket
             <AlertTriangle size={20} />
           </div>
           <div className="flex flex-col gap-1">
-            <h3 className="text-sm font-black text-white uppercase tracking-widest">Delete Bucket</h3>
+            <h3 className="text-xs font-black text-foreground uppercase tracking-widest">Delete Bucket</h3>
           </div>
         </div>
         <div className="p-6 py-8">
           <p className="text-foreground/70 text-sm mb-4">
-            You are about to delete the <span className="text-white font-bold">{bucket.name || bucket.title}</span> bucket.
+            You are about to delete the <span className="text-foreground font-bold">{bucket.name || bucket.title}</span> bucket.
           </p>
           <div className="bg-danger/10 border border-danger/20 p-4 rounded-xl mt-2">
             <p className="text-danger text-xs font-bold uppercase tracking-wide leading-relaxed">
@@ -60,19 +60,21 @@ export function DeleteBucketModal({ isOpen, onOpenChange, bucket }: DeleteBucket
           </div>
         </div>
         <div className="p-6 border-t border-white/10 flex justify-end gap-3 bg-white/5">
-          <button
-            onClick={() => onOpenChange(false)}
-            className="px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest text-foreground/70 hover:bg-white/10 transition-all"
+          <Button
+            variant="ghost"
+            onPress={() => onOpenChange(false)}
+            className="px-6 font-bold text-xs uppercase tracking-widest text-foreground/70 hover:bg-white/10"
           >
             Cancel
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest bg-[#f31260] text-white hover:bg-[#f31260]/80 shadow-[0_0_15px_rgba(243,18,96,0.5)] transition-all disabled:opacity-50 border border-transparent"
+          </Button>
+          <Button
+            variant="danger"
+            onPress={handleDelete}
+            isDisabled={isDeleting}
+            className="px-6 font-bold text-xs uppercase tracking-widest"
           >
             {isDeleting ? "Deleting..." : "Confirm Delete"}
-          </button>
+          </Button>
         </div>
         </Modal.Dialog>
       </Modal.Container>

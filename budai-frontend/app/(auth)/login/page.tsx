@@ -54,7 +54,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-transparent items-center justify-center font-sans text-white relative overflow-hidden">
+    <div className="flex h-screen w-full bg-transparent items-center justify-center font-sans text-white relative overflow-hidden">
       <Card className="w-full max-w-md bg-black/40 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-2xl relative overflow-hidden z-10 p-8">
         <Card.Header className="flex flex-col items-start gap-1 p-0 mb-8 bg-transparent">
           <h1 className="text-3xl font-extrabold tracking-tight text-white m-0 drop-shadow-md">
@@ -140,6 +140,15 @@ export default function LoginPage() {
               {isLoading ? "Authenticating..." : "Log In"}
             </Button>
           </Form>
+
+          <div className="mt-6 text-center">
+            <p className="text-xs text-muted-foreground font-mono">
+              Don't have an account?{" "}
+              <Link href="/onboarding" className="text-primary hover:underline font-bold">
+                Get Started
+              </Link>
+            </p>
+          </div>
 
 
         </Card.Content>

@@ -322,7 +322,7 @@ export default function ExpenseDistributionWidgetClient({
               </DatePicker.Popover>
             </DatePicker>
 
-            <div className="flex-1 min-w-40 max-w-50">
+            <div className="flex-1 min-w-40 max-w-56">
               <Label className="text-[9px] font-black uppercase tracking-[0.3em] text-foreground/40 mb-2 block pl-1">
                 Selected Account
               </Label>
@@ -336,7 +336,7 @@ export default function ExpenseDistributionWidgetClient({
                     className="text-foreground/30 shrink-0 pointer-events-none"
                   />
                 </Dropdown.Trigger>
-                <Dropdown.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-xl shadow-2xl w-64 p-2">
+                <Dropdown.Popover className="bg-black/80 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-xl shadow-2xl w-72 p-2">
                   <Dropdown.Menu
                     items={accounts.map(a => ({ ...a, id: a.account_id }))}
                     className="outline-none"

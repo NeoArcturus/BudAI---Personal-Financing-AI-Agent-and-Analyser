@@ -333,15 +333,14 @@ export default function OnboardingPage() {
                       <CheckboxGroup
                         name="income"
                         value={incomePattern}
-                        onChange={setIncomePattern}
+                        onChange={(vals) => setIncomePattern(vals.length > 0 ? [vals[vals.length - 1]] : [])}
                         className="w-full flex flex-col gap-3"
                       >
                         {INCOME_OPTIONS.map((opt) => {
                           const isSelected = incomePattern.includes(opt.id);
-                          const isDisabled = incomePattern.length > 0 && !isSelected;
 
                           return (
-                            <Checkbox key={opt.id} value={opt.id} variant="secondary" isDisabled={isDisabled}>
+                            <Checkbox key={opt.id} value={opt.id} variant="secondary">
                               <Checkbox.Content className={`${contentBaseClass} ${contentInactiveClass} ${contentActiveClass}`}>
                                 <Checkbox.Control className="absolute right-4 top-1/2 -translate-y-1/2 size-5 rounded-full before:rounded-full">
                                   <Checkbox.Indicator />

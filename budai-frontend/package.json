@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:local": "NEXT_PUBLIC_API_BASE_URL=http://localhost:8080 next dev",
+    "dev:prod": "NEXT_PUBLIC_API_BASE_URL=https://delicate-limit-4d2a.neo-arcturus07.workers.dev next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

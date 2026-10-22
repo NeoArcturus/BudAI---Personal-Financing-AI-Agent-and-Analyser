@@ -43,7 +43,7 @@ export default function MarketTickerClient({ initialData }: MarketTickerProps) {
             </span>
             <div className={cn(
               "flex items-center gap-1 text-[9px] font-black tracking-tighter font-mono",
-              item.change > 0 ? "text-green-500" : item.change < 0 ? "text-primary" : "text-foreground/20"
+              item.change > 0 ? "text-green-500" : item.change < 0 ? "text-red-500" : "text-foreground/20"
             )}>
               {item.change > 0 ? <TrendingUp size={12} /> : item.change < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
               {Math.abs(item.change).toFixed(2)}%
@@ -61,7 +61,7 @@ export default function MarketTickerClient({ initialData }: MarketTickerProps) {
             </span>
             <div className={cn(
               "flex items-center gap-1 text-[9px] font-black tracking-tighter font-mono",
-              item.change > 0 ? "text-green-500" : item.change < 0 ? "text-primary" : "text-foreground/20"
+              item.change > 0 ? "text-green-500" : item.change < 0 ? "text-red-500" : "text-foreground/20"
             )}>
               {item.change > 0 ? <TrendingUp size={12} /> : item.change < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
               {Math.abs(item.change).toFixed(2)}%
@@ -69,18 +69,6 @@ export default function MarketTickerClient({ initialData }: MarketTickerProps) {
           </div>
         ))}
       </div>
-      <style jsx global>{`
-        @keyframes marquee {
-          0% { transform: translateX(0%); }
-          100% { transform: translateX(-50%); }
-        }
-        .animate-marquee {
-          animation: marquee 30s linear infinite;
-        }
-        .animate-marquee:hover {
-          animation-play-state: paused;
-        }
-      `}</style>
     </div>
   );
 }

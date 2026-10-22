@@ -45,7 +45,7 @@ export default async function HomePage() {
   let initialBuckets = [];
   let initialAlerts = [];
   try {
-    const API_BASE_URL = process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+    const API_BASE_URL = process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "https://delicate-limit-4d2a.neo-arcturus07.workers.dev";
     // We try to fetch the initial data for hydration
     const [bucketsRes, alertsRes] = await Promise.all([
       fetch(`${API_BASE_URL}/api/buckets`, { cache: "no-store" }).catch(() => null),

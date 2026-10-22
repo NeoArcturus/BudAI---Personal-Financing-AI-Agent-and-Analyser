@@ -180,7 +180,11 @@ export default function SimulationControlsModal({
                     onChange={(isSelected) => setDraft({ ...draft, stress_test_active: isSelected })}
                     className={draft.stress_test_active ? "data-[selected=true]:bg-danger" : ""}
                     size="sm"
-                  />
+                  >
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                  </Switch>
                 </div>
               </div>
 

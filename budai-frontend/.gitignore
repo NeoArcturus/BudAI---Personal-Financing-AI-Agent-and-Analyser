@@ -45,3 +45,6 @@ next-env.d.ts
 # Custom AI rules
 GEMINI.md
 dashboard example.jpg
+
+# Audit reports and flaw tracking
+.audit/

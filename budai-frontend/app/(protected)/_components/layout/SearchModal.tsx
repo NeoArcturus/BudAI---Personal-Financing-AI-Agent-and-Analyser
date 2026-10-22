@@ -82,12 +82,12 @@ export default function GlobalSearchModal() {
       path: "/home",
     },
     {
-      id: "nav-settings",
+      id: "nav-connections",
       type: "nav",
-      label: "Go to Settings",
+      label: "Manage Connections",
       icon: Compass,
       section: "Navigation",
-      path: "/settings",
+      path: "/connections",
     },
     ...accounts.map((acc) => ({
       id: `acc-${acc.account_id}`,
@@ -95,7 +95,7 @@ export default function GlobalSearchModal() {
       label: acc.bank_name || acc.provider_name || "Account",
       icon: Building2,
       section: "Accounts",
-      path: `/accounts/${acc.account_id}`,
+      path: "/connections",
     })),
   ];
 
@@ -140,7 +140,7 @@ export default function GlobalSearchModal() {
     } else if ((item.type === "nav" || item.type === "account") && item.path) {
       router.push(item.path);
     } else if (item.type === "transaction") {
-      // Transactions page removed
+      router.push("/home");
     }
   };
 

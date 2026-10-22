@@ -17,7 +17,7 @@ export default async function ProtectedLayout({
   const token = cookieStore.get("budai_token")?.value;
 
   const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+    process.env.NEXT_PUBLIC_API_BASE_URL || "https://delicate-limit-4d2a.neo-arcturus07.workers.dev";
 
   let initialAccounts: Account[] = [];
   let initialSessions: ChatSession[] = [];

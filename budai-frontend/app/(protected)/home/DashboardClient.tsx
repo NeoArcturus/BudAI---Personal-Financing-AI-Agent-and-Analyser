@@ -119,7 +119,7 @@ function SortableBucketItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative flex touch-none group w-full bg-content1 border border-white/5 shadow-xl rounded-3xl overflow-hidden transition-all duration-300 ${isDragging ? "opacity-50 scale-[0.98] ring-2 ring-primary/50" : ""
+      className={`relative flex touch-none group w-full rounded-2xl overflow-hidden transition-all duration-300 ${isDragging ? "opacity-50 scale-[0.98] ring-2 ring-primary/50" : ""
         }`}
     >
       <div
@@ -470,9 +470,9 @@ export default function DashboardClient({
       return (
         <div className="w-full h-full liquid-glass rounded-3xl flex flex-col relative shadow-xl overflow-hidden p-6 gap-4">
           <div className="flex items-center gap-3 text-muted-foreground/40 mb-2">
-            <Sparkles size={20} className="text-primary" />
+            <MessageSquare size={18} className="text-primary" />
             <span className="text-xs font-bold uppercase tracking-widest text-primary">
-              Recent AI Chats
+              Recent Discussions
             </span>
           </div>
           <div className="flex flex-col gap-2 overflow-y-auto scrollbar-hide flex-1">
@@ -485,7 +485,7 @@ export default function DashboardClient({
                 >
                   <div className="flex items-center gap-3 overflow-hidden">
                     <MessageSquare size={16} className="text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                    <span className="text-sm font-medium text-white/80 group-hover:text-white truncate">
+                    <span className="text-sm font-medium text-foreground/80 group-hover:text-foreground truncate">
                       {session.title || "New Session"}
                     </span>
                   </div>
@@ -499,7 +499,7 @@ export default function DashboardClient({
             )}
           </div>
           <CloseButton
-            onClick={() => handleRemoveWidget(widget.widget_uuid)}
+            onPress={() => handleRemoveWidget(widget.widget_uuid)}
             className="absolute top-4 right-4 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors rounded-2xl"
           />
         </div>
@@ -509,7 +509,7 @@ export default function DashboardClient({
   };
 
   // Synchronization Gate - Render after all hooks
-  if (!userProfile?.is_onboarded || accounts.length === 0) {
+  if (!userProfile?.is_onboarded) {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full bg-background gap-8">
         <div className="relative">
@@ -610,7 +610,7 @@ export default function DashboardClient({
                   <button
 
                     onClick={() => setIsBucketModalOpen(true)}
-                    className="liquid-glass rounded-xl flex flex-col items-center justify-center p-6 border-[0.5px] border-dashed border-white/20 text-muted-foreground hover:bg-white/5 hover:text-white transition-all min-h-[220px] group cursor-pointer gap-2 shadow-inner">
+                    className="liquid-glass rounded-2xl flex flex-col items-center justify-center p-6 border-[0.5px] border-dashed border-white/20 text-muted-foreground hover:bg-white/5 hover:text-white transition-all min-h-[220px] group cursor-pointer gap-2 shadow-inner">
                     <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-primary/20 group-hover:text-primary transition-all border border-transparent group-hover:border-primary/30">
                       <Plus size={20} />
                     </div>
@@ -680,10 +680,10 @@ export default function DashboardClient({
                 <h2 className="text-foreground font-bold text-lg tracking-tight">
                   Add Widget
                 </h2>
-                <button
-                  onClick={() => setIsModalOpen(false)}
+                <CloseButton
+                  onPress={() => setIsModalOpen(false)}
                   className="text-muted-foreground hover:bg-white/10 hover:text-foreground transition-colors rounded-lg w-8 h-8 flex items-center justify-center cursor-pointer"
-                >&times;</button>
+                />
               </div>
               <div className="p-4 flex flex-col gap-2 max-h-[60vh] overflow-y-auto scrollbar-hide">
                 {AVAILABLE_WIDGET_TYPES.map((widget) => (

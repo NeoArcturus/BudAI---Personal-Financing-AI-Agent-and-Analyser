@@ -59,7 +59,7 @@ export const AdvisorSidebar = ({
   };
 
   return (
-    <aside className="w-full md:w-64 h-full bg-transparent border-r border-border flex flex-col shrink-0 transition-colors duration-500">
+    <aside className="hidden md:flex md:w-64 h-full bg-transparent border-r border-border flex-col shrink-0 transition-colors duration-500">
       <div className="p-8">
         <Button
           onPress={handleNewChat}
@@ -87,7 +87,7 @@ export const AdvisorSidebar = ({
         </div>
       </div>
 
-      <ScrollShadow hideScrollBar className="flex-1 px-4 pb-8  h-[calc(100vh-250px)]">
+      <ScrollShadow hideScrollBar className="flex-1 px-4 pb-8 min-h-0">
         {sessionsLoading ? (
           <div className="flex flex-col gap-3 px-4">
             {[1, 2, 3].map((i) => (

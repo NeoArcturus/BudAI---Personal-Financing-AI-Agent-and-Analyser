@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { parseDate, CalendarDate } from "@internationalized/date";
 import { useTransactions, usePersistedState, usePersistedDate } from "@/lib/hooks";
 import WidgetFlipCard from "../../internal/FlipCard";
+import { useSearch } from "@/app/context/SearchContext";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { WidgetContext } from "../../../home/DashboardClient";
@@ -62,6 +63,7 @@ export default function LedgerTableWidgetClient({
   const { onRemove, instanceId } = React.useContext(WidgetContext);
   const queryClient = useQueryClient();
   const { accounts, createNewSession } = useBudAI();
+  const { openSearch } = useSearch();
 
   const [selectedAccountId, setSelectedAccountId] = usePersistedState<string>(
     `ledger_account${instanceId ? `-${instanceId}` : ""}`,
@@ -243,7 +245,12 @@ export default function LedgerTableWidgetClient({
               Recent Transactions
             </h3>
             <div className="flex items-center gap-4">
-              <Button size="sm" variant="ghost" className="text-[10px] font-black text-foreground/50 hover:text-foreground uppercase tracking-widest bg-transparent border-none">
+              <Button
+                size="sm"
+                variant="ghost"
+                onPress={() => openSearch()}
+                className="text-[10px] font-black text-foreground/50 hover:text-foreground uppercase tracking-widest bg-transparent border-none cursor-pointer"
+              >
                 View All
               </Button>
               <CloseButton
@@ -393,7 +400,7 @@ export default function LedgerTableWidgetClient({
                 <Modal.CloseTrigger className="absolute top-6 right-6 text-foreground/40 hover:text-foreground transition-colors cursor-pointer" />
                 <Modal.Header className="mb-6 flex justify-center">
                   <Modal.Heading className="text-[10px] font-black uppercase tracking-[0.4em] italic text-primary text-center">
-                    Transactions Details
+                    Transaction Details
                   </Modal.Heading>
                 </Modal.Header>
                 <Modal.Body className="space-y-0 p-0">
@@ -404,7 +411,7 @@ export default function LedgerTableWidgetClient({
                           className={cn(
                             "text-4xl font-mono tracking-tighter font-bold",
                             (selectedTx.amount ?? 0) > 0 || selectedTx.category === "Income"
-                              ? "text-white"
+                              ? "text-foreground"
                               : "text-foreground/80",
                           )}
                         >
@@ -455,7 +462,7 @@ export default function LedgerTableWidgetClient({
                           Category
                         </Label>
                         <Dropdown>
-                          <Dropdown.Trigger className="w-56 relative flex items-center justify-between bg-white/5 hover:bg-white/10 border border-white/10 text-foreground rounded-lg h-12 px-4 cursor-pointer transition-colors outline-none">
+                          <Dropdown.Trigger className="w-full relative flex items-center justify-between bg-white/5 hover:bg-white/10 border border-white/10 text-foreground rounded-lg h-12 px-4 cursor-pointer transition-colors outline-none">
                             <span className="font-mono text-xs font-bold tracking-tight pointer-events-none">
                               {editCategory || "Select Category"}
                             </span>
@@ -465,7 +472,7 @@ export default function LedgerTableWidgetClient({
                             />
                           </Dropdown.Trigger>
                           <Dropdown.Popover
-                            className="bg-black/95 backdrop-blur-3xl border border-white/10 shadow-2xl rounded-xl w-56"
+                            className="bg-black/95 backdrop-blur-3xl border border-white/10 shadow-2xl rounded-xl w-[calc(100vw-3rem)] max-w-sm"
                             placement="bottom"
                           >
                             <Dropdown.Menu

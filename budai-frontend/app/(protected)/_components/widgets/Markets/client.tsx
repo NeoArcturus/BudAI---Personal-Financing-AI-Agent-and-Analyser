@@ -117,8 +117,8 @@ export default function CommodityMarketWidgetClient({
         scales: {
           x: { display: false },
           y: {
-            grid: { color: "rgba(255, 255, 255, 0.08)" },
-            ticks: { color: "rgba(255, 255, 255, 0.8)", font: { size: 10 } },
+            grid: { color: "rgba(150, 150, 150, 0.1)" },
+            ticks: { font: { size: 10 } },
           },
         },
       },
@@ -218,7 +218,7 @@ export default function CommodityMarketWidgetClient({
                   {isPositive ? (
                     <TrendingUp size={14} className="text-green-500" />
                   ) : (
-                    <TrendingDown size={14} className="text-primary" />
+                    <TrendingDown size={14} className="text-red-500" />
                   )}
                   <span className="text-[9px] font-black uppercase tracking-[0.4em] text-foreground/60 italic">
                     Data Stream

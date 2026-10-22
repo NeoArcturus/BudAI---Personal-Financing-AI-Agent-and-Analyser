@@ -3,7 +3,7 @@ import { Plus_Jakarta_Sans, JetBrains_Mono, Inter } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { Providers } from "./providers";
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'});
+const inter = Inter({subsets:['latin'],variable:'--font-inter'});
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],

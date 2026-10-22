@@ -2,15 +2,33 @@
 
 import axios, { AxiosRequestConfig } from "axios";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
-  (process.env.NODE_ENV === "development"
-    ? "http://localhost:8080"
-    : "https://delicate-limit-4d2a.neo-arcturus07.workers.dev");
+export const getApiBaseUrl = (): string => {
+  if (typeof window !== "undefined") {
+    const override = localStorage.getItem("budai_api_target");
+    if (override === "local") return "http://localhost:8080";
+    if (override === "prod") return "https://delicate-limit-4d2a.neo-arcturus07.workers.dev";
+  }
+  return (
+    process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
+    "https://delicate-limit-4d2a.neo-arcturus07.workers.dev"
+  );
+};
+
+export const setApiTarget = (target: "local" | "prod" | "auto"): void => {
+  if (typeof window === "undefined") return;
+  if (target === "auto") {
+    localStorage.removeItem("budai_api_target");
+  } else {
+    localStorage.setItem("budai_api_target", target);
+  }
+  window.location.reload();
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export const getApiUrl = (path: string): string => {
   const normalized = path.startsWith("/") ? path : `/${path}`;
-  return `${API_BASE_URL}${normalized}`;
+  return `${getApiBaseUrl()}${normalized}`;
 };
 
 export const getAuthToken = (): string => {
@@ -54,10 +72,14 @@ export const clearSession = (): void => {
 };
 
 export const apiClient = axios.create({
-  baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
+});
+
+apiClient.interceptors.request.use((config) => {
+  config.baseURL = getApiBaseUrl();
+  return config;
 });
 
 let isRefreshing = false;
@@ -96,7 +118,7 @@ apiClient.interceptors.response.use(
       
       try {
         const storedRefreshToken = typeof window !== "undefined" ? localStorage.getItem("budai_refresh_token") : null;
-        const refreshResponse = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
+        const refreshResponse = await axios.post(`${getApiBaseUrl()}/api/auth/refresh`, {
           refresh_token: storedRefreshToken
         }, {
           withCredentials: true

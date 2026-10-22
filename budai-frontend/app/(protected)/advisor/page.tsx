@@ -278,7 +278,7 @@ export default function AdvisorPage() {
   );
 
   return (
-    <div className="flex h-screen w-full bg-black text-foreground font-sans overflow-hidden transition-colors duration-500">
+    <div className="flex h-full w-full bg-background text-foreground font-sans overflow-hidden transition-colors duration-500">
       <AdvisorSidebar
         sessions={sessions as BudAIChatSession[]}
         sessionsLoading={sessionsLoading}

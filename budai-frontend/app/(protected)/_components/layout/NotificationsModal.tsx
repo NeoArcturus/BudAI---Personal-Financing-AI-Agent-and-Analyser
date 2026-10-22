@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { Modal, Button, ScrollShadow } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, AlertTriangle, ShieldCheck, ArrowRightLeft, Info, X } from "lucide-react";
-import { getAuthToken } from "@/lib/api";
+import { getAuthToken, getApiBaseUrl } from "@/lib/api";
 
 interface NotificationsModalProps {
   isOpen: boolean;
@@ -17,7 +17,7 @@ export function NotificationsModal({ isOpen, onOpenChange, initialAlerts = [] }:
     queryKey: ["systemAlerts"],
     queryFn: async () => {
       const token = getAuthToken();
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:8080";
+      const API_BASE_URL = getApiBaseUrl();
       const res = await fetch(`${API_BASE_URL}/api/alerts/history`, {
         headers: { Authorization: `Bearer ${token}` }
       });

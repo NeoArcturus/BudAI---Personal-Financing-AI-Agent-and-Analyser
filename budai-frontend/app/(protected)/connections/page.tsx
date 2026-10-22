@@ -193,10 +193,10 @@ export default function ConnectionsPage() {
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col lg:flex-row gap-8 pb-8 overflow-hidden h-full">
+        <div className="flex-1 flex flex-col lg:flex-row gap-8 pb-8 overflow-y-auto lg:overflow-hidden h-full">
 
           {/* Left Panel: The Connection Roster (Control Center Sidebar) */}
-          <div className="w-full lg:w-80 shrink-0 flex flex-col gap-4 overflow-y-auto custom-scrollbar relative h-full">
+          <div className="w-full lg:w-80 shrink-0 flex flex-col gap-4 overflow-y-auto custom-scrollbar relative h-auto lg:h-full max-h-[380px] lg:max-h-none">
 
             <div className="flex items-center justify-between px-2 shrink-0">
               <div className="flex bg-white/5 rounded-lg p-1 gap-1">

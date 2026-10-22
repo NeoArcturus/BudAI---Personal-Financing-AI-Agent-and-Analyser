@@ -145,7 +145,7 @@ export default function LandingPage() {
               className="text-5xl md:text-7xl font-mono font-black tracking-tighter text-foreground leading-tight uppercase border-l-4 border-primary pl-6 text-left w-full"
             >
               Personal Financial<br />
-              <span className="text-primary tracking-widest drop-shadow-[0_0_15px_rgba(var(--nextui-primary),0.3)]">
+              <span className="text-primary tracking-widest drop-shadow-[0_0_15px_rgba(0,242,255,0.3)]">
                 Analysis
               </span>
             </motion.h1>

@@ -216,7 +216,7 @@ export default function BalanceForecastWidgetClient() {
 
   return (
     <WidgetFlipCard
-      insight="Balance projections are mathematically modeled based on your historical cashflow velocity and current simulation parameters. Discuss this forecast to explore detailed 'what-if' scenarios."
+      insight="Balance projections are mathematically calculated based on your historical cashflow yield and current simulation parameters. Discuss this forecast to explore detailed 'what-if' scenarios."
       onDiscuss={() => {
         // Implement chat session opening if needed
       }}

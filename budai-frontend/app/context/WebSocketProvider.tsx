@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { toast } from "@heroui/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getAuthToken } from "@/lib/api";
+import { getAuthToken, getApiBaseUrl } from "@/lib/api";
 
 interface WebSocketContextType {
   isConnected: boolean;
@@ -31,7 +31,7 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
       const currentToken = getAuthToken();
       if (!currentToken) return;
 
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:8080";
+      const API_BASE_URL = getApiBaseUrl();
       const freshWsUrl = `${API_BASE_URL.replace(/^http/, "ws")}/ws?token=${currentToken}`;
       
       const ws = new WebSocket(freshWsUrl);

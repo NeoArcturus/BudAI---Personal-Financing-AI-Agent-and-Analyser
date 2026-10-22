@@ -4,6 +4,7 @@
 import React, { useEffect, useRef } from "react";
 import Chart from "chart.js/auto";
 import { ChartConfiguration, ChartOptions, Plugin } from "chart.js";
+import { useTheme } from "next-themes";
 
 interface CoreChartEngineProps {
   config: ChartConfiguration | null;
@@ -37,6 +38,7 @@ const customGlowPlugin: Plugin = {
 export default function CoreChartEngine({ config }: CoreChartEngineProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstance = useRef<Chart | null>(null);
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     if (!canvasRef.current || !config) return;
@@ -44,6 +46,10 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
     if (chartInstance.current) {
       chartInstance.current.destroy();
     }
+
+    const isLight = resolvedTheme === "light";
+    const tickColor = isLight ? "rgba(15, 23, 42, 0.7)" : "rgba(255, 255, 255, 0.8)";
+    const gridColor = isLight ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.05)";
 
     const baseOptions: ChartOptions = {
       responsive: true,
@@ -57,10 +63,10 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
           display: false,
         },
         tooltip: {
-          backgroundColor: "rgba(26, 28, 36, 0.9)",
-          titleColor: "#FFFFFF",
-          bodyColor: "#8B8E98",
-          borderColor: "rgba(255,255,255,0.1)",
+          backgroundColor: isLight ? "rgba(255, 255, 255, 0.95)" : "rgba(26, 28, 36, 0.9)",
+          titleColor: isLight ? "#0f172a" : "#FFFFFF",
+          bodyColor: isLight ? "#334155" : "#8B8E98",
+          borderColor: isLight ? "rgba(0, 0, 0, 0.1)" : "rgba(255, 255, 255, 0.1)",
           borderWidth: 1,
           padding: 12,
           boxPadding: 6,
@@ -72,16 +78,16 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
           grid: { display: false },
           border: { display: false },
           ticks: {
-            color: "rgba(255,255,255,0.8)",
+            color: tickColor,
             font: { size: 11, family: "sans-serif" },
             padding: 10,
           },
         },
         y: {
-          grid: { color: "rgba(255,255,255,0.05)", drawTicks: false },
+          grid: { color: gridColor, drawTicks: false },
           border: { display: false },
           ticks: {
-            color: "rgba(255,255,255,0.8)",
+            color: tickColor,
             font: { size: 11, family: "sans-serif" },
             padding: 10,
           },
@@ -158,7 +164,7 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
         chartInstance.current.destroy();
       }
     };
-  }, [config]);
+  }, [config, resolvedTheme]);
 
   if (!config) return null;
 
