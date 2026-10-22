@@ -146,6 +146,54 @@ class QdrantService:
             logger.error(f"Error searching vectors in {collection_name}: {e}")
             raise
 
+    def upsert_merchant(
+        self,
+        knowledge_uuid: str,
+        clean_merchant_name: str,
+        category: str,
+        vector: List[float],
+        sub_category: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        is_human_verified: bool = False
+    ) -> bool:
+        """
+        Upserts a merchant record into the Qdrant merchant_knowledge collection.
+        """
+        import uuid
+        try:
+            point_id = str(uuid.UUID(str(knowledge_uuid)))
+        except ValueError:
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(knowledge_uuid)))
+
+        point = models.PointStruct(
+            id=point_id,
+            vector=vector,
+            payload={
+                "knowledge_uuid": str(knowledge_uuid),
+                "clean_merchant_name": clean_merchant_name,
+                "category": category,
+                "sub_category": sub_category or "",
+                "tags": tags or [],
+                "is_human_verified": is_human_verified
+            }
+        )
+        self.upsert_vectors("merchant_knowledge", [point])
+        return True
+
+    def search_merchant_knowledge(
+        self,
+        query_vector: List[float],
+        limit: int = 1,
+        score_threshold: Optional[float] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Searches merchant_knowledge in Qdrant for semantic matches.
+        """
+        results = self.search_vectors("merchant_knowledge", query_vector=query_vector, limit=limit)
+        if score_threshold is not None:
+            results = [r for r in results if r.get("score", 0.0) >= score_threshold]
+        return results
+
 _service_instance: Optional[QdrantService] = None
 
 def get_qdrant_service() -> QdrantService:

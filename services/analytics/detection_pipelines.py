@@ -10,7 +10,7 @@ logger = get_core_logger(__name__)
 def run_detection_pipelines(session: Session, user_uuid: str) -> dict:
     """
     Step 2 of Phase 3: Mathematical & Vector Detection
-    Runs SQL window functions and pgvector math to find Subscriptions and Utilities.
+    Runs SQL window functions and Qdrant vector search to find Subscriptions and Utilities.
     """
     
     # 1. Temporal Math Query using LAG and STDDEV
@@ -67,40 +67,42 @@ def run_detection_pipelines(session: Session, user_uuid: str) -> dict:
         elif std_days < 5.0 and std_amount >= 0.01:
             potential_utilities.append({"merchant": merchant, "avg_amount": avg_amount, "frequency_days": row.avg_days})
             
-    # 3. Vector Verification for Utilities
+    # 3. Vector Verification for Utilities via Qdrant
     verified_utilities = []
     if potential_utilities:
         try:
-            base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-            if not base_url.endswith("/v1"): 
-                base_url = f"{base_url}/v1"
-                
-            embeddings_model = OpenAIEmbeddings(
-                base_url=base_url,
-                model="text-embedding-nomic-embed-text-v1.5",
-                api_key="budai-local",
-                check_embedding_ctx_length=False
-            )
+            from services.embedding_service import get_embedding_service
+            from services.qdrant_service import get_qdrant_service
+            from qdrant_client import models
+            
+            emb_service = get_embedding_service()
+            qdrant = get_qdrant_service()
             
             merchants_to_embed = [u["merchant"] for u in potential_utilities if u["merchant"]]
             if merchants_to_embed:
-                vectors = embeddings_model.embed_documents(merchants_to_embed)
+                vectors = emb_service.embed_documents(merchants_to_embed)
+                
+                utility_filter = models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="category",
+                            match=models.MatchValue(value="Utility")
+                        )
+                    ]
+                )
                 
                 for idx, u in enumerate(potential_utilities):
-                    if not u["merchant"]: continue
+                    if not u["merchant"]: 
+                        continue
                     v = vectors[idx]
-                    
-                    vector_query = text("""
-                        SELECT category, clean_merchant_name, (embedding <=> CAST(:vec AS vector)) as distance
-                        FROM merchant_knowledge 
-                        WHERE category = 'Utility'
-                        ORDER BY embedding <=> CAST(:vec AS vector)
-                        LIMIT 1
-                    """)
-                    result_dist = session.execute(vector_query, {"vec": str(v)}).first()
-                    
-                    # If semantic match is tight (< 0.1), it's a verified utility
-                    if result_dist and result_dist.distance < 0.1:
+                    hits = qdrant.search_vectors(
+                        "merchant_knowledge",
+                        query_vector=v,
+                        limit=1,
+                        query_filter=utility_filter
+                    )
+                    # High semantic match (score >= 0.85)
+                    if hits and hits[0].get("score", 0.0) >= 0.85:
                         verified_utilities.append(u)
                         
         except Exception as e:

@@ -31,13 +31,8 @@ class SubscriptionDetector:
         if not base_url.endswith("/v1"): 
             base_url = f"{base_url}/v1"
             
-        # Nomic model for Vector Generation
-        self.embeddings = OpenAIEmbeddings(
-            base_url=base_url,
-            model="text-embedding-nomic-embed-text-v1.5",
-            api_key="budai-local",
-            check_embedding_ctx_length=False
-        )
+        from services.embedding_service import get_embedding_service
+        self.embeddings = get_embedding_service()
         
         # Qwen LLM for Entity Extraction/Naming
         self.chat_model = ChatOpenAI(
@@ -153,46 +148,35 @@ class SubscriptionDetector:
                     unmatched_pools[account_id].append(tx)
                     continue
                 
-                # RAG Query with exact < 0.2 cosine distance threshold
-                sql = text('''
-                    SELECT clean_merchant_name, 
-                           embedding::text as target_vector_str, 
-                           (embedding <=> CAST(:query_vector AS vector)) AS distance 
-                    FROM merchant_knowledge 
-                    ORDER BY distance ASC 
-                    LIMIT 1
-                ''')
-                
+                # RAG Query via Qdrant
                 try:
-                    result = session.execute(sql, {"query_vector": str(query_vector)}).fetchone()
+                    from services.qdrant_service import get_qdrant_service
+                    qdrant = get_qdrant_service()
+                    hits = qdrant.search_merchant_knowledge(query_vector, limit=1, score_threshold=0.80)
                 except Exception as e:
-                    logger.warning(f"Vector search failed (pgvector might not be installed): {e}")
+                    logger.warning(f"Qdrant vector search failed: {e}")
                     unmatched_pools[account_id].append(tx)
                     continue
                 
-                if result and result.distance is not None and result.distance < 0.2:
-                    matched_name = result.clean_merchant_name
+                if hits:
+                    hit = hits[0]
+                    matched_name = hit["payload"].get("clean_merchant_name")
                     if matched_name not in matched_groups[account_id]:
                         matched_groups[account_id][matched_name] = []
                     matched_groups[account_id][matched_name].append(tx)
                     
                     # VECTOR OBSERVABILITY LOGGER
                     try:
-                        target_vec = json.loads(result.target_vector_str)
-                        sim_score = 1.0 - float(result.distance)
-                        
-                        # Truncate 768-D vectors to 5 dimensions for safe JSONL logging
+                        sim_score = float(hit.get("score", 0.0))
                         trunc_A = [round(x, 4) for x in query_vector[:5]] + ["..."]
-                        trunc_B = [round(x, 4) for x in target_vec[:5]] + ["..."]
                         
                         log_payload = {
                             "timestamp": datetime.utcnow().isoformat(),
                             "query_text_A": desc,
                             "target_text_B": matched_name,
                             "cosine_similarity": round(sim_score, 4),
-                            "distance": round(float(result.distance), 4),
-                            "vector_A_truncated": trunc_A,
-                            "vector_B_truncated": trunc_B
+                            "score": round(sim_score, 4),
+                            "vector_A_truncated": trunc_A
                         }
                         
                         with open(log_file_path, "a") as f:
@@ -447,32 +431,37 @@ class SubscriptionDetector:
             sub = next((s for s in detected_subscriptions if s.cluster_signature_hash == sub_hash), None)
             
             if sub and sub.merchant_name and sub.merchant_name != "Unknown":
-                # Embed the clean merchant name
+                # Embed the clean merchant name and archive to Qdrant + PostgreSQL
                 try:
+                    from services.qdrant_service import get_qdrant_service
+                    qdrant = get_qdrant_service()
                     merchant_vector = self.embeddings.embed_query(sub.merchant_name)
+                    new_uuid = str(uuid.uuid4())
                     
-                    # Upsert into MerchantKnowledge
-                    stmt = insert(MerchantKnowledge).values(
-                        knowledge_uuid=str(uuid.uuid4()),
-                        clean_merchant_name=sub.merchant_name,
-                        category="Subscription",  # Baseline fallback
-                        embedding=merchant_vector,
-                        is_human_verified=False,
-                        created_at=datetime.utcnow()
-                    )
-                    
-                    # If it already exists by name, we just do nothing (ON CONFLICT DO NOTHING)
-                    # Assuming clean_merchant_name is unique, or we just insert it.
-                    # Wait, if clean_merchant_name is not unique, we might insert duplicates.
-                    # Let's just check if it exists first to be safe and ORM-agnostic
                     exists = session.query(MerchantKnowledge).filter_by(clean_merchant_name=sub.merchant_name).first()
                     if not exists:
+                        stmt = insert(MerchantKnowledge).values(
+                            knowledge_uuid=new_uuid,
+                            clean_merchant_name=sub.merchant_name,
+                            category="Subscription",  # Baseline fallback
+                            is_human_verified=False,
+                            created_at=datetime.utcnow()
+                        )
                         session.execute(stmt)
+                        
+                        # Upsert vector into Qdrant
+                        qdrant.upsert_merchant(
+                            knowledge_uuid=new_uuid,
+                            clean_merchant_name=sub.merchant_name,
+                            category="Subscription",
+                            vector=merchant_vector,
+                            is_human_verified=False
+                        )
                         new_knowledge_count += 1
                 except Exception as e:
                     logger.warning(f"Failed to archive MerchantKnowledge for {sub.merchant_name}: {e}")
                     
         if new_knowledge_count > 0:
             session.commit()
-            logger.info(f"Continuously Archived {new_knowledge_count} new merchant vectors into pgvector.")
+            logger.info(f"Continuously Archived {new_knowledge_count} new merchant vectors into Qdrant.")
 

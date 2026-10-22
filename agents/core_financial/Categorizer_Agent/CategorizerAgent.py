@@ -23,47 +23,42 @@ class CategorizerState(TypedDict):
     merchant_name: str
 
 def get_embeddings_model():
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-    if not base_url.endswith("/v1"): 
-        base_url = f"{base_url}/v1"
-        
-    return OpenAIEmbeddings(
-        base_url=base_url,
-        model="text-embedding-nomic-embed-text-v1.5",
-        api_key="budai-local",
-        check_embedding_ctx_length=False
-    )
+    from services.embedding_service import get_embedding_service
+    return get_embedding_service()
 
 @tool
 def bulk_search_merchant_knowledge(merchant_names: list[str]) -> str:
     """
-    Search the vector database for historically verified categories for a list of merchants.
+    Search the vector database (Qdrant) for historically verified categories for a list of merchants.
     Provides the best matching merchant and its category for each.
     """
     if not merchant_names:
         return "No merchants provided."
 
+    from services.qdrant_service import get_qdrant_service
+    qdrant = get_qdrant_service()
     embeddings = get_embeddings_model()
     unique_names = list(set(merchant_names))
     output = "Search Results:\n"
     
-    with SessionLocal() as session:
-        for name in unique_names:
-            try:
-                vector = embeddings.embed_query(name)
-                query = text("""
-                    SELECT knowledge_uuid, clean_merchant_name, category, sub_category, tags, (embedding <=> :vector) as distance
-                    FROM merchant_knowledge
-                    ORDER BY embedding <=> :vector
-                    LIMIT 1
-                """)
-                res = session.execute(query, {"vector": str(vector)}).first()
-                if res and res.distance < 0.15:
-                    output += f"- '{name}' matches '{res.clean_merchant_name}' (UUID: {res.knowledge_uuid}, Category: {res.category}, Sub-Category: {res.sub_category}, Tags: {res.tags}, Distance: {res.distance:.4f})\n"
-                else:
-                    output += f"- '{name}': No close match found.\n"
-            except Exception as e:
-                output += f"- '{name}': Search failed ({str(e)}).\n"
+    for name in unique_names:
+        try:
+            vector = embeddings.embed_query(name)
+            hits = qdrant.search_merchant_knowledge(vector, limit=1, score_threshold=0.85)
+            if hits:
+                hit = hits[0]
+                p = hit.get("payload", {})
+                mk_uuid = p.get("knowledge_uuid") or hit["id"]
+                c_name = p.get("clean_merchant_name") or name
+                cat = p.get("category") or "General"
+                sub_cat = p.get("sub_category") or ""
+                tags = p.get("tags") or []
+                score = hit.get("score", 0.0)
+                output += f"- '{name}' matches '{c_name}' (UUID: {mk_uuid}, Category: {cat}, Sub-Category: {sub_cat}, Tags: {tags}, Score: {score:.4f})\n"
+            else:
+                output += f"- '{name}': No close match found.\n"
+        except Exception as e:
+            output += f"- '{name}': Search failed ({str(e)}).\n"
     return output
 
 @tool
@@ -116,8 +111,8 @@ def bulk_save_categories(transactions: list[dict]) -> str:
                     mk_uuid = str(uuid.uuid4())
                     
                     insert_query = text("""
-                        INSERT INTO merchant_knowledge (knowledge_uuid, clean_merchant_name, category, sub_category, tags, embedding, is_human_verified, created_at)
-                        VALUES (:uuid, :name, :cat, :sub_cat, :tags, :vec, FALSE, :now)
+                        INSERT INTO merchant_knowledge (knowledge_uuid, clean_merchant_name, category, sub_category, tags, is_human_verified, created_at)
+                        VALUES (:uuid, :name, :cat, :sub_cat, :tags, FALSE, :now)
                     """)
                     session.execute(insert_query, {
                         "uuid": mk_uuid,
@@ -125,9 +120,19 @@ def bulk_save_categories(transactions: list[dict]) -> str:
                         "cat": category,
                         "sub_cat": sub_category,
                         "tags": json.dumps(tags),
-                        "vec": str(vec),
                         "now": datetime.utcnow()
                     })
+
+                    from services.qdrant_service import get_qdrant_service
+                    get_qdrant_service().upsert_merchant(
+                        knowledge_uuid=mk_uuid,
+                        clean_merchant_name=merchant_name,
+                        category=category,
+                        sub_category=sub_category,
+                        tags=tags,
+                        vector=vec,
+                        is_human_verified=False
+                    )
                 except Exception as e:
                     logger.error(f"Failed to create new merchant knowledge for {merchant_name}: {e}")
                     mk_uuid = None
@@ -281,16 +286,25 @@ class CategorizerAgent:
                 new_mk_uuid = str(uuid.uuid4())
                 
                 insert_query = text("""
-                    INSERT INTO merchant_knowledge (knowledge_uuid, clean_merchant_name, category, sub_category, tags, embedding, is_human_verified, created_at)
-                    VALUES (:uuid, :name, :cat, NULL, '[]'::json, :vec, TRUE, :now)
+                    INSERT INTO merchant_knowledge (knowledge_uuid, clean_merchant_name, category, sub_category, tags, is_human_verified, created_at)
+                    VALUES (:uuid, :name, :cat, NULL, '[]'::json, TRUE, :now)
                 """)
                 session.execute(insert_query, {
                     "uuid": new_mk_uuid,
                     "name": merchant_name,
                     "cat": corrected_label,
-                    "vec": str(vec),
                     "now": datetime.utcnow()
                 })
+
+                from services.qdrant_service import get_qdrant_service
+                get_qdrant_service().upsert_merchant(
+                    knowledge_uuid=new_mk_uuid,
+                    clean_merchant_name=merchant_name,
+                    category=corrected_label,
+                    vector=vec,
+                    tags=[],
+                    is_human_verified=True
+                )
                 
                 tx.merchant_knowledge_uuid = new_mk_uuid
                 

@@ -9,6 +9,12 @@ logger = get_core_logger(__name__)
 
 load_dotenv()
 
+# Automatically map Prefect Cloud variables if defined with CLOUD suffix
+if os.getenv("PREFECT_CLOUD_API_URL") and not os.getenv("PREFECT_API_URL"):
+    os.environ["PREFECT_API_URL"] = os.getenv("PREFECT_CLOUD_API_URL")
+if os.getenv("PREFECT_CLOUD_API_KEY") and not os.getenv("PREFECT_API_KEY"):
+    os.environ["PREFECT_API_KEY"] = os.getenv("PREFECT_CLOUD_API_KEY")
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/budai")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)

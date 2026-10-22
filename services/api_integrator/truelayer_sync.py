@@ -315,41 +315,26 @@ class TrueLayerSync:
         if not new_txs:
             return
             
-        # --- PHASE 2: Fast Path RAG Intercept ---
-        import os
-        from langchain_openai import OpenAIEmbeddings
-        from models.database_models import MerchantKnowledge
-        from sqlalchemy import text
-        
+        # --- PHASE 2: Fast Path RAG Intercept via Qdrant ---
         try:
-            base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-            if not base_url.endswith("/v1"): 
-                base_url = f"{base_url}/v1"
-                
-            embeddings_model = OpenAIEmbeddings(
-                base_url=base_url,
-                model="text-embedding-nomic-embed-text-v1.5",
-                api_key="budai-local",
-                check_embedding_ctx_length=False
-            )
+            from services.embedding_service import get_embedding_service
+            from services.qdrant_service import get_qdrant_service
+            
+            emb_service = get_embedding_service()
+            qdrant = get_qdrant_service()
             
             # Extract strings to embed (using semi_cleaned as it strikes a good balance)
             strings_to_embed = [tx["semi_cleaned_description"] for tx in new_txs]
             if strings_to_embed:
-                vectors = embeddings_model.embed_documents(strings_to_embed)
+                vectors = emb_service.embed_documents(strings_to_embed)
                 
                 for idx, tx in enumerate(new_txs):
                     v = vectors[idx]
-                    # Cosine distance < 0.05
-                    query_with_dist = text("""
-                        SELECT knowledge_uuid, category, clean_merchant_name, (embedding <=> :vec) as distance
-                        FROM merchant_knowledge 
-                        ORDER BY embedding <=> :vec 
-                        LIMIT 1
-                    """)
-                    result_dist = session.execute(query_with_dist, {"vec": str(v)}).first()
-                    if result_dist and result_dist.distance < 0.05:
-                        tx["merchant_knowledge_uuid"] = result_dist.knowledge_uuid
+                    # Score in Qdrant with Cosine distance: score = 1 - distance. High match >= 0.85
+                    hits = qdrant.search_merchant_knowledge(v, limit=1, score_threshold=0.85)
+                    if hits:
+                        matched_uuid = hits[0]["payload"].get("knowledge_uuid") or hits[0]["id"]
+                        tx["merchant_knowledge_uuid"] = matched_uuid
         except Exception as e:
             from services.logger_setup import get_core_logger
             logger = get_core_logger(__name__)

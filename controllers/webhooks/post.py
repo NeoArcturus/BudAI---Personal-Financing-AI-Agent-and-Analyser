@@ -51,9 +51,12 @@ def background_fetch_async_results(results_uri: str, user_uuid: str, bank_uuid: 
                 sync_service.process_and_store_transactions(session, tx_data, user_uuid, bank_uuid, acc_id)
                 
                 # PHASE 2: Trigger Event Bus Flow AFTER data is stored
-                from services.orchestration.prefect_flows import flow_event_bus_sync
-                flow_event_bus_sync(user_uuid)
-                logger.info(json.dumps({"message": f"Triggered Phase 2 Event Bus Flow for {user_uuid} post-sync.", "status_code": 200}))
+                try:
+                    from services.orchestration.prefect_flows import flow_event_bus_sync
+                    flow_event_bus_sync(user_uuid)
+                    logger.info(json.dumps({"message": f"Triggered Phase 2 Event Bus Flow for {user_uuid} post-sync.", "status_code": 200}))
+                except Exception as prefect_err:
+                    logger.error(json.dumps({"message": f"Failed to trigger Prefect Event Bus Flow: {prefect_err}", "status_code": 500}), exc_info=True)
 
                 
             else:
@@ -74,15 +77,18 @@ async def handle_truelayer_webhook(payload: dict, background_tasks: BackgroundTa
     
     # 1. Idempotency Lock
     if task_id:
-        from config import redis_client
-        lock_key = f"webhook_lock:{task_id}"
-        if redis_client.get(lock_key):
-            logger.info(json.dumps({"message": f"Idempotency hit: Task {task_id} already processed. Dropping payload.", "status_code": 200}))
-            return {"status": "ok", "message": "Already processed"}
-        # Set lock for 24 hours
-        redis_client.setex(lock_key, 86400, "1")
+        try:
+            from config import redis_client
+            lock_key = f"webhook_lock:{task_id}"
+            if redis_client.get(lock_key):
+                logger.info(json.dumps({"message": f"Idempotency hit: Task {task_id} already processed. Dropping payload.", "status_code": 200}))
+                return {"status": "ok", "message": "Already processed"}
+            # Set lock for 24 hours
+            redis_client.setex(lock_key, 86400, "1")
+        except Exception as redis_err:
+            logger.warning(json.dumps({"message": f"Redis idempotency check warning: {redis_err}. Proceeding with sync.", "status_code": 200}))
     
-    if status == "Succeeded":
+    if status and status.lower() == "succeeded":
         results_uri = payload.get("results_uri")
         if results_uri and user_uuid and bank_uuid and acc_id:
             # Traditional background task for fetching raw data

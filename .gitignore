@@ -32,6 +32,8 @@ gha-creds-*.json
 
 GEMINI.md
 budai-frontend/GEMINI.md
+.audit/
+budai-frontend/.audit/
 
 # OS generated files
 .DS_Store

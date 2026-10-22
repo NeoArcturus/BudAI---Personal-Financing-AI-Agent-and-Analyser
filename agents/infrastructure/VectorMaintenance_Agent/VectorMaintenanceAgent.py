@@ -17,29 +17,42 @@ class VectorState(TypedDict):
 
 @tool
 def fetch_duplicate_candidates() -> str:
-    """Fetches a list of highly similar merchant vectors that might be duplicates."""
-    with SessionLocal() as session:
-        query = text("""
-            SELECT 
-                a.knowledge_uuid as id1, a.clean_merchant_name as name1,
-                b.knowledge_uuid as id2, b.clean_merchant_name as name2,
-                (a.embedding <=> b.embedding) as distance
-            FROM merchant_knowledge a
-            JOIN merchant_knowledge b 
-              ON a.knowledge_uuid != b.knowledge_uuid 
-             AND a.category = b.category
-            WHERE (a.embedding <=> b.embedding) < 0.02
-            LIMIT 5
-        """)
-        results = session.execute(query).fetchall()
+    """Fetches a list of highly similar merchant vectors from Qdrant that might be duplicates."""
+    try:
+        from services.qdrant_service import get_qdrant_service
+        qdrant = get_qdrant_service()
         
-        if not results:
-            return "No duplicates found."
-            
+        # Scroll points from Qdrant
+        points, _ = qdrant.client.scroll(
+            collection_name="merchant_knowledge",
+            limit=50,
+            with_vectors=True,
+            with_payload=True
+        )
+        
         dupes = []
-        for r in results:
-            dupes.append({"id1": r.id1, "name1": r.name1, "id2": r.id2, "name2": r.name2, "distance": float(r.distance)})
-        return json.dumps(dupes)
+        for p in points:
+            if not p.vector:
+                continue
+            hits = qdrant.search_merchant_knowledge(p.vector, limit=3, score_threshold=0.98)
+            for h in hits:
+                if str(h["id"]) != str(p.id):
+                    dupes.append({
+                        "id1": str(p.id),
+                        "name1": p.payload.get("clean_merchant_name", ""),
+                        "id2": str(h["id"]),
+                        "name2": h["payload"].get("clean_merchant_name", ""),
+                        "score": float(h.get("score", 0.0))
+                    })
+            if len(dupes) >= 5:
+                break
+                
+        if not dupes:
+            return "No duplicates found."
+        return json.dumps(dupes[:5])
+    except Exception as e:
+        logger.error(f"Error fetching duplicates from Qdrant: {e}")
+        return "No duplicates found."
 
 @tool
 def merge_duplicate_vectors(keep_id: str, delete_id: str) -> str:
@@ -53,6 +66,24 @@ def merge_duplicate_vectors(keep_id: str, delete_id: str) -> str:
             session.execute(delete_node, {"delete_id": delete_id})
             
             session.commit()
+            
+            # Delete from Qdrant
+            try:
+                from services.qdrant_service import get_qdrant_service
+                from qdrant_client import models
+                import uuid
+                qdrant = get_qdrant_service()
+                try:
+                    p_id = str(uuid.UUID(str(delete_id)))
+                except ValueError:
+                    p_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(delete_id)))
+                qdrant.client.delete(
+                    collection_name="merchant_knowledge",
+                    points_selector=models.PointIdsList(points=[p_id])
+                )
+            except Exception as q_err:
+                logger.warning(f"Failed to delete {delete_id} from Qdrant: {q_err}")
+
             return f"Successfully merged {delete_id} into {keep_id}."
         except Exception as e:
             session.rollback()

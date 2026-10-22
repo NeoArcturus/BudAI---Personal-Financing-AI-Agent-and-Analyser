@@ -1,7 +1,6 @@
 from typing import Optional, List, Any
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import UniqueConstraint, Column, JSON, CheckConstraint
-from pgvector.sqlalchemy import Vector
 from datetime import datetime, timezone
 from enum import Enum
 from services.logger_setup import get_core_logger
@@ -169,7 +168,6 @@ class MerchantKnowledge(SQLModel, table=True):
     sub_category: Optional[str] = None
 
     tags: Optional[list[str]] = Field(default=None, sa_column=Column(JSON))
-    embedding: Any = Field(sa_column=Column(Vector(768)))
     is_human_verified: bool = Field(default=False)
     created_at: datetime = Field(default_factory=utc_now)
 

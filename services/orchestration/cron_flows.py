@@ -184,7 +184,7 @@ def oss_timescale_refresh_flow():
 @flow(name="Vector Optimizer")
 def oss_vector_optimizer_flow():
     logger = get_run_logger()
-    logger.info("Optimizing pgvector indexes...")
+    logger.info("Optimizing Qdrant vector indexes...")
     from agents.infrastructure.VectorMaintenance_Agent.VectorMaintenanceAgent import VectorMaintenanceAgent
     agent = VectorMaintenanceAgent()
     agent.optimize_rag_memory()
