@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
+# Always run from the repository root
+cd "$(dirname "$0")/.."
+
 # Activate virtual environment if it exists
 if [ -d ".venv" ]; then
     source .venv/bin/activate

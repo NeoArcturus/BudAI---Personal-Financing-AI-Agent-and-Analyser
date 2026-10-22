@@ -1,7 +1,7 @@
 import json
 from sqlmodel import Session, select
 from models.database_models import Bucket
-from services.logger_setup import get_core_logger
+from services.logger_setup import get_core_logger, log_pipeline_data
 
 logger = get_core_logger(__name__)
 
@@ -15,7 +15,6 @@ class DataMasker:
         Step 1 of Phase 3: Ephemeral Masking
         Creates temporary aliases for database UUIDs to protect PII before sending to the LLM.
         """
-        logger.info(json.dumps({"message": f"Masking data for user {user_uuid}", "status_code": 200}))
         buckets = session.execute(select(Bucket).where(Bucket.user_id == user_uuid).order_by(Bucket.priority_index)).scalars().all()
         
         masked_state = []
@@ -31,6 +30,21 @@ class DataMasker:
                 "balance": bucket.cached_balance,
                 "target_amount": bucket.target_amount
             })
+        
+        log_pipeline_data(
+            logger=logger,
+            pipeline="data_masker",
+            stage="mask_user_state",
+            data={
+                "user_uuid": user_uuid,
+                "buckets_count": len(masked_state),
+                "masked_buckets": [
+                    {"alias": b["alias"], "type": b["type"], "balance": b["balance"]}
+                    for b in masked_state
+                ]
+            },
+            message=f"Ephemeral masking completed for {len(masked_state)} buckets"
+        )
         
         return {
             "masked_state": masked_state,

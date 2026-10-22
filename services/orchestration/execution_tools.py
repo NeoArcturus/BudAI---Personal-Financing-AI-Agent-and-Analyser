@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from sqlmodel import Session
 from models.database_models import SystemAlert, VirtualTransfer
 from config import SessionLocal, redis_client
-from services.logger_setup import get_core_logger
+from services.logger_setup import get_core_logger, log_pipeline_data
 
 logger = get_core_logger(__name__)
 
@@ -15,7 +15,13 @@ def get_sleep_tool():
     @tool
     def sleep_execution(reason: str) -> str:
         """Use this tool to take no action and terminate the evaluation if the event is routine."""
-        logger.info(json.dumps({"message": f"Decision Engine terminating: {reason}", "status_code": 200}))
+        log_pipeline_data(
+            logger=logger,
+            pipeline="decision_engine",
+            stage="sleep",
+            data={"reason": reason},
+            message=f"Decision Engine terminating: {reason}"
+        )
         return "TERMINATE"
     return sleep_execution
 
@@ -46,10 +52,20 @@ def get_alert_tool(user_uuid: str):
                 except Exception as ex:
                     logger.error(f"Redis publish failed: {ex}")
 
-                logger.info(json.dumps({"message": "System alert inserted successfully", "status_code": 200}))
+                log_pipeline_data(
+                    logger=logger,
+                    pipeline="decision_engine",
+                    stage="insert_system_alert",
+                    data={
+                        "user_uuid": user_uuid,
+                        "priority": priority,
+                        "alert_message": message
+                    },
+                    message=f"System alert inserted: [{priority}] {message}"
+                )
                 return "ALERT_CREATED"
         except Exception as e:
-            logger.error(json.dumps({"message": f"Failed to insert alert: {e}", "status_code": 500}))
+            logger.error(f"Failed to insert alert: {e}", exc_info=True)
             return "ERROR"
     return insert_system_alert
 
@@ -85,10 +101,21 @@ def get_transfer_tool(reverse_map: dict, user_uuid: str):
                 except Exception as ex:
                     logger.error(f"Redis publish failed: {ex}")
 
-                logger.info(json.dumps({"message": f"Virtual transfer of £{amount} executed.", "status_code": 200}))
+                log_pipeline_data(
+                    logger=logger,
+                    pipeline="decision_engine",
+                    stage="execute_virtual_transfer",
+                    data={
+                        "user_uuid": user_uuid,
+                        "source_alias": source_alias,
+                        "target_alias": target_alias,
+                        "amount": amount
+                    },
+                    message=f"Virtual transfer of {amount} from {source_alias} to {target_alias} executed"
+                )
                 return "TRANSFER_EXECUTED"
         except Exception as e:
-            logger.error(json.dumps({"message": f"Transfer failed: {e}", "status_code": 500}))
+            logger.error(f"Transfer failed: {e}", exc_info=True)
             return "ERROR: Transfer failed due to constraints."
     return execute_virtual_transfer
 
@@ -96,7 +123,16 @@ def get_etl_tool():
     @tool
     def trigger_etl_pipeline(pipeline_name: str, parameters: dict) -> str:
         """Use this tool to trigger a heavy background compute pipeline (e.g., 'deep_categorization')."""
-        logger.info(json.dumps({"message": f"Triggering ETL pipeline: {pipeline_name}", "status_code": 200}))
+        log_pipeline_data(
+            logger=logger,
+            pipeline="decision_engine",
+            stage="trigger_etl_pipeline",
+            data={
+                "pipeline_name": pipeline_name,
+                "parameters": parameters
+            },
+            message=f"Triggering ETL pipeline: {pipeline_name}"
+        )
         # Trigger Prefect Deployment here
         return "ETL_TRIGGERED"
     return trigger_etl_pipeline
@@ -123,10 +159,22 @@ def get_create_bucket_tool(user_uuid: str):
                     priority_index=priority_index
                 )
                 session.commit()
-                logger.info(json.dumps({"message": f"AI created new bucket '{name}' autonomously.", "status_code": 200}))
+                log_pipeline_data(
+                    logger=logger,
+                    pipeline="decision_engine",
+                    stage="create_virtual_bucket",
+                    data={
+                        "user_uuid": user_uuid,
+                        "name": name,
+                        "bucket_type": bucket_type,
+                        "target_amount": target_amount,
+                        "priority_index": priority_index
+                    },
+                    message=f"AI created new bucket '{name}' ({bucket_type}) autonomously"
+                )
                 return "BUCKET_CREATED"
         except Exception as e:
-            logger.error(json.dumps({"message": f"Failed to create bucket: {e}", "status_code": 500}))
+            logger.error(f"Failed to create bucket: {e}", exc_info=True)
             return f"ERROR: {e}"
     return create_virtual_bucket
 
@@ -165,10 +213,22 @@ def get_update_bucket_tool(reverse_map: dict, user_uuid: str):
                 except:
                     pass
                     
-                logger.info(json.dumps({"message": f"AI updated bucket '{bucket_alias}' autonomously.", "status_code": 200}))
+                log_pipeline_data(
+                    logger=logger,
+                    pipeline="decision_engine",
+                    stage="update_virtual_bucket",
+                    data={
+                        "user_uuid": user_uuid,
+                        "bucket_alias": bucket_alias,
+                        "name": name,
+                        "target_amount": target_amount,
+                        "priority_index": priority_index
+                    },
+                    message=f"AI updated bucket '{bucket_alias}' autonomously"
+                )
                 return "BUCKET_UPDATED"
         except Exception as e:
-            logger.error(json.dumps({"message": f"Failed to update bucket: {e}", "status_code": 500}))
+            logger.error(f"Failed to update bucket: {e}", exc_info=True)
             return f"ERROR: {e}"
     return update_virtual_bucket
 
@@ -195,9 +255,18 @@ def get_delete_bucket_tool(reverse_map: dict, user_uuid: str):
                 except:
                     pass
                     
-                logger.info(json.dumps({"message": f"AI deleted bucket '{bucket_alias}' autonomously.", "status_code": 200}))
+                log_pipeline_data(
+                    logger=logger,
+                    pipeline="decision_engine",
+                    stage="delete_virtual_bucket",
+                    data={
+                        "user_uuid": user_uuid,
+                        "bucket_alias": bucket_alias
+                    },
+                    message=f"AI deleted bucket '{bucket_alias}' autonomously"
+                )
                 return "BUCKET_DELETED"
         except Exception as e:
-            logger.error(json.dumps({"message": f"Failed to delete bucket: {e}", "status_code": 500}))
+            logger.error(f"Failed to delete bucket: {e}", exc_info=True)
             return f"ERROR: {e}"
     return delete_virtual_bucket_tool

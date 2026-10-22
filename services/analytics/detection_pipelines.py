@@ -2,7 +2,7 @@ import json
 import os
 from sqlmodel import Session
 from sqlalchemy import text
-from services.logger_setup import get_core_logger
+from services.logger_setup import get_core_logger, log_pipeline_data
 from langchain_openai import OpenAIEmbeddings
 
 logger = get_core_logger(__name__)
@@ -12,7 +12,6 @@ def run_detection_pipelines(session: Session, user_uuid: str) -> dict:
     Step 2 of Phase 3: Mathematical & Vector Detection
     Runs SQL window functions and pgvector math to find Subscriptions and Utilities.
     """
-    logger.info(json.dumps({"message": f"Running detection pipelines for {user_uuid}", "status_code": 200}))
     
     # 1. Temporal Math Query using LAG and STDDEV
     query = text("""
@@ -105,9 +104,25 @@ def run_detection_pipelines(session: Session, user_uuid: str) -> dict:
                         verified_utilities.append(u)
                         
         except Exception as e:
-            logger.error(json.dumps({"message": f"Vector search failed in detection pipeline: {e}", "status_code": 500}))
+            logger.error(f"Vector search failed in detection pipeline: {e}", exc_info=True)
             
-    return {
+    output_data = {
         "new_subscriptions": subscriptions,
         "new_utilities": verified_utilities
     }
+
+    log_pipeline_data(
+        logger=logger,
+        pipeline="detection_pipelines",
+        stage="detection_complete",
+        data={
+            "user_uuid": user_uuid,
+            "subscriptions_count": len(subscriptions),
+            "utilities_count": len(verified_utilities),
+            "subscriptions": subscriptions,
+            "utilities": verified_utilities
+        },
+        message=f"Detection pipeline found {len(subscriptions)} subscriptions and {len(verified_utilities)} utilities"
+    )
+
+    return output_data

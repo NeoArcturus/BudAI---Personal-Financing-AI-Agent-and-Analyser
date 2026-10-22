@@ -1,34 +1,64 @@
 from langfuse.langchain import CallbackHandler
 from prefect import flow, task, get_run_logger
 from schemas.api_schema import OnboardingLLMResult
-from models.database_models import User
+from models.database_models import User, Bucket, BucketType, UserLifestyleProfile
 from config import SessionLocal
 import os
+import uuid
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_openai import ChatOpenAI
+from services.logger_setup import get_core_logger, log_pipeline_data
 
-@task(retries=3, retry_delay_seconds=30)
-def extract_persona_task(form_context: str) -> dict:
-    logger = get_run_logger()
-    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-    if not OLLAMA_BASE_URL.endswith("/v1"):
-        OLLAMA_BASE_URL = f"{OLLAMA_BASE_URL}/v1"
+logger = get_core_logger(__name__)
 
-    onboarding_llm = ChatOpenAI(
-        model="Qwen3.5-9B-GGUF",
-        base_url=OLLAMA_BASE_URL,
-        api_key="budai-local",
-        temperature=0,
-        streaming=False,
-        max_tokens=2000,
-        timeout=600
-    )
-    
-    parser = JsonOutputParser(pydantic_object=OnboardingLLMResult)
-    
-    prompt = PromptTemplate(
-        template="""
+def deduce_deterministic_persona(goals: list, income_pattern: list, liabilities: list, user_summary: str = "") -> str:
+    """
+    Deterministic rule-based persona deduction for non-LLM resilience.
+    Guarantees user onboarding completes and core dashboard works even if LLM is offline.
+    """
+    summary_lower = (user_summary or "").lower()
+    goals_str = " ".join(goals or []).lower()
+    income_str = " ".join(income_pattern or []).lower()
+    liabilities_str = " ".join(liabilities or []).lower()
+    combined = f"{goals_str} {income_str} {liabilities_str} {summary_lower}"
+
+    if any(k in combined for k in ["student", "tuition", "university", "college", "student_loans", "academic"]):
+        return "STUDENT"
+    if any(k in combined for k in ["artist", "creative", "musician", "designer", "creator", "writer", "photographer", "illustrator"]):
+        return "CREATIVE"
+    if any(k in combined for k in ["retire", "pension", "superannuation", "senior"]):
+        return "RETIREE"
+    if any(k in combined for k in ["business", "freelance_management", "corporate", "revenue", "company", "founder", "entrepreneur", "shop", "store", "commercial", "freelance", "bakery", "enterprise"]):
+        return "BUSINESS"
+    return "PROFESSIONAL"
+
+@task(retries=1, retry_delay_seconds=3)
+def extract_persona_task(form_context: str, fallback_persona: str = "PROFESSIONAL") -> dict:
+    try:
+        run_logger = get_run_logger()
+    except Exception:
+        run_logger = logger
+
+    try:
+        OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
+        if not OLLAMA_BASE_URL.endswith("/v1"):
+            OLLAMA_BASE_URL = f"{OLLAMA_BASE_URL}/v1"
+
+        onboarding_llm = ChatOpenAI(
+            model="Qwen3.5-9B-GGUF",
+            base_url=OLLAMA_BASE_URL,
+            api_key="budai-local",
+            temperature=0,
+            streaming=False,
+            max_tokens=1000,
+            timeout=15  # Fail fast to prevent user stalls when LLM is offline
+        )
+        
+        parser = JsonOutputParser(pydantic_object=OnboardingLLMResult)
+        
+        prompt = PromptTemplate(
+            template="""
 You are BudAI's core analytical engine.
 Analyze the user's hardcoded form answers and their personal summary.
 1. Deduce their macro Persona (MUST be one of: STUDENT, PROFESSIONAL, BUSINESS, RETIREE, CREATIVE).
@@ -39,58 +69,105 @@ Analyze the user's hardcoded form answers and their personal summary.
 Data:
 {form_data}
 """,
-        input_variables=["form_data"],
-        partial_variables={"format_instructions": parser.get_format_instructions()},
-    )
-    
-    chain = prompt | onboarding_llm | parser
-    logger.info("Invoking LLM for onboarding extraction...")
-    
-    llm_analysis_dict = chain.invoke({"form_data": form_context}, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_tags": ["onboarding"]}})
-    return llm_analysis_dict
+            input_variables=["form_data"],
+            partial_variables={"format_instructions": parser.get_format_instructions()},
+        )
+        
+        chain = prompt | onboarding_llm | parser
+        run_logger.info("Invoking LLM for onboarding extraction...")
+        
+        llm_analysis_dict = chain.invoke(
+            {"form_data": form_context}, 
+            config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_tags": ["onboarding"]}}
+        )
+        return llm_analysis_dict
+    except Exception as e:
+        run_logger.warning(f"LLM offline or timed out during onboarding extraction: {e}. Utilizing deterministic fallback.")
+        return {
+            "persona": fallback_persona,
+            "keypoints": [
+                "Profile initialized with deterministic baseline rules.",
+                "Non-LLM shadow ledger and accounts dashboard fully active.",
+                "AI contextual analysis will refresh once LLM service resumes."
+            ]
+        }
 
 @task
 def commit_onboarding_db_task(user_uuid: str, llm_analysis_dict: dict):
-    logger = get_run_logger()
-    llm_analysis = OnboardingLLMResult(**llm_analysis_dict)
-    logger.info(f"Deduced persona: {llm_analysis.persona}")
+    try:
+        run_logger = get_run_logger()
+    except Exception:
+        run_logger = logger
+
+    persona_deduced = llm_analysis_dict.get("persona", "PROFESSIONAL")
+    run_logger.info(f"Deduced persona: {persona_deduced}")
     
     with SessionLocal() as db:
         user = db.query(User).filter(User.user_uuid == user_uuid).first()
         if user:
-            user.persona = llm_analysis.persona
+            user.persona = persona_deduced
             user.is_onboarded = True
             
             # Seed the mandatory DEFAULT bucket for the zero-sum ledger system
-            from models.database_models import Bucket
-            import uuid
-            
-            existing_bucket = db.query(Bucket).filter(Bucket.user_id == user_uuid, Bucket.type == "DEFAULT").first()
+            existing_bucket = db.query(Bucket).filter(Bucket.user_id == user_uuid, Bucket.type == BucketType.DEFAULT).first()
             if not existing_bucket:
                 default_bucket = Bucket(
                     id=str(uuid.uuid4()),
                     user_id=user_uuid,
-                    type="DEFAULT",
+                    type=BucketType.DEFAULT,
                     name="Unallocated Funds",
                     priority_index=100.0,
-                    cached_balance=0.0
+                    cached_balance=0.0,
+                    is_active=True
                 )
                 db.add(default_bucket)
-                logger.info("Seeded default Unallocated Funds bucket.")
-                
+                run_logger.info("Seeded default Unallocated Funds bucket.")
+
+            # Update or create UserLifestyleProfile
+            profile = db.query(UserLifestyleProfile).filter(UserLifestyleProfile.user_uuid == user_uuid).first()
+            if not profile:
+                profile = UserLifestyleProfile(
+                    profile_uuid=str(uuid.uuid4()),
+                    user_uuid=user_uuid,
+                    macro_persona=persona_deduced
+                )
+                db.add(profile)
+            else:
+                profile.macro_persona = persona_deduced
+
             db.commit()
-            logger.info("Successfully updated user profile in database.")
+            log_pipeline_data(
+                logger=logger,
+                pipeline="onboarding",
+                stage="db_commit_complete",
+                data={
+                    "user_uuid": user_uuid,
+                    "persona": persona_deduced,
+                    "is_onboarded": True
+                },
+                message=f"Successfully committed onboarding profile for user {user_uuid}"
+            )
         else:
-            logger.error(f"User {user_uuid} not found during onboarding commit.")
+            run_logger.error(f"User {user_uuid} not found during onboarding commit.")
 
 @flow(name="Process User Onboarding")
 def process_user_onboarding_flow(user_uuid: str, goals: list, income_pattern: list, liabilities: list, user_summary: str):
-    logger = get_run_logger()
+    try:
+        run_logger = get_run_logger()
+    except Exception:
+        run_logger = logger
+
     from services.llm_manager import GlobalLLMManager
-    GlobalLLMManager.try_acquire()
+    acquired = False
+    try:
+        GlobalLLMManager.acquire_background()
+        acquired = True
+    except Exception as e:
+        run_logger.warning(f"GlobalLLMManager acquire bypassed: {e}")
     
     try:
-        logger.info(f"Processing static onboarding completion in background for {user_uuid}")
+        run_logger.info(f"Processing onboarding completion in background for {user_uuid}")
+        fallback_persona = deduce_deterministic_persona(goals, income_pattern, liabilities, user_summary)
         
         form_context = f"""
         User Form Submission:
@@ -102,11 +179,33 @@ def process_user_onboarding_flow(user_uuid: str, goals: list, income_pattern: li
         "{user_summary}"
         """
         
-        llm_analysis_dict = extract_persona_task(form_context)
+        llm_analysis_dict = extract_persona_task(form_context, fallback_persona=fallback_persona)
         commit_onboarding_db_task(user_uuid, llm_analysis_dict)
         
     except Exception as e:
-        logger.error(f"Onboarding background flow failed: {e}")
-        raise e
+        run_logger.error(f"Onboarding background flow failed: {e}")
     finally:
-        GlobalLLMManager.release()
+        if acquired:
+            try:
+                GlobalLLMManager.release()
+            except Exception:
+                pass
+
+def run_onboarding_flow_direct(user_uuid: str, goals: list, income_pattern: list, liabilities: list, user_summary: str):
+    """Fallback runner for direct in-process execution when Prefect daemon is unreachable."""
+    try:
+        fallback_persona = deduce_deterministic_persona(goals, income_pattern, liabilities, user_summary)
+        form_context = f"""
+        User Form Submission:
+        - Selected Goals: {goals}
+        - Income Pattern: {income_pattern}
+        - Liabilities: {liabilities}
+        
+        User's Personal Summary:
+        "{user_summary}"
+        """
+        # Execute tasks directly using .fn attribute
+        llm_analysis_dict = extract_persona_task.fn(form_context, fallback_persona=fallback_persona)
+        commit_onboarding_db_task.fn(user_uuid, llm_analysis_dict)
+    except Exception as e:
+        logger.error(f"Direct onboarding fallback flow failed: {e}", exc_info=True)

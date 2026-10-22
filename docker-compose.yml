@@ -121,7 +121,7 @@ services:
       - PREFECT_LOGGING_EXTRA_LOGGERS=sqlalchemy.engine,httpx,langchain,uvicorn
     volumes:
       - .:/app
-    command: python serve_cloud.py
+    command: python scripts/serve_cloud.py
     restart: always
     networks:
       - default
@@ -155,7 +155,7 @@ services:
       - PREFECT_LOGGING_EXTRA_LOGGERS=sqlalchemy.engine,httpx,langchain,uvicorn
     volumes:
       - .:/app
-    command: python serve_oss.py
+    command: python scripts/serve_oss.py
     restart: always
     networks:
       - default

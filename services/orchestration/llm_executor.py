@@ -7,7 +7,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from services.orchestration.execution_tools import get_sleep_tool, get_alert_tool, get_transfer_tool, get_etl_tool, get_create_bucket_tool, get_update_bucket_tool, get_delete_bucket_tool
-from services.logger_setup import get_core_logger
+from services.logger_setup import get_core_logger, log_pipeline_data
 
 logger = get_core_logger(__name__)
 
@@ -20,8 +20,6 @@ def execute_llm_chain(user_uuid: str, compiled_brief: str, reverse_map: dict):
     Initializes a highly scoped LangGraph state machine, binds the mathematically verified tools, 
     and forces the LLM to make a decision based exclusively on the state snapshot.
     """
-    logger.info(json.dumps({"message": f"Waking Decision Engine for {user_uuid}", "status_code": 200}))
-    
     # Generate tightly bound tools using closures to protect PII/UUIDs
     tools = [
         get_sleep_tool(),
@@ -33,6 +31,19 @@ def execute_llm_chain(user_uuid: str, compiled_brief: str, reverse_map: dict):
         get_delete_bucket_tool(reverse_map, user_uuid)
     ]
     tool_node = ToolNode(tools)
+
+    log_pipeline_data(
+        logger=logger,
+        pipeline="llm_decision_engine",
+        stage="dispatch",
+        data={
+            "user_uuid": user_uuid,
+            "brief_snippet": compiled_brief[:200] + "..." if len(compiled_brief) > 200 else compiled_brief,
+            "brief_length": len(compiled_brief),
+            "tools_available": [t.name for t in tools]
+        },
+        message=f"Dispatching brief ({len(compiled_brief)} chars) to Decision Engine for {user_uuid}"
+    )
     
     # Configure LLM
     base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
@@ -48,7 +59,6 @@ def execute_llm_chain(user_uuid: str, compiled_brief: str, reverse_map: dict):
     llm_with_tools = llm.bind_tools(tools)
     
     def evaluate_node(state: ExecutionState):
-        logger.info(json.dumps({"message": "Decision Engine evaluating state.", "status_code": 200}))
         response = llm_with_tools.invoke(state["messages"])
         return {"messages": [response]}
         
@@ -90,6 +100,15 @@ def execute_llm_chain(user_uuid: str, compiled_brief: str, reverse_map: dict):
     
     try:
         engine.invoke(state, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_session_id": user_uuid, "langfuse_tags": ["decision-engine"]}})
-        logger.info(json.dumps({"message": "Decision Engine completed execution.", "status_code": 200}))
+        log_pipeline_data(
+            logger=logger,
+            pipeline="llm_decision_engine",
+            stage="complete",
+            data={
+                "user_uuid": user_uuid,
+                "status": "success"
+            },
+            message=f"Decision Engine run completed for {user_uuid}"
+        )
     except Exception as e:
-        logger.error(json.dumps({"message": f"Decision Engine failed: {e}", "status_code": 500}))
+        logger.error(f"Decision Engine failed: {e}", exc_info=True)

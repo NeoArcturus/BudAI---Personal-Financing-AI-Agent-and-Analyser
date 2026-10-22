@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from prefect import serve
 from prefect.events import DeploymentEventTrigger
 from services.orchestration.periodic_worker import run_periodic_evaluation

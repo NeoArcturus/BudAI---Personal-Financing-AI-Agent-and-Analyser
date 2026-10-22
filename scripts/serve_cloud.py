@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from prefect import serve
 from services.orchestration.onboarding_flows import process_user_onboarding_flow
 from services.orchestration.cron_flows import (

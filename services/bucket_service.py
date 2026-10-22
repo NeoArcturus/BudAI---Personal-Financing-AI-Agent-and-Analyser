@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from sqlmodel import Session
 from models.database_models import Bucket
-from services.logger_setup import get_core_logger
+from services.logger_setup import get_core_logger, log_pipeline_data
 
 logger = get_core_logger(__name__)
 
@@ -37,7 +37,20 @@ def create_new_bucket(
     )
     
     session.add(new_bucket)
-    logger.info(json.dumps({"message": f"Created new {bucket_type} bucket '{name}' for user {user_uuid}", "status_code": 201}))
+    log_pipeline_data(
+        logger=logger,
+        pipeline="bucket_service",
+        stage="create_bucket",
+        data={
+            "bucket_id": new_bucket.id,
+            "user_uuid": user_uuid,
+            "name": name,
+            "type": bucket_type,
+            "target_amount": target_amount,
+            "priority_index": priority_index
+        },
+        message=f"Created new {bucket_type} bucket '{name}' for user {user_uuid}"
+    )
     
     return new_bucket
 
@@ -69,7 +82,19 @@ def execute_bucket_transfer(
     # Note: PL/pgSQL database trigger automatically updates the cached_balance 
     # of both buckets when this insert commits.
     
-    logger.info(json.dumps({"message": f"Virtual transfer of £{amount} staged for user {user_uuid}.", "status_code": 200}))
+    log_pipeline_data(
+        logger=logger,
+        pipeline="bucket_service",
+        stage="execute_transfer",
+        data={
+            "transfer_id": transfer.id,
+            "user_uuid": user_uuid,
+            "source_bucket": {"id": source.id, "name": source.name, "balance_before": source.cached_balance},
+            "target_bucket": {"id": target.id, "name": target.name, "balance_before": target.cached_balance},
+            "amount": amount
+        },
+        message=f"Virtual transfer of £{amount} staged from '{source.name}' to '{target.name}'"
+    )
     return transfer
 
 def update_bucket_details(
@@ -96,7 +121,19 @@ def update_bucket_details(
         
     bucket.updated_at = datetime.now(timezone.utc)
         
-    logger.info(json.dumps({"message": f"Updated bucket {bucket_id} for user {user_uuid}.", "status_code": 200}))
+    log_pipeline_data(
+        logger=logger,
+        pipeline="bucket_service",
+        stage="update_bucket",
+        data={
+            "bucket_id": bucket_id,
+            "user_uuid": user_uuid,
+            "name": bucket.name,
+            "target_amount": bucket.target_amount,
+            "priority_index": bucket.priority_index
+        },
+        message=f"Updated bucket '{bucket.name}' ({bucket_id}) for user {user_uuid}"
+    )
     return bucket
 
 def delete_virtual_bucket(session: Session, user_uuid: str, bucket_id: str):
@@ -129,9 +166,16 @@ def delete_virtual_bucket(session: Session, user_uuid: str, bucket_id: str):
     # Now hard delete the bucket
     session.delete(bucket)
     
-    from services.logger_setup import get_core_logger
-    import json
-    logger = get_core_logger(__name__)
-    logger.info(json.dumps({"message": f"Bucket {bucket_id} completely removed from database.", "status_code": 200}))
+    log_pipeline_data(
+        logger=logger,
+        pipeline="bucket_service",
+        stage="delete_bucket",
+        data={
+            "bucket_id": bucket_id,
+            "user_uuid": user_uuid,
+            "recovered_to_default": amount_to_recover
+        },
+        message=f"Bucket {bucket_id} removed, £{amount_to_recover} returned to DEFAULT"
+    )
     return True
 

@@ -12,8 +12,6 @@ def build_evaluation_context(session: Session, user_uuid: str, masked_state: lis
     Compiles the masked state, mathematical discoveries, and strict behavioral guardrails 
     into a rigid, un-hallucinatable text prompt for the LLM.
     """
-    logger.info(json.dumps({"message": f"Compiling agent brief for {user_uuid}", "status_code": 200}))
-    
     # 1. State Block (Masked)
     state_block = "CURRENT STATE (Masked):\n"
     for b in masked_state:

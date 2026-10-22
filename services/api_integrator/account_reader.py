@@ -2,12 +2,12 @@ from models.status_codes import OpenBankingStatus
 import json
 import pandas as pd
 from typing import Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from config import SessionLocal
 from models.database_models import Account, Bank, Transaction
 import requests
 from services.api_integrator.truelayer_sync import TrueLayerSync
-from services.logger_setup import get_core_logger
+from services.logger_setup import get_core_logger, log_pipeline_data
 
 logger = get_core_logger(__name__)
 
@@ -21,14 +21,14 @@ class AccountReader:
         provider_names = {}
         try:
             providers_res = requests.get(
-                "https://auth.truelayer.com/api/providers")
+                "https://auth.truelayer.com/api/providers", timeout=10)
             if providers_res is not None and providers_res.status_code == 200:
                 for p in providers_res.json():
                     provider_logos[p.get("provider_id")] = p.get("logo_url")
                     provider_names[p.get("provider_id")] = p.get(
                         "display_name")
         except Exception as e:
-            logger.error(json.dumps({"message": f"Error fetching providers", "status_code": 500}), exc_info=True)
+            logger.error(f"Error fetching TrueLayer providers: {e}", exc_info=True)
 
         try:
             with SessionLocal() as session:
@@ -55,24 +55,29 @@ class AccountReader:
                         })
                         continue
                     for acc in b.accounts:
-                        if acc.last_synced_at is None or (datetime.utcnow() - acc.last_synced_at).total_seconds() > 300:
+                        acc_id = str(acc.account_id)
+                        last_sync = acc.last_synced_at
+                        if last_sync and last_sync.tzinfo is None:
+                            last_sync = last_sync.replace(tzinfo=timezone.utc)
+                        now_utc = datetime.now(timezone.utc)
+
+                        if last_sync is None or (now_utc - last_sync).total_seconds() > 300:
                             try:
                                 sync = TrueLayerSync(self.user_id)
                                 enc_token = b.access_token
                                 if isinstance(enc_token, memoryview):
                                     enc_token = enc_token.tobytes()
                                 access_token = sync.cipher_suite.decrypt(bytes(enc_token)).decode()
-                                bal_res = sync._make_request(f"{sync.base_url}/{acc.account_id}/balance", access_token, b.truelayer_provider_id)
+                                bal_res = sync._make_request(f"{sync.base_url}/{acc_id}/balance", access_token, b.truelayer_provider_id)
                                 if bal_res:
                                     if bal_res.status_code == 200:
                                         bal_data = bal_res.json().get("results", [{}])[0]
                                         acc.account_balance = float(bal_data.get("available", bal_data.get("current", 0.0)))
-                                        acc.last_synced_at = datetime.utcnow()
+                                        acc.last_synced_at = now_utc
                                         session.commit()
-                                    elif bal_res.status_code == 404:
-                                        logger.debug(json.dumps({"message": f"Balance not supported for {acc.account_id} (404)", "status_code": 100}))
                             except Exception as e:
-                                logger.error(json.dumps({"message": f"Failed direct balance sync for {acc.account_id}: {e}", "status_code": 500}))
+                                session.rollback()
+                                logger.error(f"Failed direct balance sync for {acc_id}: {e}")
 
                         all_accounts.append({
                             "account_id": acc.account_id,
@@ -88,9 +93,30 @@ class AccountReader:
                             "provider_id": b.truelayer_provider_id,
                             "logo_url": logo_url
                         })
+
+            log_pipeline_data(
+                logger=logger,
+                pipeline="account_reader",
+                stage="get_all_accounts",
+                data={
+                    "user_id": self.user_id,
+                    "accounts_count": len(all_accounts),
+                    "accounts": [
+                        {
+                            "account_id": a["account_id"],
+                            "bank_name": a["bank_name"],
+                            "balance": a["balance"],
+                            "currency": a["currency"],
+                            "status": a["status"]
+                        }
+                        for a in all_accounts
+                    ]
+                },
+                message=f"Fetched {len(all_accounts)} accounts for user {self.user_id}"
+            )
             return all_accounts
         except Exception:
-            logger.error(json.dumps({"message": f"Error getting all accounts", "status_code": 500}), exc_info=True)
+            logger.error("Error retrieving accounts", exc_info=True)
             return []
 
     def get_account_balance(self, bank_name_or_id, user_uuid, account_type="TRANSACTION"):
@@ -121,6 +147,19 @@ class AccountReader:
                 
                 results = query.order_by(Transaction.date.desc()).all()
                 if not results:
+                    log_pipeline_data(
+                        logger=logger,
+                        pipeline="account_reader",
+                        stage="get_transactions",
+                        data={
+                            "account_id": account_id,
+                            "user_uuid": user_uuid,
+                            "count": 0,
+                            "start_date": str(start_date) if start_date else None,
+                            "end_date": str(end_date) if end_date else None,
+                        },
+                        message=f"No transactions found for account {account_id}"
+                    )
                     return pd.DataFrame()
                 
                 transactions = []
@@ -138,9 +177,36 @@ class AccountReader:
                         "bank_uuid": tx.bank_uuid,
                         "account_id": tx.account_id
                     })
+
+                log_pipeline_data(
+                    logger=logger,
+                    pipeline="account_reader",
+                    stage="get_transactions",
+                    data={
+                        "account_id": account_id,
+                        "user_uuid": user_uuid,
+                        "count": len(transactions),
+                        "start_date": str(start_date) if start_date else None,
+                        "end_date": str(end_date) if end_date else None,
+                        "date_range": {
+                            "min_date": transactions[-1]["date"] if transactions else None,
+                            "max_date": transactions[0]["date"] if transactions else None,
+                        },
+                        "sample": [
+                            {
+                                "date": t["date"],
+                                "amount": t["amount"],
+                                "desc": t["description"][:30] if t["description"] else "",
+                                "category": t["category"]
+                            }
+                            for t in transactions[:3]
+                        ]
+                    },
+                    message=f"Retrieved {len(transactions)} transactions for account {account_id}"
+                )
                 return pd.DataFrame(transactions)
         except Exception:
-            logger.error(json.dumps({"message": f"Error in get_transactions", "status_code": 500}), exc_info=True)
+            logger.error("Error in get_transactions", exc_info=True)
             return pd.DataFrame()
 
     def get_transactions_by_account(self, account_id):
@@ -167,7 +233,27 @@ class AccountReader:
                         "sub_category": mk.sub_category if mk else None,
                         "tags": mk.tags if mk else []
                     })
+
+                log_pipeline_data(
+                    logger=logger,
+                    pipeline="account_reader",
+                    stage="get_transactions_by_account",
+                    data={
+                        "account_id": account_id,
+                        "user_id": self.user_id,
+                        "count": len(results),
+                        "sample": [
+                            {
+                                "amount": r["amount"],
+                                "desc": r["description"][:30] if r["description"] else "",
+                                "category": r["category"]
+                            }
+                            for r in results[:3]
+                        ]
+                    },
+                    message=f"Retrieved {len(results)} transactions by account {account_id}"
+                )
                 return results
         except Exception:
-            logger.error(json.dumps({"message": f"An error occurred in get_transactions_by_account", "status_code": 500}), exc_info=True)
+            logger.error("An error occurred in get_transactions_by_account", exc_info=True)
             return []

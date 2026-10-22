@@ -10,7 +10,7 @@ from services.api_integrator.access_token_generator import AccessTokenGenerator
 from config import SessionLocal, TRUELAYER_BASE_URL, ENCRYPTION_KEY
 from models.database_models import Account, Bank, Transaction
 from sqlalchemy import text
-from services.logger_setup import get_core_logger
+from services.logger_setup import get_core_logger, log_pipeline_data
 
 logger = get_core_logger(__name__)
 
@@ -32,7 +32,7 @@ class TrueLayerSync:
                 f"Rate limited (429) for {url}. Retrying in {2**attempt}s...")
             time.sleep(2 ** attempt)
         if res is not None and res.status_code == 401 and provider_id:
-            logger.info(
+            logger.warning(
                 f"Token expired for {provider_id}. Attempting refresh...")
             token_gen = AccessTokenGenerator()
             new_token = token_gen.refresh_token(provider_id, self.user_id)
@@ -41,45 +41,32 @@ class TrueLayerSync:
                 res = requests.get(url, headers=headers, params=params)
         if res is not None and res.status_code == 403:
             err_data = res.json()
-            logger.error(json.dumps({"message": f"Access forbidden (403) for {url}: {err_data}", "status_code": 500}))
+            logger.error(f"Access forbidden (403) for {url}: {err_data}")
             if isinstance(err_data, dict) and (err_data.get("error") == "sca_exceeded" or "PSU" in str(err_data)):
                 raise PermissionError("SECURITY LOCK")
-        if res is not None:
-            if res.status_code == 404 and url.endswith("/balance"):
-                pass # Suppress noisy 404 logs for unsupported balance endpoints
-            else:
-                logger.info(
-                    f"Request to {url} completed with status {res.status_code}")
         return res
 
     def initialise_accounts(self, bank_uuid, user_uuid):
-        logger.info(
-            f"Starting account initialization for Bank: {bank_uuid}, User: {user_uuid}")
         try:
             with SessionLocal() as session:
                 bank = session.query(Bank).filter_by(
                     bank_uuid=bank_uuid, user_uuid=user_uuid).first()
                 if not bank:
-                    logger.warning(json.dumps({"message": f"Bank connection not found: {bank_uuid}", "status_code": 400}))
+                    logger.warning(f"Bank connection not found: {bank_uuid}")
                     return False
-                logger.info(
-                    f"Decrypting tokens for bank: {bank.bank_name or bank.truelayer_provider_id}")
                 access_token_raw = bank.access_token
                 if isinstance(access_token_raw, memoryview):
                     access_token_raw = access_token_raw.tobytes()
                 access_token = self.cipher_suite.decrypt(
                     access_token_raw).decode()
                 provider_id = bank.truelayer_provider_id
-                logger.info(
-                    f"Fetching accounts from TrueLayer for provider: {provider_id}")
                 account_res = self._make_request(
                     self.base_url, access_token, provider_id)
                 if account_res is not None and account_res.status_code == 200:
                     results = account_res.json().get("results", [])
-                    logger.debug(
-                        f"Found {len(results)} accounts for provider {provider_id}")
                     if not results:
                         return False
+                    initialized_accounts = []
                     for acc_det in results:
                         acc_id = acc_det.get("account_id")
                         display_name = acc_det.get(
@@ -112,8 +99,7 @@ class TrueLayerSync:
                             if bal_res.status_code == 200:
                                 bal_data = bal_res.json().get("results", [{}])[0]
                                 acc_balance = bal_data.get("available", bal_data.get("current", 0.0))
-                            elif bal_res.status_code == 404:
-                                logger.debug(json.dumps({"message": f"Balance not supported for account {acc_id} (404). Defaulting to 0.0", "status_code": 100}))
+
                         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
                         stmt = pg_insert(Account).values(
@@ -141,6 +127,13 @@ class TrueLayerSync:
                         
                         session.execute(stmt)
                         session.commit()
+                        initialized_accounts.append({
+                            "account_id": acc_id,
+                            "display_name": display_name,
+                            "balance": float(acc_balance),
+                            "currency": acc_det.get("currency", "GBP"),
+                            "account_type": acc_det.get("account_type", "TRANSACTION")
+                        })
                         tx_url = f"{self.base_url}/{acc_id}/transactions"
                         
                         target_acc = session.query(Account).filter_by(account_id=acc_id).first()
@@ -161,14 +154,22 @@ class TrueLayerSync:
                             "webhook_uri": webhook_url
                         }
                         
-                        tx_res = self._make_request(
+                        self._make_request(
                             tx_url, access_token, provider_id, params=tx_params)
-                            
-                        if tx_res is not None and tx_res.status_code in [200, 202]:
-                            res_json = tx_res.json()
                     
-                    logger.info(
-                        f"Finished initialization for bank connection: {bank_uuid}")
+                    log_pipeline_data(
+                        logger=logger,
+                        pipeline="truelayer_sync",
+                        stage="initialise_accounts",
+                        data={
+                            "bank_uuid": bank_uuid,
+                            "user_uuid": user_uuid,
+                            "provider_id": provider_id,
+                            "accounts_count": len(initialized_accounts),
+                            "accounts": initialized_accounts
+                        },
+                        message=f"Initialized {len(initialized_accounts)} accounts for provider {provider_id}"
+                    )
                     try:
                         import asyncio
                         from utils.cache_utils import clear_user_cache
@@ -183,11 +184,11 @@ class TrueLayerSync:
                         except RuntimeError:
                             asyncio.run(_clear_cache())
                     except Exception as ce:
-                        logger.error(json.dumps({"message": f"Failed to clear cache: {ce}", "status_code": 500}))
+                        logger.error(f"Failed to clear cache: {ce}")
                     return True
                 return False
         except Exception as e:
-            logger.error(json.dumps({"message": f"Error initializing accounts: {e}", "status_code": 500}), exc_info=True)
+            logger.error(f"Error initializing accounts: {e}", exc_info=True)
             return False
 
     def trigger_sync(self, account_id: str, user_uuid: str, from_date: str = None, to_date: str = None):
@@ -382,6 +383,31 @@ class TrueLayerSync:
         # Update last_synced_at
         session.execute(text("UPDATE accounts SET last_synced_at = :now WHERE account_id = :acc_id"), {"now": datetime.utcnow(), "acc_id": account_id})
         session.commit()
+
+        rag_matches = sum(1 for tx in new_txs if tx.get("merchant_knowledge_uuid") is not None)
+        log_pipeline_data(
+            logger=logger,
+            pipeline="truelayer_sync",
+            stage="process_and_store_transactions",
+            data={
+                "user_uuid": user_uuid,
+                "account_id": account_id,
+                "batch_size_raw": len(tx_data),
+                "unique_processed": len(new_txs),
+                "rag_matches": rag_matches,
+                "sample": [
+                    {
+                        "date": tx["date"].strftime("%Y-%m-%d") if hasattr(tx["date"], "strftime") else str(tx["date"]),
+                        "amount": tx["amount"],
+                        "currency": tx["currency"],
+                        "desc": tx["semi_cleaned_description"][:30],
+                        "rag_match": tx.get("merchant_knowledge_uuid") is not None
+                    }
+                    for tx in new_txs[:3]
+                ]
+            },
+            message=f"Stored {len(new_txs)} transactions for account {account_id} ({rag_matches} RAG matches)"
+        )
 
         # Update cache and run ML in a separate thread
         def trigger_categorization():
