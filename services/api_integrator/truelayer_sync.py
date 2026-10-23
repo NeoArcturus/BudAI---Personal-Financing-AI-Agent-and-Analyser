@@ -315,30 +315,15 @@ class TrueLayerSync:
         if not new_txs:
             return
             
-        # --- PHASE 2: Fast Path RAG Intercept via Qdrant ---
+        # --- PHASE 2: FastEmbed Vectorization & Merchant Anchor Assignment ---
         try:
-            from services.embedding_service import get_embedding_service
-            from services.qdrant_service import get_qdrant_service
-            
-            emb_service = get_embedding_service()
-            qdrant = get_qdrant_service()
-            
-            # Extract strings to embed (using semi_cleaned as it strikes a good balance)
-            strings_to_embed = [tx["semi_cleaned_description"] for tx in new_txs]
-            if strings_to_embed:
-                vectors = emb_service.embed_documents(strings_to_embed)
-                
-                for idx, tx in enumerate(new_txs):
-                    v = vectors[idx]
-                    # Score in Qdrant with Cosine distance: score = 1 - distance. High match >= 0.85
-                    hits = qdrant.search_merchant_knowledge(v, limit=1, score_threshold=0.85)
-                    if hits:
-                        matched_uuid = hits[0]["payload"].get("knowledge_uuid") or hits[0]["id"]
-                        tx["merchant_knowledge_uuid"] = matched_uuid
+            from services.analytics.anchor_service import get_anchor_service
+            anchor_service = get_anchor_service()
+            new_txs = anchor_service.process_and_anchor_batch(new_txs, session)
         except Exception as e:
             from services.logger_setup import get_core_logger
             logger = get_core_logger(__name__)
-            logger.error(f"RAG Intercept Fast Path failed: {e}")
+            logger.error(f"Anchor processing failed: {e}")
 
         for tx in new_txs:
             if "merchant_knowledge_uuid" not in tx:

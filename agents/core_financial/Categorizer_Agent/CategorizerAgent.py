@@ -102,6 +102,29 @@ def bulk_save_categories(transactions: list[dict]) -> str:
                 if not exists:
                     logger.warning(json.dumps({"message": f"LLM hallucinated/invalid mk_uuid {mk_uuid} for {merchant_name}. Generating new one.", "status_code": 400}))
                     mk_uuid = None
+                else:
+                    # Update existing merchant anchor with resolved category
+                    update_mk_query = text("""
+                        UPDATE merchant_knowledge 
+                        SET category = :cat, sub_category = :sub_cat, tags = :tags
+                        WHERE knowledge_uuid = :uuid
+                    """)
+                    session.execute(update_mk_query, {
+                        "cat": category,
+                        "sub_cat": sub_category,
+                        "tags": json.dumps(tags),
+                        "uuid": mk_uuid
+                    })
+                    try:
+                        from services.qdrant_service import get_qdrant_service
+                        get_qdrant_service().update_merchant_payload(
+                            knowledge_uuid=mk_uuid,
+                            category=category,
+                            sub_category=sub_category,
+                            tags=tags
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to update Qdrant payload for anchor {mk_uuid}: {e}")
                     
             if not mk_uuid:
                 try:
@@ -260,6 +283,26 @@ class CategorizerAgent:
             
             tx = session.query(Transaction).filter_by(transaction_uuid=transaction_uuid).first()
             if not tx: return
+
+            # If transaction is linked to a Merchant Anchor, update the anchor directly
+            if tx.merchant_knowledge_uuid:
+                update_query = text("""
+                    UPDATE merchant_knowledge
+                    SET category = :cat, is_human_verified = TRUE
+                    WHERE knowledge_uuid = :uuid
+                """)
+                session.execute(update_query, {"cat": corrected_label, "uuid": tx.merchant_knowledge_uuid})
+                try:
+                    from services.qdrant_service import get_qdrant_service
+                    get_qdrant_service().update_merchant_payload(
+                        knowledge_uuid=tx.merchant_knowledge_uuid,
+                        category=corrected_label,
+                        is_human_verified=True
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to update Qdrant payload on manual label: {e}")
+                session.commit()
+                return
             
             # Find the current merchant_name from the description
             merchant_name = tx.semi_cleaned_description

@@ -221,34 +221,58 @@ def oss_token_auditor_flow():
     except Exception as e:
         logger.error(f"Token audit failed: {e}")
 
+@task(retries=2, retry_delay_seconds=30, tags=["vector-reconciliation"])
+def reconcile_merchants_cron_task():
+    logger = get_run_logger()
+    from services.analytics.anchor_service import get_anchor_service
+    res = get_anchor_service().reconcile_unlinked_transactions(limit=1000)
+    logger.info(f"Merchant vectorization reconciliation result: {res}")
+    return res
+
+@flow(name="Merchant Vectorization and Reconciliation")
+def merchant_vectorization_cron_flow():
+    reconcile_merchants_cron_task()
+
 @task(retries=1, tags=["alienware-llm"])
 def llm_categorization_sweep_task():
     logger = get_run_logger()
     logger.info("Starting Agentic Categorization Sweep...")
     
+    # Step 1: Ensure unlinked transactions are anchored first via vector reconciliation
+    try:
+        from services.analytics.anchor_service import get_anchor_service
+        reconcile_res = get_anchor_service().reconcile_unlinked_transactions(limit=500)
+        logger.info(f"Pre-sweep anchor reconciliation: {reconcile_res}")
+    except Exception as e:
+        logger.warning(f"Pre-sweep vector reconciliation failed: {e}")
+
+    # Step 2: Query unclassified merchant anchors
     from sqlalchemy import text
     from config import SessionLocal
     from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
     from langchain_core.messages import SystemMessage, HumanMessage
+    import json
     
     agent = CategorizerAgent()
     
     with SessionLocal() as session:
-        # Get orphans missing their Semantic Foreign Key
-        query = text("SELECT transaction_uuid, semi_cleaned_description FROM transactions WHERE merchant_knowledge_uuid IS NULL LIMIT 50")
+        query = text("""
+            SELECT knowledge_uuid, clean_merchant_name 
+            FROM merchant_knowledge 
+            WHERE category = 'Uncategorized' OR category IS NULL 
+            LIMIT 50
+        """)
         results = session.execute(query).fetchall()
         
         if not results:
-            logger.info("No uncategorized transactions found.")
+            logger.info("No unclassified merchant anchors found.")
             return
             
+        batch_data = [{"merchant_knowledge_uuid": r[0], "merchant_name": r[1]} for r in results]
         
-        batch_data = [{"transaction_uuid": r[0], "merchant_name": r[1]} for r in results]
-        import json
-        
-        logger.info(f"Delegating categorization of {len(batch_data)} transactions to CategorizerAgent in a single batch...")
+        logger.info(f"Delegating categorization of {len(batch_data)} merchant anchors to CategorizerAgent in a single batch...")
         messages = [
-            HumanMessage(content=f"Please categorize the following batch of {len(batch_data)} transactions:\n{json.dumps(batch_data, indent=2)}")
+            HumanMessage(content=f"Please categorize the following batch of {len(batch_data)} merchant anchors:\n{json.dumps(batch_data, indent=2)}")
         ]
         
         agent.app.invoke(

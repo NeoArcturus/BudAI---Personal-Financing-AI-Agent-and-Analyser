@@ -180,6 +180,77 @@ class QdrantService:
         self.upsert_vectors("merchant_knowledge", [point])
         return True
 
+    def upsert_merchants_batch(
+        self,
+        merchants: List[Dict[str, Any]]
+    ) -> bool:
+        """
+        Batch upserts multiple merchant records into Qdrant.
+        """
+        import uuid
+        points = []
+        for m in merchants:
+            k_uuid = str(m["knowledge_uuid"])
+            try:
+                point_id = str(uuid.UUID(k_uuid))
+            except ValueError:
+                point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, k_uuid))
+
+            point = models.PointStruct(
+                id=point_id,
+                vector=m["vector"],
+                payload={
+                    "knowledge_uuid": k_uuid,
+                    "clean_merchant_name": m["clean_merchant_name"],
+                    "category": m.get("category", "Uncategorized"),
+                    "sub_category": m.get("sub_category", "") or "",
+                    "tags": m.get("tags", []) or [],
+                    "is_human_verified": m.get("is_human_verified", False)
+                }
+            )
+            points.append(point)
+
+        if points:
+            self.upsert_vectors("merchant_knowledge", points)
+        return True
+
+    def update_merchant_payload(
+        self,
+        knowledge_uuid: str,
+        category: str,
+        sub_category: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        is_human_verified: bool = False
+    ) -> bool:
+        """
+        Updates the category/payload of an existing merchant in Qdrant.
+        """
+        import uuid
+        try:
+            point_id = str(uuid.UUID(str(knowledge_uuid)))
+        except ValueError:
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(knowledge_uuid)))
+
+        payload_update = {
+            "category": category,
+            "is_human_verified": is_human_verified
+        }
+        if sub_category is not None:
+            payload_update["sub_category"] = sub_category
+        if tags is not None:
+            payload_update["tags"] = tags
+
+        try:
+            self.client.set_payload(
+                collection_name="merchant_knowledge",
+                payload=payload_update,
+                points=[point_id]
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update merchant payload in Qdrant for {knowledge_uuid}: {e}")
+            return False
+
     def search_merchant_knowledge(
         self,
         query_vector: List[float],
