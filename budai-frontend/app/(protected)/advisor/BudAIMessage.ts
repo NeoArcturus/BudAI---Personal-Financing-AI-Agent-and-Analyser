@@ -102,12 +102,33 @@ export type BudAITools = InferUITools<typeof budAITools>;
 export type BudAIMetadata = z.infer<typeof budAIMetadataSchema>;
 export type BudAIDataPart = z.infer<typeof budAIDataPartSchema>;
 
+export type SubagentStepAnnotation = {
+  type: "subagent_step";
+  agent: string;
+  action?: string;
+  status: "queued" | "running" | "completed" | "failed";
+  timestamp?: string;
+  duration_ms?: number;
+};
+
+export type TelemetryAnnotation = {
+  type: "telemetry";
+  ttft_ms?: number;
+  compute_time_ms?: number;
+  tokens?: number;
+  model?: string;
+  verbosity?: "concise" | "balanced" | "deep_dive";
+};
+
 export type BudAIAnnotation =
   | { type: "thinking_context"; status: string; worker_id?: string }
   | { type: "global_refresh_signal"; chart_type?: string; timeStamp?: string }
-  | { type: "htil_interrupt"; interrupts: Array<{ id: string; value: unknown }>; payload?: unknown };
+  | { type: "htil_interrupt"; interrupts: Array<{ id: string; value: unknown }>; payload?: unknown }
+  | SubagentStepAnnotation
+  | TelemetryAnnotation;
 
 export type BudAIMessage = UIMessage<BudAIMetadata, BudAIDataPart, BudAITools> & {
+  content?: string;
   annotations?: BudAIAnnotation[];
   toolInvocations?: any[];
   usage?: {

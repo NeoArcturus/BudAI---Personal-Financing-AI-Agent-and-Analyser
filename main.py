@@ -35,6 +35,7 @@ from routes.analytics_routes import router as analytics_router
 from services.api_integrator.access_token_generator import AccessTokenGenerator
 from services.db_service import init_db
 from services.mcp_bridge import MCPBridge
+from services.a2a.bootstrap import register_all_a2a_workers
 from services.logger_setup import get_core_logger
 from models.database_models import Bank
 
@@ -47,6 +48,7 @@ async def lifespan(app: FastAPI):
     logger.info({"message": f"INITIALIZING BUDAI CORE ENGINE", "status_code": 200})
     bridge = MCPBridge()
     FastAPICache.init(InMemoryBackend(), prefix="budai-cache")
+    register_all_a2a_workers()
     logger.info({"message": f"Background tasks have been offloaded to Prefect workers.", "status_code": 200})
     yield
     logger.info({"message": f"Shutting down core engine", "status_code": 200})
@@ -96,6 +98,7 @@ from routes.onboarding_routes import router as onboarding_router
 from routes.bucket_routes import router as bucket_router
 from routes.websocket_routes import router as websocket_router
 from routes.neon_routes import router as neon_router
+from routes.notification_routes import router as notification_router
 
 app.include_router(auth_router)
 app.include_router(callback_router)
@@ -115,6 +118,7 @@ app.include_router(onboarding_router)
 app.include_router(bucket_router)
 app.include_router(websocket_router)
 app.include_router(neon_router)
+app.include_router(notification_router)
 
 
 @app.get("/")

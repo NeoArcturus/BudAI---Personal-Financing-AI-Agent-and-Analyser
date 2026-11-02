@@ -13,7 +13,7 @@ import { DefaultChatTransport } from "ai";
 
 import { AdvisorSidebar, BudAIChatSession } from "./components/AdvisorSidebar";
 import { MemoizedChatMessage } from "./components/MemoizedChatMessage";
-import { ChatInputArea } from "./components/ChatInputArea";
+import { ChatInputArea, VerbosityMode } from "./components/ChatInputArea";
 
 interface BudAIChatMessage {
   role: "user" | "assistant" | "system" | "data";
@@ -51,13 +51,23 @@ export default function AdvisorPage() {
 
   const [resumeStream, setResumeStream] = useState(false);
   const [showReasoning, setShowReasoning] = useState(false);
+  const [verbosity, setVerbosity] = useState<VerbosityMode>("balanced");
 
   useEffect(() => {
     const saved = localStorage.getItem("budai_show_reasoning");
     if (saved === "true") {
       setTimeout(() => setShowReasoning(true), 0);
     }
+    const savedVerbosity = localStorage.getItem("budai_chat_verbosity") as VerbosityMode;
+    if (savedVerbosity && ["concise", "balanced", "deep_dive"].includes(savedVerbosity)) {
+      setVerbosity(savedVerbosity);
+    }
   }, []);
+
+  const handleVerbosityChange = (mode: VerbosityMode) => {
+    setVerbosity(mode);
+    localStorage.setItem("budai_chat_verbosity", mode);
+  };
 
   const handleToggleReasoning = () => {
     setShowReasoning((prev) => {
@@ -191,7 +201,7 @@ export default function AdvisorPage() {
     }
   }, [sessionParam, setMessages]);
 
-  const handleSend = async (text: string) => {
+  const handleSend = async (text: string, selectedVerbosity: VerbosityMode = verbosity) => {
     try {
       if (typeof sendMessage === "function") {
         let currentSessionId = activeSessionId;
@@ -207,6 +217,7 @@ export default function AdvisorPage() {
           {
             body: {
               session_id: currentSessionId,
+              verbosity: selectedVerbosity,
             },
           },
         );
@@ -403,6 +414,8 @@ export default function AdvisorPage() {
               stop={stop}
               onSend={handleSend}
               isLocked={isLocked}
+              verbosity={verbosity}
+              onVerbosityChange={handleVerbosityChange}
             />
             <div className="text-center mt-4">
               <p className="text-[8px] text-foreground/30 uppercase tracking-[0.3em] font-black">

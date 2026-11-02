@@ -39,6 +39,7 @@ class StreamChatRequest(BaseModel):
     active_account_id: Optional[str] = None
     htil_response: Optional[Dict[str, Any]] = None
     messageId: Optional[str] = None
+    verbosity: Optional[str] = "balanced"
 
 class OnboardingRequest(BaseModel):
     messages: List[VercelMessage]

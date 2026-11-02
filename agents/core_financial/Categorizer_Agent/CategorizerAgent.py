@@ -278,25 +278,43 @@ class CategorizerAgent:
     def save_manual_label(self, user_uuid, transaction_uuid, corrected_label):
         with SessionLocal() as session:
             from models.database_models import Transaction, MerchantKnowledge
+            from services.categorization.taxonomy import enrich_transaction_taxonomy
             import uuid
             from datetime import datetime
+            import json
             
             tx = session.query(Transaction).filter_by(transaction_uuid=transaction_uuid).first()
             if not tx: return
+
+            clean_desc = tx.semi_cleaned_description or tx.description or ""
+            cat, sub_cat, tags, ons_code = enrich_transaction_taxonomy(
+                category=corrected_label,
+                sub_category=tx.sub_category,
+                description=clean_desc,
+                existing_tags=tx.tags or []
+            )
+
+            tx.sub_category = sub_cat
+            tx.tags = tags
 
             # If transaction is linked to a Merchant Anchor, update the anchor directly
             if tx.merchant_knowledge_uuid:
                 update_query = text("""
                     UPDATE merchant_knowledge
-                    SET category = :cat, is_human_verified = TRUE
+                    SET category = :cat, sub_category = :sub_cat, tags = :tags::jsonb, is_human_verified = TRUE
                     WHERE knowledge_uuid = :uuid
                 """)
-                session.execute(update_query, {"cat": corrected_label, "uuid": tx.merchant_knowledge_uuid})
+                session.execute(update_query, {
+                    "cat": cat,
+                    "sub_cat": sub_cat,
+                    "tags": json.dumps(tags),
+                    "uuid": tx.merchant_knowledge_uuid
+                })
                 try:
                     from services.qdrant_service import get_qdrant_service
                     get_qdrant_service().update_merchant_payload(
                         knowledge_uuid=tx.merchant_knowledge_uuid,
-                        category=corrected_label,
+                        category=cat,
                         is_human_verified=True
                     )
                 except Exception as e:
@@ -307,6 +325,7 @@ class CategorizerAgent:
             # Find the current merchant_name from the description
             merchant_name = tx.semi_cleaned_description
             if not merchant_name:
+                session.commit()
                 return
 
             # Check if there is an existing merchant_knowledge row for this name AND this category
@@ -316,7 +335,7 @@ class CategorizerAgent:
                 WHERE clean_merchant_name = :name AND category = :cat
                 LIMIT 1
             """)
-            res = session.execute(query, {"name": merchant_name, "cat": corrected_label}).first()
+            res = session.execute(query, {"name": merchant_name, "cat": cat}).first()
             
             if res:
                 # Target exists, just point to it
@@ -330,12 +349,14 @@ class CategorizerAgent:
                 
                 insert_query = text("""
                     INSERT INTO merchant_knowledge (knowledge_uuid, clean_merchant_name, category, sub_category, tags, is_human_verified, created_at)
-                    VALUES (:uuid, :name, :cat, NULL, '[]'::json, TRUE, :now)
+                    VALUES (:uuid, :name, :cat, :sub_cat, :tags::jsonb, TRUE, :now)
                 """)
                 session.execute(insert_query, {
                     "uuid": new_mk_uuid,
                     "name": merchant_name,
-                    "cat": corrected_label,
+                    "cat": cat,
+                    "sub_cat": sub_cat,
+                    "tags": json.dumps(tags),
                     "now": datetime.utcnow()
                 })
 
@@ -343,9 +364,9 @@ class CategorizerAgent:
                 get_qdrant_service().upsert_merchant(
                     knowledge_uuid=new_mk_uuid,
                     clean_merchant_name=merchant_name,
-                    category=corrected_label,
+                    category=cat,
                     vector=vec,
-                    tags=[],
+                    tags=tags,
                     is_human_verified=True
                 )
                 

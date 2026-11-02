@@ -126,8 +126,15 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
         f"Stream request: '{user_input[:50]}...', Session: {thread_id}")
 
     chat_history = await asyncio.to_thread(get_session_history, current_user.user_uuid, thread_id)
+    
+    effective_user_input = user_input
+    if request.verbosity == "concise":
+        effective_user_input = f"{user_input}\n[STYLE: Concise mode. Deliver precise data and actionable takeaways. Keep brief.]"
+    elif request.verbosity == "deep_dive":
+        effective_user_input = f"{user_input}\n[STYLE: Deep Dive mode. Provide comprehensive quantitative breakdown, multi-step agent audits, and mathematical rationale.]"
+
     initial_state = {
-        "messages": chat_history + [HumanMessage(content=user_input)],
+        "messages": chat_history + [HumanMessage(content=effective_user_input)],
         "user_uuid": str(current_user.user_uuid),
         "session_id": thread_id,
         "active_account_id": request.active_account_id or None,
@@ -139,7 +146,7 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
         await execute_chat_graph_async({
             "user_uuid": current_user.user_uuid,
             "session_id": thread_id,
-            "user_input": user_input
+            "user_input": effective_user_input
         })
 
     async def generate_response():
@@ -189,7 +196,35 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                 
                     elif kind == "on_tool_start":
                         tool_name = event.get("name")
-                        if tool_name == "generate_ui_chart":
+                        agent_map = {
+                            "call_analyser_agent": ("AnalyserAgent", "Analyzing historical spending & cashflow"),
+                            "call_forecaster_agent": ("ForecasterWorker", "Simulating stochastic balance trajectories"),
+                            "call_categorizer_agent": ("CategorizerAgent", "Enriching taxonomy & ONS macro tags"),
+                            "call_health_agent": ("HealthWorker", "Evaluating liquidity reserves & safety runway"),
+                            "call_memory_agent": ("MemoryAgent", "Retrieving qualitative profile memory"),
+                            "call_market_agent": ("MarketWorker", "Fetching macroeconomic & market telemetry"),
+                            "call_scenario_agent": ("ScenarioWorker", "Computing structural financial scenarios"),
+                            "call_bucket_transfer_agent": ("BucketTransferWorker", "Calculating virtual double-entry rebalance"),
+                            "call_anomaly_detection_agent": ("AnomalyWorker", "Screening transactions for surge variance"),
+                            "call_debt_management_agent": ("DebtWorker", "Modeling liability payoff trajectories"),
+                            "call_goal_tracking_agent": ("GoalWorker", "Auditing savings goal milestone progress"),
+                            "call_income_detection_agent": ("IncomeWorker", "Profiling recurring payroll rhythms"),
+                            "call_lifestyle_clustering_agent": ("LifestyleWorker", "Clustering behavioral spending archetypes"),
+                            "call_monte_carlo_simulation_agent": ("MonteCarloEngine", "Running Bates jump-diffusion simulations"),
+                            "call_subscription_detection_agent": ("SubscriptionWorker", "Auditing active recurring billing"),
+                            "get_connected_accounts_orchestrator": ("AccountWorker", "Querying verified bank accounts"),
+                            "get_liability_horizon_orchestrator": ("LiabilityEngine", "Mapping debt maturity horizon"),
+                            "get_semantic_anomalies_wrapper": ("AnomalyEngine", "Evaluating vector semantic drift"),
+                            "get_lifestyle_trajectory_wrapper": ("TrajectoryEngine", "Modeling lifestyle spending drift"),
+                            "benchmark_persona_budget_wrapper": ("BenchmarkEngine", "Cross-referencing demographic budget benchmarks"),
+                            "predict_impulse_vulnerability_wrapper": ("ImpulseEngine", "Evaluating payday proximity vulnerability"),
+                            "get_upcoming_subscriptions_wrapper": ("SubscriptionEngine", "Scanning upcoming recurring deductions"),
+                        }
+                        if tool_name in agent_map:
+                            agent_name, agent_action = agent_map[tool_name]
+                            await queue.put(f'8:[{json.dumps({"type": "subagent_step", "agent": agent_name, "action": agent_action, "status": "running"})}]\n')
+                            await queue.put(f'8:[{json.dumps({"type": "thinking_context", "status": f"Consulting {agent_name}..."})}]\n')
+                        elif tool_name == "generate_ui_chart":
                             tool_input = event.get("data", {}).get("input", {})
                             # Pass the entire tool_input to the frontend as the tool arguments
                             tool_call = {
@@ -209,6 +244,35 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                                     "args": {"question": question}
                                 }
                                 await queue.put(f'9:[{json.dumps(tool_call)}]\n')
+                    elif kind == "on_tool_end":
+                        tool_name = event.get("name")
+                        agent_end_map = {
+                            "call_analyser_agent": "AnalyserAgent",
+                            "call_forecaster_agent": "ForecasterWorker",
+                            "call_categorizer_agent": "CategorizerAgent",
+                            "call_health_agent": "HealthWorker",
+                            "call_memory_agent": "MemoryAgent",
+                            "call_market_agent": "MarketWorker",
+                            "call_scenario_agent": "ScenarioWorker",
+                            "call_bucket_transfer_agent": "BucketTransferWorker",
+                            "call_anomaly_detection_agent": "AnomalyWorker",
+                            "call_debt_management_agent": "DebtWorker",
+                            "call_goal_tracking_agent": "GoalWorker",
+                            "call_income_detection_agent": "IncomeWorker",
+                            "call_lifestyle_clustering_agent": "LifestyleWorker",
+                            "call_monte_carlo_simulation_agent": "MonteCarloEngine",
+                            "call_subscription_detection_agent": "SubscriptionWorker",
+                            "get_connected_accounts_orchestrator": "AccountWorker",
+                            "get_liability_horizon_orchestrator": "LiabilityEngine",
+                            "get_semantic_anomalies_wrapper": "AnomalyEngine",
+                            "get_lifestyle_trajectory_wrapper": "TrajectoryEngine",
+                            "benchmark_persona_budget_wrapper": "BenchmarkEngine",
+                            "predict_impulse_vulnerability_wrapper": "ImpulseEngine",
+                            "get_upcoming_subscriptions_wrapper": "SubscriptionEngine",
+                        }
+                        if tool_name in agent_end_map:
+                            agent_name = agent_end_map[tool_name]
+                            await queue.put(f'8:[{json.dumps({"type": "subagent_step", "agent": agent_name, "status": "completed"})}]\n')
 
             except Exception as e:
                 logger.error(json.dumps({"message": f"Event processing failed: {e}", "status_code": 500}))
@@ -237,7 +301,8 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                 "type": "telemetry",
                 "ttft_ms": ttft_ms,
                 "compute_time_ms": compute_time_ms,
-                "tokens": tokens_generated["count"]
+                "tokens": tokens_generated["count"],
+                "verbosity": request.verbosity or "balanced"
             }
             await queue.put(f'8:[{json.dumps(telemetry_data)}]\n')
         

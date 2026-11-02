@@ -160,11 +160,17 @@ def cloud_failsafe_sync_flow():
     logger = get_run_logger()
     logger.info("Executing daily catch-all TrueLayer sync...")
     try:
-        from agents.infrastructure.CloudFailsafe_Agent.CloudFailsafeAgent import CloudFailsafeAgent
-        from langchain_core.messages import HumanMessage
-        agent = CloudFailsafeAgent()
-        # Use SYSTEM as user_uuid to sweep all missing webhooks
-        agent.app.invoke({"messages": [HumanMessage(content="Trigger failsafe sync for all missing webhook data.")], "user_uuid": "SYSTEM"}, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_session_id": "SYSTEM", "langfuse_tags": ["failsafe-sync"]}})
+        from config import SessionLocal
+        from sqlalchemy import text
+        from services.api_integrator.truelayer_sync import TrueLayerSync
+        with SessionLocal() as session:
+            conns = session.execute(text("SELECT user_uuid, account_id FROM user_bank_connections WHERE consent_status = '200-200'")).fetchall()
+        for u_id, acc_id in conns:
+            try:
+                syncer = TrueLayerSync(user_id=u_id)
+                syncer.trigger_sync(account_id=acc_id, user_uuid=u_id)
+            except Exception as se:
+                logger.warning(f"Failsafe sync skipped for account {acc_id}: {se}")
     except Exception as e:
         logger.error(f"Failsafe sync failed: {e}")
 
@@ -209,17 +215,23 @@ def oss_monte_carlo_sim_flow():
     except Exception as e:
         logger.error(f"Monte Carlo sim failed: {e}")
 
-@flow(name="Token Auditor")
+@flow(name="Local Inference Monitor")
 def oss_token_auditor_flow():
     logger = get_run_logger()
-    logger.info("Auditing LLM token usage...")
-    try:
-        from agents.infrastructure.TokenAuditing_Agent.TokenAuditingAgent import TokenAuditingAgent
-        from langchain_core.messages import HumanMessage
-        agent = TokenAuditingAgent()
-        agent.app.invoke({"messages": [HumanMessage(content="Audit system-wide LLM token usage.")] , "user_uuid": "SYSTEM"}, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_session_id": "SYSTEM", "langfuse_tags": ["token-audit"]}})
-    except Exception as e:
-        logger.error(f"Token audit failed: {e}")
+    logger.info("Local offline inference active: Zero cloud token expenses incurred.")
+
+@task(retries=2, retry_delay_seconds=60, tags=["macro-telemetry"])
+def fetch_ons_macro_telemetry_task():
+    logger = get_run_logger()
+    logger.info("Executing scheduled ONS macroeconomic telemetry sync...")
+    from services.analytics.ons_client import get_ons_client
+    res = get_ons_client().sync_telemetry()
+    logger.info(f"ONS sync completed: {res}")
+    return res
+
+@flow(name="ONS Macroeconomic Sync")
+def ons_macroeconomic_sync_flow():
+    fetch_ons_macro_telemetry_task()
 
 @task(retries=2, retry_delay_seconds=30, tags=["vector-reconciliation"])
 def reconcile_merchants_cron_task():
@@ -307,6 +319,22 @@ def autonomous_fiduciary_patrol_task():
             
             logger.info(f"Patrolling user {user_id}")
             
+            # 1. Run Cashflow Deficit Collision Check
+            try:
+                from services.analytics.cashflow_collision import get_cashflow_collision_engine
+                collision_res = get_cashflow_collision_engine().evaluate_liability_collision(str(user_id))
+                logger.info(f"User {user_id} cashflow collision status: {collision_res.get('status')}")
+            except Exception as ex:
+                logger.warning(f"Cashflow collision check error for {user_id}: {ex}")
+
+            # 2. Run Daily Spend Surge Check
+            try:
+                from services.analytics.surge_detector import get_surge_detector
+                surge_res = get_surge_detector().check_daily_surge(str(user_id))
+                logger.info(f"User {user_id} surge check status: {surge_res.get('status')}")
+            except Exception as ex:
+                logger.warning(f"Surge check error for {user_id}: {ex}")
+
             langfuse_handler = CallbackHandler()
             app_config = {"callbacks": [langfuse_handler], "metadata": {"langfuse_session_id": f"patrol_{user_id}_{int(time.time())}", "langfuse_user_id": str(user_id), "langfuse_tags": ["10-minute-patrol", "autonomous"]}}
             

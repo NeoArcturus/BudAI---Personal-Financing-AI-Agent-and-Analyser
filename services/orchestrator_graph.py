@@ -28,6 +28,7 @@ import os
 from services.mcp_bridge import MCPBridge
 from services.mcp_tools.external_tools import export_advisory_state
 from services.logger_setup import get_core_logger
+from services.llm_factory import get_chat_llm, LLMFactory
 from langchain_core.runnables import RunnableConfig
 
 logger = get_core_logger("orchestrator_graph")

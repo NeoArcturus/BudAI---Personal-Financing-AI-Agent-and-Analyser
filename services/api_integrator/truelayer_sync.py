@@ -389,6 +389,10 @@ class TrueLayerSync:
                 from utils.cache_utils import clear_user_cache
                 clear_user_cache(str(user_uuid), namespace="transactions")
                 clear_user_cache(str(user_uuid), namespace="categorizer")
+                
+                # Reactive Surge Detection Trigger
+                from services.analytics.surge_detector import get_surge_detector
+                get_surge_detector().check_daily_surge(str(user_uuid))
             except Exception as e:
                 logger.error(json.dumps({"message": f"Failed in trigger_categorization: {e}", "status_code": 500}), exc_info=True)
             finally:

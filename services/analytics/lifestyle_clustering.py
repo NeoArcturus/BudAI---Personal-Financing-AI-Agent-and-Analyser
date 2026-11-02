@@ -10,8 +10,8 @@ from sqlmodel import select
 import json
 import hashlib
 from pydantic import BaseModel
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_huggingface import HuggingFaceEmbeddings
+from services.embedding_service import get_embedding_service
+from services.llm_factory import get_chat_llm
 from config import SessionLocal
 from sqlalchemy import text
 from models.database_models import Transaction, UserLifestyleProfile, LifestyleCluster
@@ -30,23 +30,11 @@ class LifestyleAnalysisOutput(BaseModel):
 
 class LifestyleClusteringService:
     def __init__(self):
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-        if not base_url.endswith("/v1"): 
-            base_url = f"{base_url}/v1"
-            
-        self.embeddings = OpenAIEmbeddings(
-            base_url=base_url,
-            model="text-embedding-nomic-embed-text-v1.5",
-            api_key="budai-local",
-            check_embedding_ctx_length=False
-        )
-        
-        self.llm = ChatOpenAI(
-            model="Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit", 
-            base_url=base_url, 
-            api_key="budai-local", 
+        self.embeddings = get_embedding_service()
+        self.llm = get_chat_llm(
             temperature=0,
-            max_tokens=20000
+            max_tokens=20000,
+            timeout=60.0
         )
         
     def _clean_structural_noise(self, text: str) -> str:

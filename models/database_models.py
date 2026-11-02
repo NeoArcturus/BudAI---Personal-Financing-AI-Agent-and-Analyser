@@ -83,6 +83,8 @@ class Transaction(SQLModel, table=True):
     is_semantic_anomaly: Optional[bool] = Field(default=False)
     is_pending: bool = Field(default=False)
     merchant_knowledge_uuid: Optional[str] = Field(default=None, foreign_key="merchant_knowledge.knowledge_uuid")
+    sub_category: Optional[str] = None
+    tags: Optional[List[str]] = Field(default=[], sa_column=Column(JSON))
     
     user: Optional["User"] = Relationship(back_populates="transactions")
     account: Optional["Account"] = Relationship(back_populates="transactions")
@@ -209,8 +211,32 @@ class SystemAlert(SQLModel, table=True):
     __tablename__ = "system_alerts"
     id: str = Field(primary_key=True, index=True)
     user_id: str = Field(foreign_key="users.user_uuid", index=True)
-    event_type: str
+    title: Optional[str] = Field(default=None)
+    event_type: str = Field(index=True)
     message: str
-    is_read: bool = Field(default=False)
-    timestamp: datetime = Field(default_factory=utc_now)
+    urgency_level: int = Field(default=1, index=True)
+    status_code: Optional[str] = Field(default="308-200", index=True)
+    action_type: Optional[str] = Field(default=None)
+    action_payload: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    is_read: bool = Field(default=False, index=True)
+    is_dismissed: bool = Field(default=False)
+    timestamp: datetime = Field(default_factory=utc_now, index=True)
+
+class MacroTelemetry(SQLModel, table=True):
+    __tablename__ = "macro_telemetry"
+    __table_args__ = (
+        UniqueConstraint('source', 'dataset', 'indicator_code', 'period', name='uq_macro_record'),
+    )
+    id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    source: str = Field(default="ONS", index=True)
+    dataset: str = Field(index=True)
+    indicator_code: str = Field(index=True)
+    indicator_name: str
+    period: str = Field(index=True)
+    value: float
+    delta_pct_yoy: Optional[float] = None
+    delta_pct_mom: Optional[float] = None
+    etag: Optional[str] = None
+    metadata_json: Optional[dict] = Field(default={}, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utc_now)
 
