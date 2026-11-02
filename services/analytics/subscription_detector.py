@@ -27,20 +27,12 @@ class SubscriptionDetector:
         self.price_hike_threshold = price_hike_threshold
         self.similarity_threshold = similarity_threshold
         
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-        if not base_url.endswith("/v1"): 
-            base_url = f"{base_url}/v1"
-            
         from services.embedding_service import get_embedding_service
         self.embeddings = get_embedding_service()
         
-        # Qwen LLM for Entity Extraction/Naming
-        self.chat_model = ChatOpenAI(
-            base_url=base_url,
-            model="Qwen3.5-9B-GGUF",
-            api_key="budai-local",
-            temperature=0
-        )
+        # Qwen LLM for Entity Extraction/Naming via Tailscale cluster
+        from services.llm_factory import get_chat_llm
+        self.chat_model = get_chat_llm(temperature=0)
 
     def _cosine_similarity(self, v1, v2):
         if np.linalg.norm(v1) == 0 or np.linalg.norm(v2) == 0: 

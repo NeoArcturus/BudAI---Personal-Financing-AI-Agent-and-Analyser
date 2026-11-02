@@ -86,18 +86,12 @@ class HealthAgent:
         ]
         tool_node = ToolNode(tools)
         
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-        if not base_url.endswith("/v1"):
-            base_url = f"{base_url}/v1"
-            
-        llm = ChatOpenAI(
-            model="Qwen3.5-9B-GGUF",
-            base_url=base_url,
-            api_key="budai-local",
+        from services.llm_factory import get_chat_llm
+        llm = get_chat_llm(
             temperature=0,
             streaming=False,
             max_tokens=4000,
-            timeout=600,
+            timeout=600.0,
         ).bind_tools(tools)
         
         def evaluate_node(state: AgentState):

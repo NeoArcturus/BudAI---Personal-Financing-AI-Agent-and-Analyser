@@ -133,15 +133,44 @@ class AccountReader:
     def get_transactions(self, account_id: str, user_uuid, start_date=None, end_date=None, expense_only=False):
         try:
             from models.database_models import MerchantKnowledge
+            from datetime import datetime, date
+            import dateutil.parser
+
+            parsed_start = None
+            if start_date:
+                if isinstance(start_date, datetime):
+                    parsed_start = start_date
+                elif isinstance(start_date, date):
+                    parsed_start = datetime.combine(start_date, datetime.min.time())
+                elif isinstance(start_date, str):
+                    try:
+                        d = dateutil.parser.parse(start_date)
+                        parsed_start = d if isinstance(d, datetime) else datetime.combine(d, datetime.min.time())
+                    except Exception:
+                        parsed_start = None
+
+            parsed_end = None
+            if end_date:
+                if isinstance(end_date, datetime):
+                    parsed_end = end_date
+                elif isinstance(end_date, date):
+                    parsed_end = datetime.combine(end_date, datetime.max.time())
+                elif isinstance(end_date, str):
+                    try:
+                        d = dateutil.parser.parse(end_date)
+                        parsed_end = d if isinstance(d, datetime) else datetime.combine(d, datetime.max.time())
+                    except Exception:
+                        parsed_end = None
+
             with SessionLocal() as session:
                 query = session.query(Transaction, MerchantKnowledge).outerjoin(
                     MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid
                 ).filter(Transaction.account_id == account_id, Transaction.user_uuid == user_uuid)
 
-                if start_date:
-                    query = query.filter(Transaction.date >= start_date)
-                if end_date:
-                    query = query.filter(Transaction.date <= end_date)
+                if parsed_start:
+                    query = query.filter(Transaction.date >= parsed_start)
+                if parsed_end:
+                    query = query.filter(Transaction.date <= parsed_end)
                 if expense_only:
                     query = query.filter(Transaction.amount < 0)
                 

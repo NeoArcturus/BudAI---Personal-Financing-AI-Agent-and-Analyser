@@ -33,9 +33,6 @@ from langchain_core.runnables import RunnableConfig
 
 logger = get_core_logger("orchestrator_graph")
 
-OLLAMA_BASE_URL = os.getenv(
-    "OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-
 @tool
 async def ask_user(question: str) -> str:
     """Ask the user a question for clarification or more information. Use this if the user's request is ambiguous or if you need more details to decide which specialist tool to call."""
@@ -131,10 +128,7 @@ def strip_thinking(content: Any) -> str:
 async def generate_session_title(session_id: str, first_msg: str):
     """Generates an automatic session title."""
     try:
-        llm = ChatOpenAI(
-            model="lmstudio-community/Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit",
-            base_url=OLLAMA_BASE_URL,
-            api_key="budai-local",
+        llm = get_chat_llm(
             temperature=0,
             max_tokens=200
         )
@@ -186,14 +180,11 @@ async def execute_chat_graph_async(initial_state: dict):
     except Exception as e:
         logger.error(json.dumps({"message": f"DB failed: {e}", "status_code": 500}))
 
-supervisor_llm = ChatOpenAI(
-    model="lmstudio-community/Qwen3.5-9B-GGUF", # Mac: model="mlx-community/Qwen3.5-4B-4bit",
-    base_url=OLLAMA_BASE_URL,
-    api_key="budai-local",
+supervisor_llm = LLMFactory.get_supervisor_model(
     temperature=0.1,
     streaming=True,
     max_tokens=5000,
-    timeout=600
+    timeout=600.0
 )
 
 supervisor_tools = [

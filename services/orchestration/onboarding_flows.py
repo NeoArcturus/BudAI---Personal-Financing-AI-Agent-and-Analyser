@@ -41,18 +41,12 @@ def extract_persona_task(form_context: str, fallback_persona: str = "PROFESSIONA
         run_logger = logger
 
     try:
-        OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-        if not OLLAMA_BASE_URL.endswith("/v1"):
-            OLLAMA_BASE_URL = f"{OLLAMA_BASE_URL}/v1"
-
-        onboarding_llm = ChatOpenAI(
-            model="Qwen3.5-9B-GGUF",
-            base_url=OLLAMA_BASE_URL,
-            api_key="budai-local",
+        from services.llm_factory import get_chat_llm
+        onboarding_llm = get_chat_llm(
             temperature=0,
             streaming=False,
             max_tokens=1000,
-            timeout=15  # Fail fast to prevent user stalls when LLM is offline
+            timeout=15.0
         )
         
         parser = JsonOutputParser(pydantic_object=OnboardingLLMResult)

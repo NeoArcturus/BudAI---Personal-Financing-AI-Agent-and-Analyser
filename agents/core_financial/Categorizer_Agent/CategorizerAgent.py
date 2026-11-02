@@ -92,7 +92,7 @@ def bulk_save_categories(transactions: list[dict]) -> str:
             if str(mk_uuid).strip().lower() in ["", "none", "null", "undefined"]:
                 mk_uuid = None
                 
-            if not tx_uuid or not category or not merchant_name:
+            if not category or not merchant_name:
                 continue
                 
             if mk_uuid:
@@ -115,6 +115,18 @@ def bulk_save_categories(transactions: list[dict]) -> str:
                         "tags": json.dumps(tags),
                         "uuid": mk_uuid
                     })
+                    
+                    # Cascade category and tags down to all transactions linked to this anchor
+                    session.execute(text("""
+                        UPDATE transactions 
+                        SET sub_category = :sub_cat, tags = :tags 
+                        WHERE merchant_knowledge_uuid = :uuid
+                    """), {
+                        "sub_cat": sub_category,
+                        "tags": json.dumps(tags),
+                        "uuid": mk_uuid
+                    })
+
                     try:
                         from services.qdrant_service import get_qdrant_service
                         get_qdrant_service().update_merchant_payload(
@@ -160,20 +172,25 @@ def bulk_save_categories(transactions: list[dict]) -> str:
                     logger.error(f"Failed to create new merchant knowledge for {merchant_name}: {e}")
                     mk_uuid = None
                     
-            update_query = text("""
-                UPDATE transactions 
-                SET merchant_knowledge_uuid = :knowledge_uuid 
-                WHERE transaction_uuid = :transaction_uuid
-                   OR semi_cleaned_description = (
-                    SELECT semi_cleaned_description 
-                    FROM transactions 
+            if tx_uuid and tx_uuid != "batch":
+                update_query = text("""
+                    UPDATE transactions 
+                    SET merchant_knowledge_uuid = :knowledge_uuid,
+                        sub_category = :sub_cat,
+                        tags = :tags
                     WHERE transaction_uuid = :transaction_uuid
-                )
-            """)
-            session.execute(update_query, {
-                "knowledge_uuid": mk_uuid,
-                "transaction_uuid": tx_uuid
-            })
+                       OR semi_cleaned_description = (
+                        SELECT semi_cleaned_description 
+                        FROM transactions 
+                        WHERE transaction_uuid = :transaction_uuid
+                    )
+                """)
+                session.execute(update_query, {
+                    "knowledge_uuid": mk_uuid,
+                    "sub_cat": sub_category,
+                    "tags": json.dumps(tags),
+                    "transaction_uuid": tx_uuid
+                })
             success_count += 1
             
         session.commit()
@@ -190,16 +207,8 @@ class CategorizerAgent:
         tools = [bulk_search_merchant_knowledge, bulk_save_categories]
         tool_node = ToolNode(tools)
         
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-        if not base_url.endswith("/v1"): 
-            base_url = f"{base_url}/v1"
-            
-        llm = ChatOpenAI(
-            base_url=base_url,
-            api_key="budai-local",
-            model="Qwen3.5-9B-GGUF",
-            temperature=0
-        )
+        from services.llm_factory import get_chat_llm
+        llm = get_chat_llm(temperature=0)
         llm_with_tools = llm.bind_tools(tools)
         
         def evaluate_node(state: CategorizerState):

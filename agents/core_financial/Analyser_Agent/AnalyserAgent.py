@@ -43,12 +43,8 @@ class AnalyserAgent:
         self.app = self._build_graph()
         
     def _build_graph(self):
-        ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-        llm = ChatOpenAI(
-            model="Qwen3.5-9B-GGUF",
-            base_url=ollama_base_url,
-            api_key="ollama"
-        ).bind_tools(tools)
+        from services.llm_factory import get_chat_llm
+        llm = get_chat_llm(temperature=0).bind_tools(tools)
         
         tool_node = ToolNode(tools)
 

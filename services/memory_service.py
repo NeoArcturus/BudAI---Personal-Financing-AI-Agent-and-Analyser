@@ -29,10 +29,6 @@ class MemoryService:
         
         self.index_file = os.path.join(self.db_path, "transactions.index")
         self.metadata_file = os.path.join(self.db_path, "metadata.pkl")
-        
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-        if not base_url.endswith("/v1"):
-            base_url = f"{base_url}/v1"
             
         logger.debug(json.dumps({"message": f"Initializing HuggingFaceEmbeddings locally", "status_code": 100}))
         self._model = HuggingFaceEmbeddings(

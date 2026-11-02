@@ -53,11 +53,8 @@ class DatabaseReconciliationAgent:
         tools = [fetch_balances, fire_audit_alert]
         tool_node = ToolNode(tools)
         
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:8000/v1")
-        if not base_url.endswith("/v1"): 
-            base_url = f"{base_url}/v1"
-            
-        llm = ChatOpenAI(base_url=base_url, api_key="budai-local", model="Qwen3.5-9B-GGUF", temperature=0)
+        from services.llm_factory import get_chat_llm
+        llm = get_chat_llm(temperature=0)
         llm_with_tools = llm.bind_tools(tools)
         
         def evaluate_node(state: ReconState):

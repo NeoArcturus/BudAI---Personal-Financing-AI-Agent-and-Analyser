@@ -29,7 +29,7 @@ def test_deduce_deterministic_persona_categories():
 
 def test_extract_persona_task_offline_fallback():
     """Ensures extract_persona_task does not crash when LLM throws an exception or is offline."""
-    with patch("services.orchestration.onboarding_flows.ChatOpenAI") as mock_llm:
+    with patch("services.llm_factory.LLMFactory.get_chat_model") as mock_llm:
         mock_instance = MagicMock()
         mock_instance.invoke.side_effect = ConnectionRefusedError("LLM offline")
         mock_llm.return_value = mock_instance
