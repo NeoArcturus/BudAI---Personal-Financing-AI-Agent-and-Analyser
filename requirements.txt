@@ -60,3 +60,5 @@ pytest-sugar
 langfuse
 qdrant-client
 fastembed
+socksio
+httpx[socks]
