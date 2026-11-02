@@ -31,16 +31,19 @@ def get_user_persona(user_uuid: str, db: SessionLocal = Depends(get_db)):
         }
         
     # Dynamically calculate the user's actual category spending
-    txs = db.execute(
-        select(Transaction)
+    from models.database_models import MerchantKnowledge
+    tx_rows = db.execute(
+        select(Transaction.amount, MerchantKnowledge.category)
+        .outerjoin(MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid)
         .where(Transaction.user_uuid == user_uuid)
         .where(Transaction.amount < 0)
-    ).scalars().all()
+    ).all()
     
     category_spend = {}
-    for tx in txs:
-        cat = (tx.category or "uncategorized").lower()
-        category_spend[cat] = category_spend.get(cat, 0.0) + abs(tx.amount)
+    for amount, cat in tx_rows:
+        cat_key = (cat or "uncategorized").lower()
+        if amount is not None:
+            category_spend[cat_key] = category_spend.get(cat_key, 0.0) + abs(amount)
         
     # Phase 4 (Roadmap): We will eventually query the Office for National Statistics JSON.
     # For now, we apply basic deterministic thresholds based on the persona.

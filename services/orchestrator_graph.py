@@ -167,7 +167,8 @@ async def execute_chat_graph_async(initial_state: dict):
                 asyncio.create_task(generate_session_title(
                     session_id, initial_state['user_input']))
             else:
-                db_session.last_updated = datetime.utcnow()
+                from models.database_models import utc_now
+                db_session.last_updated = utc_now()
                 if db_session.title == "New Conversation":
                     asyncio.create_task(generate_session_title(
                         session_id, initial_state['user_input']))

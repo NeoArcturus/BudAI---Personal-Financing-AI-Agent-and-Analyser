@@ -106,25 +106,29 @@ def query_transactions(account_id: Optional[str] = None, start_date: Optional[st
     logger.info(json.dumps({"message": "Executing MCP Tool: query_transactions", "status_code": 200}))
     try:
         with SessionLocal() as session:
-            query = select(Transaction)
+            from models.database_models import MerchantKnowledge
+            query = select(Transaction, MerchantKnowledge.category).outerjoin(
+                MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid
+            )
             query = _apply_transaction_filters(query, user_uuid, account_id, start_date, end_date, categories, min_amount, max_amount, transaction_type, session)
             
             # Order by most recent
             query = query.order_by(Transaction.date.desc()).limit(500) # Safeguard limit
             
-            transactions = session.execute(query).scalars().all()
+            rows = session.execute(query).all()
             
-            if not transactions:
+            if not rows:
                 return json.dumps({"status": "success", "data": []})
                 
             results = []
-            for t in transactions:
+            for t, cat in rows:
                 results.append({
                     "id": t.transaction_uuid,
                     "date": t.date.strftime("%Y-%m-%d") if t.date else None,
                     "amount": t.amount,
                     "currency": t.currency,
-                    "category": t.category,
+                    "category": cat or "Uncategorized",
+                    "sub_category": t.sub_category or "",
                     "description": t.description
                 })
             
@@ -218,9 +222,12 @@ def get_liability_horizon(user_uuid: Annotated[str, InjectedState("user_uuid")] 
             ).scalars().all()
             
             # 2. Fetch Pending Transactions
-            pending_txs = session.execute(
-                select(Transaction).where(Transaction.user_uuid == user_uuid, Transaction.is_pending == True)
-            ).scalars().all()
+            from models.database_models import MerchantKnowledge
+            pending_rows = session.execute(
+                select(Transaction, MerchantKnowledge.category)
+                .outerjoin(MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid)
+                .where(Transaction.user_uuid == user_uuid, Transaction.is_pending == True)
+            ).all()
             
             subs_data = []
             for s in subs:
@@ -232,13 +239,13 @@ def get_liability_horizon(user_uuid: Annotated[str, InjectedState("user_uuid")] 
                 })
                 
             pending_data = []
-            for tx in pending_txs:
+            for tx, cat in pending_rows:
                 pending_data.append({
                     "id": tx.transaction_uuid,
                     "date": tx.date.strftime("%Y-%m-%d") if tx.date else None,
                     "amount": tx.amount,
                     "merchant": tx.description,
-                    "category": tx.category
+                    "category": cat or "Uncategorized"
                 })
                 
             return json.dumps({

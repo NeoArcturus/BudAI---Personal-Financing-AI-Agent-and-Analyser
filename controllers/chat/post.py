@@ -154,6 +154,33 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
         langfuse_handler = CallbackHandler()
         config["metadata"] = {"session_id": request.session_id or "default", "user_id": str(current_user.user_uuid)}
         config["callbacks"] = [langfuse_handler]
+
+        # Self-healing: Repair any orphaned tool calls in checkpointer state to prevent INVALID_CHAT_HISTORY
+        try:
+            from langchain_core.messages import ToolMessage, AIMessage
+            current_state = budai_app.get_state(config)
+            if current_state and current_state.values and "messages" in current_state.values:
+                state_msgs = current_state.values["messages"]
+                tool_call_ids_responded = {getattr(m, "tool_call_id", None) for m in state_msgs if isinstance(m, ToolMessage)}
+                missing_tool_responses = []
+                for m in state_msgs:
+                    if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
+                        for tc in m.tool_calls:
+                            tc_id = tc.get("id")
+                            if tc_id and tc_id not in tool_call_ids_responded:
+                                missing_tool_responses.append(
+                                    ToolMessage(
+                                        content="[Tool execution encountered an internal error or was interrupted. Proceeding with available context.]",
+                                        tool_call_id=tc_id,
+                                        name=tc.get("name", "unknown_tool")
+                                    )
+                                )
+                if missing_tool_responses:
+                    logger.warning(f"Repairing {len(missing_tool_responses)} orphaned tool calls in session {thread_id}")
+                    budai_app.update_state(config, {"messages": missing_tool_responses})
+        except Exception as e:
+            logger.warning(f"Checkpointer state repair check skipped: {e}")
+
         input_data = resume_command if resume_command else initial_state
         queue = asyncio.Queue()
         sent_cache_ids = set()

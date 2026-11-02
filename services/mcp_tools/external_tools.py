@@ -69,9 +69,14 @@ def export_custom_statement(user_uuid: str, ai_summary: str) -> str:
         writer.writerow([])
         writer.writerow(["Date", "Description", "Category", "Amount"])
         with SessionLocal() as session:
-            txs = session.query(Transaction).filter_by(user_uuid=user_uuid).order_by(Transaction.date.desc()).limit(100).all()
-            for tx in txs:
-                writer.writerow([tx.date.strftime("%Y-%m-%d"), tx.description, tx.category, f"£{tx.amount:.2f}"])
+            from models.database_models import MerchantKnowledge
+            rows = session.query(Transaction, MerchantKnowledge.category).outerjoin(
+                MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid
+            ).filter(Transaction.user_uuid == user_uuid).order_by(Transaction.date.desc()).limit(100).all()
+            for tx, cat in rows:
+                date_str = tx.date.strftime("%Y-%m-%d") if tx.date else ""
+                amount_str = f"£{tx.amount:.2f}" if tx.amount is not None else "£0.00"
+                writer.writerow([date_str, tx.description or "", cat or "Uncategorized", amount_str])
         filename = f"Statement_{user_uuid}_{datetime.now().strftime('%Y%m%d')}.csv"
         file_path = os.path.join(bridge.workspace_dir, "exports", filename)
         os.makedirs(os.path.dirname(file_path), exist_ok=True)

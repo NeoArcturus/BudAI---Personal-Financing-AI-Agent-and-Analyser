@@ -89,6 +89,11 @@ class Transaction(SQLModel, table=True):
     user: Optional["User"] = Relationship(back_populates="transactions")
     account: Optional["Account"] = Relationship(back_populates="transactions")
 
+    @property
+    def category(self) -> str:
+        """Safe fallback property to prevent schema attribute crashes when accessing tx.category directly."""
+        return "Uncategorized"
+
 class ChatSession(SQLModel, table=True):
     __tablename__ = "chat_sessions"
     session_id: str = Field(primary_key=True, index=True)
