@@ -9,7 +9,9 @@ from services.a2a.handlers import (
     handle_forecaster_agent,
     handle_bucket_transfer_agent,
     handle_categorizer_agent,
-    handle_analyser_agent
+    handle_analyser_agent,
+    handle_scenario_agent,
+    handle_anomaly_agent
 )
 from models.status_codes import AgentStatus
 from services.logger_setup import get_core_logger
@@ -82,15 +84,45 @@ def register_all_a2a_workers() -> None:
     registry.register(
         AgentCard(
             name="AnalyserAgent",
-            description="Audits transaction velocity, spending surges, and cashflow collisions.",
-            intents_handled=["ANALYZE_SPENDING_SURGE", "FETCH_UNCATEGORIZED_BATCH", "GET_CATEGORY_BREAKDOWN", "GET_SUBSISTENCE_BASELINE"],
+            description="Audits transaction velocity, spending surges, cashflow baselines, and historical volatility.",
+            intents_handled=[
+                "ANALYZE_SPENDING_SURGE",
+                "FETCH_UNCATEGORIZED_BATCH",
+                "GET_CATEGORY_BREAKDOWN",
+                "GET_SUBSISTENCE_BASELINE",
+                "GET_HISTORICAL_VOLATILITY",
+                "GET_NET_CASHFLOW_SURPLUS",
+                "GET_CATEGORY_BASELINE"
+            ],
             avg_latency_ms=25.0
         ),
         handle_analyser_agent
     )
 
+    # 7. ScenarioWorker Card
+    registry.register(
+        AgentCard(
+            name="ScenarioWorker",
+            description="Simulates macro shocks, income disruption, and expense spikes via multi-agent handoffs.",
+            intents_handled=["SIMULATE_EXPENSE_SHOCK", "PROJECT_REVENUE_DROP"],
+            avg_latency_ms=35.0
+        ),
+        handle_scenario_agent
+    )
+
+    # 8. AnomalyWorker Card
+    registry.register(
+        AgentCard(
+            name="AnomalyWorker",
+            description="Evaluates transaction anomalies using category baselines and ONS inflation indices.",
+            intents_handled=["EVALUATE_TRANSACTION_ANOMALY", "AUDIT_OUTLIER"],
+            avg_latency_ms=25.0
+        ),
+        handle_anomaly_agent
+    )
+
     logger.info(
-        f"A2A Bootstrap: 6 specialist workers successfully registered on in-process bus "
+        f"A2A Bootstrap: 8 specialist workers successfully registered on in-process bus "
         f"({', '.join([c.name for c in registry.list_agents()])})."
     )
 
