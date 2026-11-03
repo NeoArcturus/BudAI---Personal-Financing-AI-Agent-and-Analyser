@@ -14,7 +14,7 @@ from services.workers.market_worker import call_market_agent
 from services.workers.scenario_worker import call_scenario_agent
 
 from models.graph_state import BudAIState
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage, trim_messages
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
@@ -260,14 +260,33 @@ Direct Tools:
 - get_liability_horizon_orchestrator
 """
 
-def get_orchestrator_prompt():
-    return default_orchestrator_prompt
+def _estimate_message_tokens(messages: list) -> int:
+    total = 0
+    for m in messages:
+        total += len(str(getattr(m, "content", ""))) // 4 + 20
+        if getattr(m, "tool_calls", None):
+            total += 50
+    return total
+
+def orchestrator_prompt_modifier(state: BudAIState) -> list[BaseMessage]:
+    raw_messages = state.get("messages", [])
+    # Trim to last ~3500 tokens, always starting on a HumanMessage to preserve valid tool call pairs
+    trimmed = trim_messages(
+        raw_messages,
+        max_tokens=3500,
+        strategy="last",
+        token_counter=_estimate_message_tokens,
+        start_on="human",
+        include_system=False,
+        allow_partial=False
+    )
+    return [SystemMessage(content=default_orchestrator_prompt)] + trimmed
 
 budai_app = create_react_agent(
     model=supervisor_llm,
     tools=supervisor_tools,
     state_schema=BudAIState,
-    prompt=get_orchestrator_prompt(),
+    prompt=orchestrator_prompt_modifier,
     checkpointer=InMemorySaver()
 )
 

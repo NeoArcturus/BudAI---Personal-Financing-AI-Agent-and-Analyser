@@ -16,16 +16,15 @@ logger = get_core_logger(__name__)
 DEFAULT_TAILNET_DOMAIN = os.getenv("TAILNET_DOMAIN", "tail49d1ce.ts.net")
 DEFAULT_LLM_PORT = os.getenv("LLM_PORT", "1234")
 
-# 5 Active GPU inference nodes (4 RTX 4070 desktops + Alienware laptop via Tailscale MagicDNS)
+# 4 Primary GPU inference desktops (RTX 4070 desktops via Tailscale MagicDNS)
 DEFAULT_PRIMARY_NODES = [
     f"http://desktop-2cp9764.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1",
     f"http://desktop-383je1s.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1",
     f"http://desktop-t9nu4er.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1",
     f"http://desktop-upmj9kg.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1",
-    f"http://stpi-kohima-g11.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1",
 ]
 
-# Standby backup endpoint
+# 5th node: Standby / Failover backup Alienware laptop
 DEFAULT_BACKUP_NODE = f"http://stpi-kohima-g11.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1"
 
 DEFAULT_MODEL_NAME = os.getenv("LLM_MODEL", "qwen3.5-9b")
@@ -87,6 +86,17 @@ class LLMClusterManager:
         backup_url = os.getenv("LLM_BACKUP_ENDPOINT", DEFAULT_BACKUP_NODE)
         backup_name = backup_url.split("//")[-1].split(".")[0].split(":")[0]
         self.backup_node = ClusterNode(name=backup_name, url=backup_url, is_backup=True)
+
+    @property
+    def all_nodes(self) -> List[ClusterNode]:
+        """Returns all distinct GPU nodes (4 primaries + 1 backup Alienware)."""
+        seen = set()
+        unique = []
+        for n in self.primary_nodes + [self.backup_node]:
+            if n.url not in seen:
+                seen.add(n.url)
+                unique.append(n)
+        return unique
 
     def select_node(self) -> ClusterNode:
         """
@@ -196,7 +206,7 @@ class LoadBalancedChatOpenAI(ChatOpenAI):
         **kwargs: Any
     ) -> ChatResult:
         mgr = get_cluster_manager()
-        max_attempts = len(mgr.primary_nodes) + 1
+        max_attempts = len(mgr.all_nodes)
         last_error = None
 
         for attempt in range(max_attempts):
@@ -230,7 +240,7 @@ class LoadBalancedChatOpenAI(ChatOpenAI):
         **kwargs: Any
     ) -> ChatResult:
         mgr = get_cluster_manager()
-        max_attempts = len(mgr.primary_nodes) + 1
+        max_attempts = len(mgr.all_nodes)
         last_error = None
 
         for attempt in range(max_attempts):
@@ -255,6 +265,46 @@ class LoadBalancedChatOpenAI(ChatOpenAI):
         if last_error:
             raise last_error
         raise RuntimeError("LLM cluster exhausted all async retry attempts without a response.")
+
+    async def _astream(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[Any] = None,
+        **kwargs: Any
+    ):
+        mgr = get_cluster_manager()
+        max_attempts = len(mgr.all_nodes)
+        last_error = None
+
+        for attempt in range(max_attempts):
+            node = mgr.select_node()
+            mgr.increment_active(node.url)
+            self._sync_client_url(node.url)
+
+            try:
+                started = False
+                async for chunk in super()._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
+                    started = True
+                    yield chunk
+                mgr.mark_success(node.url)
+                return
+            except RETRYABLE_ERROR_TYPES as err:
+                last_error = err
+                err_detail = getattr(err, "body", getattr(err, "message", str(err)))
+                mgr.mark_failure(node.url, err)
+                logger.warning(
+                    f"Async stream attempt {attempt + 1}/{max_attempts} failed on {node.name} ({node.url}): {err_detail}; failing over..."
+                )
+                if started:
+                    # Chunks were already yielded to consumer, cannot transparently switch node mid-stream
+                    raise err
+            finally:
+                mgr.decrement_active(node.url)
+
+        if last_error:
+            raise last_error
+        raise RuntimeError("LLM cluster exhausted all async stream retry attempts without a response.")
 
 class LLMFactory:
     """

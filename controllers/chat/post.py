@@ -156,11 +156,14 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
         config["callbacks"] = [langfuse_handler]
 
         # Self-healing: Repair any orphaned tool calls in checkpointer state to prevent INVALID_CHAT_HISTORY
+        has_checkpoint_history = False
         try:
             from langchain_core.messages import ToolMessage, AIMessage
             current_state = budai_app.get_state(config)
             if current_state and current_state.values and "messages" in current_state.values:
                 state_msgs = current_state.values["messages"]
+                if state_msgs:
+                    has_checkpoint_history = True
                 tool_call_ids_responded = {getattr(m, "tool_call_id", None) for m in state_msgs if isinstance(m, ToolMessage)}
                 missing_tool_responses = []
                 for m in state_msgs:
@@ -181,7 +184,19 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
         except Exception as e:
             logger.warning(f"Checkpointer state repair check skipped: {e}")
 
-        input_data = resume_command if resume_command else initial_state
+        if resume_command:
+            input_data = resume_command
+        elif has_checkpoint_history:
+            # Checkpointer already has existing session state; only append the new user turn to avoid prompt duplication
+            input_data = {
+                "messages": [HumanMessage(content=effective_user_input)],
+                "user_uuid": str(current_user.user_uuid),
+                "session_id": thread_id,
+                "active_account_id": request.active_account_id or None,
+                "is_explanation": False
+            }
+        else:
+            input_data = initial_state
         queue = asyncio.Queue()
         sent_cache_ids = set()
         full_assistant_response = []
@@ -309,7 +324,7 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
             try:
                 while True:
                     await queue.put(f'8:[{json.dumps({"type": "thinking_context", "status": "Thinking"})}]\n')
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(2.5)
             except asyncio.CancelledError:
                 pass
 
