@@ -972,6 +972,58 @@ async def handle_anomaly_agent(msg: A2AMessage) -> A2AResponse:
             }
         )
 
+    elif intent == "REMEDIATE_ANOMALY":
+        amount = float(msg.payload.get("amount", 0.0))
+        category = msg.payload.get("category", "General & Discretionary")
+        merchant = msg.payload.get("merchant", "Unknown")
+
+        # Step 1: Run EVALUATE_TRANSACTION_ANOMALY
+        eval_msg = A2AMessage(
+            sender="AnomalyWorker",
+            recipient="AnomalyWorker",
+            message_type="QUERY",
+            intent="EVALUATE_TRANSACTION_ANOMALY",
+            user_uuid=user_uuid,
+            correlation_id=msg.correlation_id,
+            payload=msg.payload
+        )
+        eval_resp = await handle_anomaly_agent(eval_msg)
+        is_anomaly = eval_resp.payload.get("is_anomaly", False)
+
+        alert_dispatched = False
+        if is_anomaly:
+            from services.notifications.alert_dispatcher import AlertDispatcher
+            dispatcher = AlertDispatcher()
+            dispatcher.dispatch(
+                user_uuid=user_uuid,
+                message=f"Anomalous expenditure detected: £{amount:.2f} at {merchant} ({category}).",
+                event_type="spending_anomaly_detected",
+                title="Spending Anomaly Flagged",
+                urgency=2,
+                status_code="305-401"
+            )
+            alert_dispatched = True
+
+        remediation = {
+            "action": "TRIGGER_CASCADE" if is_anomaly and amount > 500.0 else "LOG_AND_NOTIFY",
+            "recommended_budget_adjustment": round(amount * 0.2, 2) if is_anomaly else 0.0,
+            "requires_priority_cascade": is_anomaly and amount > 300.0
+        }
+
+        return A2AResponse(
+            reply_to_id=msg.message_id,
+            correlation_id=msg.correlation_id,
+            sender="AnomalyWorker",
+            recipient=msg.sender,
+            status="SUCCESS",
+            status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+            payload={
+                "anomaly_evaluation": eval_resp.payload,
+                "remediation_action": remediation,
+                "alert_dispatched": alert_dispatched
+            }
+        )
+
     return A2AResponse(
         reply_to_id=msg.message_id,
         correlation_id=msg.correlation_id,
@@ -980,4 +1032,143 @@ async def handle_anomaly_agent(msg: A2AMessage) -> A2AResponse:
         status="ERROR",
         status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
         error_message=f"Unrecognized AnomalyWorker intent: {intent}"
+    )
+
+async def handle_cascade_agent(msg: A2AMessage) -> A2AResponse:
+    """
+    CascadeWorker A2A Handler:
+    Autonomous Priority Cascade (The Overdraft Engine).
+    Drains auxiliary buckets in strict descending priority order (lowest priority first)
+    to cover a deficit in the DEFAULT bucket under PostgreSQL double-entry math lock triggers.
+    """
+    user_uuid = msg.user_uuid
+    intent = msg.intent.upper()
+    deficit = float(msg.payload.get("deficit", 0.0))
+    target_default_bucket_id = msg.payload.get("target_default_bucket_id")
+
+    if intent == "EXECUTE_PRIORITY_CASCADE":
+        if deficit <= 0.0:
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="CascadeWorker",
+                recipient=msg.sender,
+                status="SUCCESS",
+                status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+                payload={
+                    "deficit_resolved": True,
+                    "total_recovered": 0.0,
+                    "uncovered_deficit": 0.0,
+                    "transfers_executed": []
+                }
+            )
+
+        with SessionLocal() as session:
+            # 1. Locate DEFAULT bucket
+            if target_default_bucket_id:
+                def_row = session.execute(
+                    text("SELECT id, name, cached_balance FROM buckets WHERE id = :id AND user_id = :u"),
+                    {"id": target_default_bucket_id, "u": user_uuid}
+                ).fetchone()
+            else:
+                def_row = session.execute(
+                    text("SELECT id, name, cached_balance FROM buckets WHERE user_id = :u AND type = 'DEFAULT' AND is_active = TRUE"),
+                    {"u": user_uuid}
+                ).fetchone()
+
+            if not def_row:
+                return A2AResponse(
+                    reply_to_id=msg.message_id,
+                    correlation_id=msg.correlation_id,
+                    sender="CascadeWorker",
+                    recipient=msg.sender,
+                    status="ERROR",
+                    status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
+                    error_message=f"No active DEFAULT bucket found for user {user_uuid}"
+                )
+
+            default_id = def_row[0]
+
+            # 2. Query candidate auxiliary buckets sorted by priority_index DESC (lowest priority drained first)
+            candidates = session.execute(
+                text("""
+                    SELECT id, name, type, priority_index, cached_balance
+                    FROM buckets
+                    WHERE user_id = :u AND id != :def_id AND type != 'DEFAULT' AND is_active = TRUE AND cached_balance > 0
+                    ORDER BY priority_index DESC
+                """),
+                {"u": user_uuid, "def_id": default_id}
+            ).fetchall()
+
+            remaining_deficit = deficit
+            total_recovered = 0.0
+            transfers_executed = []
+
+            for b_id, b_name, b_type, b_priority, b_balance in candidates:
+                if remaining_deficit <= 0.01:
+                    break
+
+                b_bal = float(b_balance or 0.0)
+                drain_amount = min(b_bal, remaining_deficit)
+                t_id = str(uuid.uuid4())
+
+                # Insert double-entry virtual transfer under math lock
+                session.execute(
+                    text("""
+                        INSERT INTO virtual_transfers (id, source_bucket_id, target_bucket_id, amount, timestamp)
+                        VALUES (:id, :src, :dst, :amt, NOW())
+                    """),
+                    {"id": t_id, "src": b_id, "dst": default_id, "amt": drain_amount}
+                )
+                session.commit()
+
+                remaining_deficit = round(remaining_deficit - drain_amount, 2)
+                total_recovered = round(total_recovered + drain_amount, 2)
+                transfers_executed.append({
+                    "transfer_id": t_id,
+                    "source_bucket_id": b_id,
+                    "source_bucket_name": b_name,
+                    "source_priority": float(b_priority),
+                    "target_bucket_id": default_id,
+                    "amount": drain_amount
+                })
+
+        deficit_resolved = remaining_deficit <= 0.01
+
+        if not deficit_resolved:
+            from services.notifications.alert_dispatcher import AlertDispatcher
+            dispatcher = AlertDispatcher()
+            dispatcher.dispatch(
+                user_uuid=user_uuid,
+                message=f"Priority cascade partially exhausted: £{remaining_deficit:.2f} uncovered deficit remains.",
+                event_type="cascade_exhaustion_warning",
+                title="Liquidity Deficit Unresolved",
+                urgency=3,
+                status_code="500-409"
+            )
+
+        return A2AResponse(
+            reply_to_id=msg.message_id,
+            correlation_id=msg.correlation_id,
+            sender="CascadeWorker",
+            recipient=msg.sender,
+            status="SUCCESS",
+            status_code=AgentStatus.AGENT_RESPONSE_READY.value if deficit_resolved else "500-409",
+            payload={
+                "deficit_resolved": deficit_resolved,
+                "initial_deficit": deficit,
+                "total_recovered": total_recovered,
+                "uncovered_deficit": max(0.0, remaining_deficit),
+                "transfers_executed": transfers_executed
+            }
+        )
+
+    return A2AResponse(
+        reply_to_id=msg.message_id,
+        correlation_id=msg.correlation_id,
+        sender="CascadeWorker",
+        recipient=msg.sender,
+        status="ERROR",
+        status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
+        error_message=f"Unrecognized CascadeWorker intent: {intent}"
     )

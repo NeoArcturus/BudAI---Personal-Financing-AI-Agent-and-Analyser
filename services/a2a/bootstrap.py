@@ -11,7 +11,8 @@ from services.a2a.handlers import (
     handle_categorizer_agent,
     handle_analyser_agent,
     handle_scenario_agent,
-    handle_anomaly_agent
+    handle_anomaly_agent,
+    handle_cascade_agent
 )
 from models.status_codes import AgentStatus
 from services.logger_setup import get_core_logger
@@ -115,14 +116,25 @@ def register_all_a2a_workers() -> None:
         AgentCard(
             name="AnomalyWorker",
             description="Evaluates transaction anomalies using category baselines and ONS inflation indices.",
-            intents_handled=["EVALUATE_TRANSACTION_ANOMALY", "AUDIT_OUTLIER"],
+            intents_handled=["EVALUATE_TRANSACTION_ANOMALY", "AUDIT_OUTLIER", "REMEDIATE_ANOMALY"],
             avg_latency_ms=25.0
         ),
         handle_anomaly_agent
     )
 
+    # 9. CascadeWorker Card
+    registry.register(
+        AgentCard(
+            name="CascadeWorker",
+            description="Executes autonomous priority cascade waterfall over virtual ledger under math locks.",
+            intents_handled=["EXECUTE_PRIORITY_CASCADE"],
+            avg_latency_ms=20.0
+        ),
+        handle_cascade_agent
+    )
+
     logger.info(
-        f"A2A Bootstrap: 8 specialist workers successfully registered on in-process bus "
+        f"A2A Bootstrap: 9 specialist workers successfully registered on in-process bus "
         f"({', '.join([c.name for c in registry.list_agents()])})."
     )
 
