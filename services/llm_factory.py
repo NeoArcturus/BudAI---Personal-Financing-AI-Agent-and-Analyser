@@ -16,15 +16,16 @@ logger = get_core_logger(__name__)
 DEFAULT_TAILNET_DOMAIN = os.getenv("TAILNET_DOMAIN", "tail49d1ce.ts.net")
 DEFAULT_LLM_PORT = os.getenv("LLM_PORT", "1234")
 
-# 4 Primary RTX 4070 desktop nodes (LM Studio via Tailscale MagicDNS)
+# 5 Active GPU inference nodes (4 RTX 4070 desktops + Alienware laptop via Tailscale MagicDNS)
 DEFAULT_PRIMARY_NODES = [
     f"http://desktop-2cp9764.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1",
     f"http://desktop-383je1s.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1",
     f"http://desktop-t9nu4er.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1",
     f"http://desktop-upmj9kg.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1",
+    f"http://stpi-kohima-g11.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1",
 ]
 
-# Backup Alienware laptop node (activated strictly when all 4 primary desktops fail)
+# Standby backup endpoint
 DEFAULT_BACKUP_NODE = f"http://stpi-kohima-g11.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1"
 
 DEFAULT_MODEL_NAME = os.getenv("LLM_MODEL", "qwen3.5-9b")

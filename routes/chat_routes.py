@@ -35,6 +35,7 @@ async def list_chat_sessions_route(current_user: User = Depends(get_current_user
 async def get_chat_session_route(session_id: str, current_user: User = Depends(get_current_user)):
     return await get_chat_session(session_id, current_user)
 
+@router.put("/sessions/{session_id}")
 @router.patch("/sessions/{session_id}")
 async def rename_chat_session_route(session_id: str, request: ChatSessionRenameRequest, current_user: User = Depends(get_current_user)):
     return await rename_chat_session(session_id, request, current_user)

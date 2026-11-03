@@ -20,8 +20,14 @@ export const SearchProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      const isMac =
+        typeof window !== "undefined" &&
+        /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+      const isModifierActive = isMac
+        ? e.metaKey && !e.ctrlKey
+        : e.ctrlKey && !e.metaKey;
+
+      if (isModifierActive && e.key.toLowerCase() === "k") {
         e.preventDefault();
         toggleSearch();
       }

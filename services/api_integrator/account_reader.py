@@ -133,7 +133,7 @@ class AccountReader:
     def get_transactions(self, account_id: str, user_uuid, start_date=None, end_date=None, expense_only=False):
         try:
             from models.database_models import MerchantKnowledge
-            from datetime import datetime, date
+            from datetime import datetime, date, timezone
             import dateutil.parser
 
             parsed_start = None
@@ -148,6 +148,8 @@ class AccountReader:
                         parsed_start = d if isinstance(d, datetime) else datetime.combine(d, datetime.min.time())
                     except Exception:
                         parsed_start = None
+            if parsed_start and parsed_start.tzinfo is None:
+                parsed_start = parsed_start.replace(tzinfo=timezone.utc)
 
             parsed_end = None
             if end_date:
@@ -161,6 +163,8 @@ class AccountReader:
                         parsed_end = d if isinstance(d, datetime) else datetime.combine(d, datetime.max.time())
                     except Exception:
                         parsed_end = None
+            if parsed_end and parsed_end.tzinfo is None:
+                parsed_end = parsed_end.replace(tzinfo=timezone.utc)
 
             with SessionLocal() as session:
                 query = session.query(Transaction, MerchantKnowledge).outerjoin(

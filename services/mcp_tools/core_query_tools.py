@@ -21,6 +21,7 @@ class QueryTransactionsInput(BaseModel):
     min_amount: Optional[float] = Field(default=None, description="Minimum absolute transaction amount.")
     max_amount: Optional[float] = Field(default=None, description="Maximum absolute transaction amount.")
     transaction_type: Optional[str] = Field(default=None, description="'income' or 'expense'.")
+    limit: Optional[int] = Field(default=30, description="Max transactions to return (default 30, max 50). Keeps prompt compact to prevent context overflow.")
 
 class AggregateFinancialDataInput(BaseModel):
     account_id: Optional[str] = Field(default=None, description="The specific account ID or Bank Name to filter by.")
@@ -56,13 +57,23 @@ def _apply_transaction_filters(query: Any, user_uuid: str, account_id: Optional[
             # Fallback to direct string match if DB lookup fails
             query = query.where(Transaction.account_id == account_id)
 
-    # Date filters
+    # Date filters (enforce timezone-aware UTC datetime to satisfy SQLModel validation)
     if start_date:
         if "T" in start_date: start_date = start_date.split("T")[0]
-        query = query.where(Transaction.date >= datetime.strptime(start_date, "%Y-%m-%d"))
+        try:
+            from datetime import timezone
+            dt_start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            query = query.where(Transaction.date >= dt_start)
+        except Exception:
+            pass
     if end_date:
         if "T" in end_date: end_date = end_date.split("T")[0]
-        query = query.where(Transaction.date <= datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1))
+        try:
+            from datetime import timezone
+            dt_end = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)).replace(tzinfo=timezone.utc)
+            query = query.where(Transaction.date <= dt_end)
+        except Exception:
+            pass
 
     # Categories
     if categories:
@@ -98,7 +109,8 @@ def _apply_transaction_filters(query: Any, user_uuid: str, account_id: Optional[
 def query_transactions(account_id: Optional[str] = None, start_date: Optional[str] = None, 
                        end_date: Optional[str] = None, categories: Optional[List[str]] = None, 
                        min_amount: Optional[float] = None, max_amount: Optional[float] = None, 
-                       transaction_type: Optional[str] = None, user_uuid: Annotated[str, InjectedState("user_uuid")] = "") -> str:
+                       transaction_type: Optional[str] = None, limit: Optional[int] = 30,
+                       user_uuid: Annotated[str, InjectedState("user_uuid")] = "") -> str:
     """
     Dynamically filter and read transaction records from the database. 
     Returns a JSON string containing the transactions.
@@ -112,8 +124,9 @@ def query_transactions(account_id: Optional[str] = None, start_date: Optional[st
             )
             query = _apply_transaction_filters(query, user_uuid, account_id, start_date, end_date, categories, min_amount, max_amount, transaction_type, session)
             
-            # Order by most recent
-            query = query.order_by(Transaction.date.desc()).limit(500) # Safeguard limit
+            # Order by most recent with high-signal window limit (max 50 to prevent LLM context overflow)
+            capped_limit = min(max(1, limit or 30), 50)
+            query = query.order_by(Transaction.date.desc()).limit(capped_limit)
             
             rows = session.execute(query).all()
             

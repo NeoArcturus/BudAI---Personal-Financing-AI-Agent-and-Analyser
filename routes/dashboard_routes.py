@@ -64,9 +64,9 @@ def fetch_widget_data(payload: DataRequestPayload, current_user: User = Depends(
     params = payload.parameters
     
     # Import inside function to avoid circular/init issues
-    from models.database_models import Transaction, ProactiveInsight
+    from models.database_models import Transaction, ProactiveInsight, utc_now
     
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = utc_now() - timedelta(days=30)
 
     if tool_name == "aggregate_financial_data":
         # Get daily spending for last 30 days

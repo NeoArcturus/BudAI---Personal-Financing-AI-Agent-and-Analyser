@@ -30,8 +30,8 @@ export interface BudAIAdvisorContext {
   | "cash_flow"
   | "spending_trend"
   | "expense_distribution"
-  | "ledger_audit"
-  | "market_audit"
+  | "transactions"
+  | "market_insights"
   | "general";
   accountId?: string;
   data?: [];
@@ -76,6 +76,25 @@ export default function AdvisorPage() {
       return next;
     });
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac =
+        typeof window !== "undefined" &&
+        /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+      const isModifierActive = isMac
+        ? e.metaKey && !e.ctrlKey
+        : e.ctrlKey && !e.metaKey;
+
+      if (isModifierActive && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        handleToggleReasoning();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const transport = React.useMemo(() => {
     return new DefaultChatTransport({
@@ -271,7 +290,7 @@ export default function AdvisorPage() {
       await apiFetch(
         `/api/chat/sessions/${id}`,
         {
-          method: "PATCH",
+          method: "PUT",
           body: JSON.stringify({ title: newTitle }),
         },
         true,
@@ -333,21 +352,6 @@ export default function AdvisorPage() {
               </span>
             )}
           </div>
-          <div
-            className="flex items-center gap-3 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full shadow-[0_0_15px_rgba(0,242,255,0.05)] cursor-pointer hover:bg-white/10 transition-colors"
-            onClick={handleToggleReasoning}
-          >
-            <div
-              className={`flex items-center h-4 w-7 rounded-full p-0.5 transition-colors ${showReasoning ? "bg-white" : "bg-white/20"}`}
-            >
-              <div
-                className={`h-3 w-3 rounded-full shadow-sm transition-transform ${showReasoning ? "translate-x-3 bg-black" : "translate-x-0 bg-white"}`}
-              />
-            </div>
-            <span className="text-[9px] font-black uppercase tracking-widest text-foreground/50 select-none">
-              Show thinking
-            </span>
-          </div>
         </header>
 
         <div
@@ -368,7 +372,7 @@ export default function AdvisorPage() {
                   "Analyze my latest spending trends",
                   "What's my cash flow looking like?",
                   "Review my high-value transactions",
-                  "Perform a account audit",
+                  "Review my account summary",
                 ].map((hint, idx) => (
                   <Button
                     key={idx}

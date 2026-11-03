@@ -31,7 +31,7 @@ const VERBOSITY_CONFIG: Record<
   },
   deep_dive: {
     label: "Deep Dive",
-    description: "Exhaustive multi-agent audits & stochastic breakdown",
+    description: "Detailed analysis and spending breakdown",
   },
 };
 
@@ -44,7 +44,12 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   onVerbosityChange,
 }) => {
   const [input, setInput] = useState("");
+  const [isMac, setIsMac] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent));
+  }, []);
 
   // Auto-resize textarea height
   useEffect(() => {
@@ -175,9 +180,11 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
       <div className="flex items-center justify-between px-3.5 pb-2 text-[9px] font-mono text-foreground/30 select-none">
         <span className="flex items-center gap-1">
           <Sparkles size={9} className="text-primary/70" />
-          <span>Zero-sum double entry virtual ledger active</span>
+          <span>Live financial tracking active</span>
         </span>
-        <span className="hidden sm:flex items-center gap-1">
+        <span className="hidden sm:flex items-center gap-1.5">
+          <span>{isMac ? "⌘O" : "Ctrl+O"} thinking</span>
+          <span>•</span>
           <span>Enter to send</span>
           <CornerDownLeft size={9} />
           <span>• Shift+Enter newline</span>

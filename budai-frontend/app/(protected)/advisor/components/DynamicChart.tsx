@@ -3,7 +3,7 @@
 import React from "react";
 import CashFlowWidgetClient from "../../_components/widgets/Cashflow/client";
 import ExpenseDistributionWidgetClient from "../../_components/widgets/Categories/client";
-import LedgerTableWidgetClient from "../../_components/widgets/Transactions/client";
+import TransactionsWidgetClient from "../../_components/widgets/Transactions/client";
 
 export interface DynamicChartConfig {
   type: string;
@@ -29,7 +29,7 @@ export const DynamicChart = ({ config, hideWrapper = false }: { config: DynamicC
   if (normalizedType === "table" || normalizedType === "transactions" || normalizedTitle.includes("transaction")) {
     return (
       <div className="w-full h-full relative">
-         <LedgerTableWidgetClient />
+         <TransactionsWidgetClient />
       </div>
     );
   }

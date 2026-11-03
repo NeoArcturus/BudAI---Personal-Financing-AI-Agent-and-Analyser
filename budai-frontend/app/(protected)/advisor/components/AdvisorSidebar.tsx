@@ -82,7 +82,7 @@ export const AdvisorSidebar = ({
         <div className="flex items-center gap-2 mb-4">
           <History size={12} className="text-foreground/40" />
           <Text className="text-[9px] font-bold tracking-[0.2em] uppercase text-foreground/40">
-            Recent Analysis
+            Recent Chats
           </Text>
         </div>
       </div>
@@ -211,58 +211,57 @@ export const AdvisorSidebar = ({
         )}
       </ScrollShadow>
 
-      <Modal>
-        <Modal.Backdrop
-          isOpen={editingId !== null}
-          onOpenChange={(open) => {
-            if (!open) setEditingId(null);
-          }}
-          className="fixed inset-0 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200"
-        >
-          <Modal.Container className="modal relative w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 mx-4">
-            <Modal.Dialog>
-              <Modal.CloseTrigger
-                slot="close"
-                className="absolute right-4 top-4 w-8 h-8 min-w-8 opacity-50 hover:opacity-100 hover:bg-white/10 text-foreground transition-all rounded-full flex items-center justify-center z-10 cursor-pointer"
+      <Modal.Backdrop
+        isOpen={editingId !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingId(null);
+        }}
+        variant="blur"
+      >
+        <Modal.Container placement="center">
+          <Modal.Dialog className="modal relative w-full max-w-md bg-black/90 border border-white/10 shadow-2xl rounded-2xl overflow-hidden flex flex-col pointer-events-auto mx-4">
+            <Modal.CloseTrigger
+              slot="close"
+              className="absolute right-4 top-4 w-8 h-8 min-w-8 opacity-50 hover:opacity-100 hover:bg-white/10 text-foreground transition-all rounded-full flex items-center justify-center z-10 cursor-pointer"
+            />
+            <Modal.Header className="border-b border-border px-6 py-4 pr-12">
+              <Modal.Heading className="text-sm font-bold uppercase tracking-widest text-foreground">
+                Rename Session
+              </Modal.Heading>
+            </Modal.Header>
+            <Modal.Body className="p-6">
+              <Input
+                autoFocus
+                placeholder="Enter new title..."
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveEdit();
+                }}
+                variant="primary"
+                className="w-full h-10 text-foreground bg-transparent focus-within:bg-content2 transition-colors rounded-md pl-1"
               />
-              <Modal.Header className="border-b border-border px-6 py-4 pr-12">
-                <Modal.Heading className="text-sm font-bold uppercase tracking-widest text-foreground">
-                  Rename Session
-                </Modal.Heading>
-              </Modal.Header>
-              <Modal.Body className="p-6">
-                <Input
-                  autoFocus
-                  placeholder="Enter new title..."
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") saveEdit();
-                  }}
-                  variant="primary"
-                  className="w-full h-10 text-foreground bg-transparent focus-within:bg-content2 transition-colors rounded-md pl-1"
-                />
-              </Modal.Body>
-              <Modal.Footer className="border-t border-border px-6 py-4 flex justify-end gap-3">
-                <Button
-                  slot="close"
-                  variant="ghost"
-                  className="text-muted-foreground hover:bg-secondary hover:text-red-500 transition-all border-none h-10 rounded-xl px-4 text-xs font-semibold"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  slot="close"
-                  onPress={saveEdit}
-                  variant="secondary" className="font-black uppercase tracking-widest text-[11px] h-10 rounded-xl px-6 transition-all cursor-pointer "
-                >
-                  Save Changes
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+            </Modal.Body>
+            <Modal.Footer className="border-t border-border px-6 py-4 flex justify-end gap-3">
+              <Button
+                slot="close"
+                variant="ghost"
+                className="text-muted-foreground hover:bg-secondary hover:text-red-500 transition-all border-none h-10 rounded-xl px-4 text-xs font-semibold"
+              >
+                Cancel
+              </Button>
+              <Button
+                slot="close"
+                onPress={saveEdit}
+                variant="secondary"
+                className="font-black uppercase tracking-widest text-[11px] h-10 rounded-xl px-6 transition-all cursor-pointer"
+              >
+                Save Changes
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
     </aside>
   );
 };

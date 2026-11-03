@@ -71,7 +71,7 @@ export const BreadcrumbMetrics: React.FC<BreadcrumbMetricsProps> = ({
 
         <ChevronRight size={10} className="text-foreground/30 shrink-0" />
         <span className="text-[9px] uppercase tracking-wider text-foreground/40">
-          {isStreaming ? "Generating..." : "Synthesized"}
+          {isStreaming ? "Generating..." : "Complete"}
         </span>
       </div>
 

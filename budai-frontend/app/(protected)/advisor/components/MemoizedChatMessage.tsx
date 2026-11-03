@@ -14,6 +14,7 @@ import { DynamicChart } from "./DynamicChart";
 import { TransactionSplitterWidget } from "./TransactionSplitterWidget";
 import { ReasoningAccordion, SubagentStep } from "./ReasoningAccordion";
 import { BreadcrumbMetrics, TelemetryData } from "./BreadcrumbMetrics";
+import { AgentHandoverCard } from "./AgentHandoverCard";
 import { useDashboardStore } from "@/store/dashboardStore";
 import { useEffect } from "react";
 
@@ -211,19 +212,19 @@ export const MemoizedChatMessage = React.memo(
               )}
             </div>
 
-            {/* Bubble / Container */}
+            {/* Free-form Container for AI, Sleek Bubble for User */}
             <div
               className={cn(
-                "rounded-2xl px-5 py-4 w-full transition-all duration-200 border",
+                "w-full transition-all duration-200",
                 isAssistant
-                  ? "bg-content1/40 backdrop-blur-xl border-white/10 text-foreground shadow-lg"
-                  : "bg-content2/80 backdrop-blur-md border-white/15 text-foreground max-w-2xl shadow-md",
+                  ? "bg-transparent border-0 shadow-none px-0 py-1 text-foreground"
+                  : "rounded-2xl px-5 py-3.5 bg-content2/80 backdrop-blur-md border border-white/15 text-foreground max-w-2xl shadow-md",
               )}
             >
-              {/* Tool Invocations for Assistant */}
+              {/* Tool & Subagent Invocations for Assistant */}
               {isAssistant && message.toolInvocations && message.toolInvocations.length > 0 && (
-                <div className="w-full my-2 space-y-3">
-                  {message.toolInvocations.map((tool) => {
+                <div className="w-full my-2 space-y-2">
+                  {message.toolInvocations.map((tool: any) => {
                     const { toolName, toolCallId, args } = tool;
 
                     if (toolName === "generate_ui_chart") {
@@ -273,7 +274,16 @@ export const MemoizedChatMessage = React.memo(
                       );
                     }
 
-                    return null;
+                    // For all other specialist agents / data retrieval tools: Render Handover Card
+                    return (
+                      <AgentHandoverCard
+                        key={toolCallId}
+                        toolName={toolName}
+                        args={args}
+                        state={tool.state}
+                        result={tool.result}
+                      />
+                    );
                   })}
                 </div>
               )}
@@ -361,7 +371,7 @@ export const MemoizedChatMessage = React.memo(
               ) : isStreamingMessage && !reasoningText ? (
                 <div className="flex items-center gap-2 py-2 text-foreground/40 font-mono text-xs">
                   <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
-                  <span>Synthesizing zero-sum ledger context...</span>
+                  <span>Reviewing transactions and accounts...</span>
                 </div>
               ) : null}
 
