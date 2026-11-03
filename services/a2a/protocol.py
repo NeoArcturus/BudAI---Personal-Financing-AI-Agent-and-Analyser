@@ -39,7 +39,7 @@ class A2AResponse(BaseModel):
     correlation_id: str
     sender: str
     recipient: str
-    status: Literal["SUCCESS", "REJECTED", "ERROR"]
+    status: Literal["SUCCESS", "REJECTED", "ERROR", "COUNTER_PROPOSED"]
     status_code: str = Field(default=AgentStatus.AGENT_RESPONSE_READY.value, description="Custom BudAI status code e.g. 500-200, 500-409")
     payload: Dict[str, Any] = Field(default_factory=dict)
     error_message: Optional[str] = None

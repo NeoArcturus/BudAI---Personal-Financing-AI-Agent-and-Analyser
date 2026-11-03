@@ -287,6 +287,36 @@ async def handle_forecaster_agent(msg: A2AMessage) -> A2AResponse:
             }
         )
 
+    elif intent == "EVALUATE_SOLVENCY_IMPACT":
+        deduction = float(msg.payload.get("deduction_amount", 0.0))
+        horizon = int(msg.payload.get("horizon_days", 30))
+
+        # Check impact on balance after horizon
+        post_balance = current_balance - deduction
+        projected_after = post_balance + (daily_velocity * horizon)
+        
+        # Safe if post balance >= 0 and projected doesn't collapse
+        is_safe = (post_balance >= 0.0) and (projected_after >= -50.0)
+        shortfall_prob = 0.85 if not is_safe else 0.05
+
+        return A2AResponse(
+            reply_to_id=msg.message_id,
+            correlation_id=msg.correlation_id,
+            sender="ForecasterWorker",
+            recipient=msg.sender,
+            status="SUCCESS",
+            status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+            payload={
+                "current_balance": current_balance,
+                "deduction_amount": deduction,
+                "post_deduction_balance": round(post_balance, 2),
+                "projected_balance_after": round(projected_after, 2),
+                "is_safe": is_safe,
+                "shortfall_probability": shortfall_prob,
+                "risk_rating": "CRITICAL" if not is_safe else "LOW"
+            }
+        )
+
     return A2AResponse(
         reply_to_id=msg.message_id,
         correlation_id=msg.correlation_id,
@@ -309,6 +339,8 @@ async def handle_bucket_transfer_agent(msg: A2AMessage) -> A2AResponse:
         return await A2ANegotiator.evaluate_transfer_proposal(msg)
     elif intent == "EXECUTE_VIRTUAL_TRANSFER":
         return await A2ANegotiator.execute_transfer(msg)
+    elif intent == "CONSENSUS_REBALANCE":
+        return await A2ANegotiator.negotiate_rebalance(msg)
 
     return A2AResponse(
         reply_to_id=msg.message_id,

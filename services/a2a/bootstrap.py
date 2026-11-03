@@ -52,7 +52,7 @@ def register_all_a2a_workers() -> None:
         AgentCard(
             name="ForecasterWorker",
             description="Simulates stochastic balance corridors and projects daily cashflow trajectories.",
-            intents_handled=["SIMULATE_STOCHASTIC_BALANCE", "PROJECT_CASHFLOW"],
+            intents_handled=["SIMULATE_STOCHASTIC_BALANCE", "PROJECT_CASHFLOW", "EVALUATE_SOLVENCY_IMPACT"],
             avg_latency_ms=30.0
         ),
         handle_forecaster_agent
@@ -63,7 +63,7 @@ def register_all_a2a_workers() -> None:
         AgentCard(
             name="BucketTransferAgent",
             description="Executes double-entry virtual transfers under strict PL/pgSQL math lock constraints.",
-            intents_handled=["PROPOSE_REBALANCE", "EXECUTE_VIRTUAL_TRANSFER"],
+            intents_handled=["PROPOSE_REBALANCE", "EXECUTE_VIRTUAL_TRANSFER", "CONSENSUS_REBALANCE"],
             avg_latency_ms=20.0
         ),
         handle_bucket_transfer_agent
