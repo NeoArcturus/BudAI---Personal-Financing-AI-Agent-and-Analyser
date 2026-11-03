@@ -44,9 +44,25 @@ async def call_analyser_agent(
             ]
         })
     except Exception as e:
-        logger.error(f"Error in analyser worker: {e}")
-        return Command(update={
-            "messages": [
-                ToolMessage(content=f"Error executing Analyser tool: {str(e)}", tool_call_id=tool_call_id)
-            ]
-        })
+        err_details = getattr(e, "body", getattr(e, "message", str(e)))
+        logger.error(f"Error in analyser worker: {err_details}")
+
+        # Deterministic Fallback: If agent invocation fails, query transactions directly to satisfy query
+        try:
+            from services.mcp_tools.core_query_tools import query_transactions
+            fallback_res = query_transactions(user_uuid=user_uuid)
+            fallback_content = (
+                f"Direct transaction data retrieval (analyser fallback due to cluster error):\n{fallback_res}"
+            )
+            return Command(update={
+                "messages": [
+                    ToolMessage(content=fallback_content, tool_call_id=tool_call_id)
+                ]
+            })
+        except Exception as fb_err:
+            logger.error(f"Fallback direct query also failed: {fb_err}")
+            return Command(update={
+                "messages": [
+                    ToolMessage(content=f"Error executing Analyser tool: {str(e)}", tool_call_id=tool_call_id)
+                ]
+            })

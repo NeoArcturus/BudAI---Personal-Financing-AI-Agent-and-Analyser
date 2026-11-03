@@ -21,13 +21,14 @@ class AgentState(TypedDict):
 @tool
 def send_system_alert(event_type: str, message: str, user_uuid: Annotated[str, InjectedState("user_uuid")] = "") -> str:
     """Inserts a row into the system_alerts table."""
+    from models.database_models import utc_now
     with Session(engine) as session:
         alert = SystemAlert(
             id=str(uuid.uuid4()),
             user_id=user_uuid,
             event_type=event_type,
             message=message,
-            timestamp=datetime.utcnow()
+            timestamp=utc_now()
         )
         session.add(alert)
         session.commit()

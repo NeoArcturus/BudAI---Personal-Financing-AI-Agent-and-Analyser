@@ -162,20 +162,23 @@ def get_cluster_manager() -> LLMClusterManager:
         _cluster_manager_instance = LLMClusterManager()
     return _cluster_manager_instance
 
-NETWORK_ERROR_TYPES = (
+RETRYABLE_ERROR_TYPES = (
     openai.APIConnectionError,
     openai.APITimeoutError,
+    openai.APIStatusError,
     httpx.ConnectError,
     httpx.ConnectTimeout,
     httpx.ReadTimeout,
     httpx.RemoteProtocolError,
+    httpx.HTTPStatusError,
 )
 
 class LoadBalancedChatOpenAI(ChatOpenAI):
     """
     ChatOpenAI wrapper that dynamically routes requests across the 4 primary
-    RTX 4070 desktops via Least-Connections and auto-fails over to the Alienware
-    backup laptop on network timeouts or connection drops.
+    RTX 4070 desktops via Least-Connections and auto-fails over to other desktop
+    nodes and the Alienware backup laptop on network timeouts, connection drops,
+    or node status errors (e.g. 400 Bad Request, 500/503 Service Unavailable).
     """
 
     def _sync_client_url(self, target_url: str):
@@ -204,10 +207,13 @@ class LoadBalancedChatOpenAI(ChatOpenAI):
                 result = super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
                 mgr.mark_success(node.url)
                 return result
-            except NETWORK_ERROR_TYPES as err:
+            except RETRYABLE_ERROR_TYPES as err:
                 last_error = err
+                err_detail = getattr(err, "body", getattr(err, "message", str(err)))
                 mgr.mark_failure(node.url, err)
-                logger.warning(f"Inference attempt {attempt + 1}/{max_attempts} failed on {node.name}; failing over...")
+                logger.warning(
+                    f"Inference attempt {attempt + 1}/{max_attempts} failed on {node.name} ({node.url}): {err_detail}; failing over..."
+                )
             finally:
                 mgr.decrement_active(node.url)
 
@@ -235,10 +241,13 @@ class LoadBalancedChatOpenAI(ChatOpenAI):
                 result = await super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
                 mgr.mark_success(node.url)
                 return result
-            except NETWORK_ERROR_TYPES as err:
+            except RETRYABLE_ERROR_TYPES as err:
                 last_error = err
+                err_detail = getattr(err, "body", getattr(err, "message", str(err)))
                 mgr.mark_failure(node.url, err)
-                logger.warning(f"Async inference attempt {attempt + 1}/{max_attempts} failed on {node.name}; failing over...")
+                logger.warning(
+                    f"Async inference attempt {attempt + 1}/{max_attempts} failed on {node.name} ({node.url}): {err_detail}; failing over..."
+                )
             finally:
                 mgr.decrement_active(node.url)
 
