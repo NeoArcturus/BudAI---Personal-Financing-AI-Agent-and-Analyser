@@ -26,21 +26,21 @@ async def get_spending_trends(
     if not to_date:
         to_date = datetime.now().strftime("%Y-%m-%d")
 
-    bucket_str = "1 day"
+    bucket_str = "day"
     if time_type == "weekly":
-        bucket_str = "1 week"
+        bucket_str = "week"
     elif time_type == "monthly":
-        bucket_str = "1 month"
+        bucket_str = "month"
 
     query = text(f"""
-        SELECT time_bucket('{bucket_str}', date) as "Date", sum(abs(amount)) as "Amount"
+        SELECT date_trunc('{bucket_str}', date) as "Date", sum(abs(amount)) as "Amount"
         FROM transactions
         WHERE user_uuid = :user_uuid 
           AND account_id = :account_id
           AND date >= :start_date 
           AND date <= :end_date
           AND amount < 0
-        GROUP BY time_bucket('{bucket_str}', date)
+        GROUP BY date_trunc('{bucket_str}', date)
         ORDER BY "Date" ASC
     """)
     

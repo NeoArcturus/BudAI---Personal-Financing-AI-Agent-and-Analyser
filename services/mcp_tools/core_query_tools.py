@@ -165,9 +165,9 @@ def aggregate_financial_data(group_by: str, metric: str = "sum", account_id: Opt
             # Determine grouping column
             from models.database_models import MerchantKnowledge
             if group_by == "day":
-                group_col = func.time_bucket(text("'1 day'"), Transaction.date)
+                group_col = func.date_trunc("day", Transaction.date)
             elif group_by == "month":
-                group_col = func.time_bucket(text("'1 month'"), Transaction.date)
+                group_col = func.date_trunc("month", Transaction.date)
             elif group_by == "category":
                 group_col = MerchantKnowledge.category
             else:

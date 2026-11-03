@@ -42,8 +42,8 @@ class FinancialHealthAnalyzer:
             WHERE t.user_uuid = :user_uuid
               AND m.category IN ('Rent', 'Mortgage', 'Utilities', 'Insurance', 'Groceries', 'Debt_Min')
               AND t.amount < 0
-            GROUP BY time_bucket('1 month', t.date)
-            ORDER BY time_bucket('1 month', t.date) DESC
+            GROUP BY date_trunc('month', t.date)
+            ORDER BY date_trunc('month', t.date) DESC
             LIMIT 3
         """)
         with SessionLocal() as session:
@@ -70,10 +70,10 @@ class FinancialHealthAnalyzer:
     def calculate_net_worth_velocity(self):
         query = text("""
             WITH monthly_net AS (
-                SELECT time_bucket('1 month', date) as month, sum(amount) as net
+                SELECT date_trunc('month', date) as month, sum(amount) as net
                 FROM transactions
                 WHERE user_uuid = :user_uuid
-                GROUP BY time_bucket('1 month', date)
+                GROUP BY date_trunc('month', date)
                 ORDER BY month ASC
             ),
             diffs AS (
@@ -96,12 +96,12 @@ class FinancialHealthAnalyzer:
     def calculate_mpc(self):
         query = text("""
             WITH monthly_flows AS (
-                SELECT time_bucket('1 month', date) as month,
+                SELECT date_trunc('month', date) as month,
                        sum(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
                        sum(CASE WHEN amount < 0 THEN abs(amount) ELSE 0 END) as expense
                 FROM transactions
                 WHERE user_uuid = :user_uuid
-                GROUP BY time_bucket('1 month', date)
+                GROUP BY date_trunc('month', date)
                 ORDER BY month ASC
             ),
             deltas AS (
@@ -126,7 +126,7 @@ class FinancialHealthAnalyzer:
                 SELECT sum(amount) as net
                 FROM transactions
                 WHERE user_uuid = :user_uuid
-                GROUP BY time_bucket('1 month', date)
+                GROUP BY date_trunc('month', date)
             ) t;
         """)
         with SessionLocal() as session:
@@ -150,7 +150,7 @@ class FinancialHealthAnalyzer:
                 SELECT sum(amount) as income
                 FROM transactions
                 WHERE user_uuid = :user_uuid AND amount > 0
-                GROUP BY time_bucket('1 month', date)
+                GROUP BY date_trunc('month', date)
             ) t;
         """)
         with SessionLocal() as session:
