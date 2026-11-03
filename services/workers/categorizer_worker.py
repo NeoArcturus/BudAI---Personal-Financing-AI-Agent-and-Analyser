@@ -17,10 +17,65 @@ async def call_categorizer_agent(
     tool_call_id: Annotated[str, InjectedToolCallId],
     state: Annotated[BudAIState, InjectedState]
 ):
-    """Delegate to the Categorizer Agent."""
+    """Delegate to the Categorizer Agent with automated A2A Analyser handoff for transaction fetching."""
     try:
         user_uuid = state.get("user_uuid", "ea0e5c07-ab5b-4c14-9ad9-95a036b24637")
-        
+        q_lower = query.lower()
+
+        # If this is a general categorization or analysis query, execute via A2A bus with AnalyserAgent
+        is_general_batch = any(kw in q_lower for kw in [
+            "categorize", "classify", "uncategorized", "unassigned", "all", "highest", "spending", "breakdown"
+        ])
+
+        if is_general_batch:
+            from services.a2a.bus import get_a2a_bus
+            from services.a2a.protocol import A2AMessage
+            bus = get_a2a_bus()
+            a2a_msg = A2AMessage(
+                sender="Supervisor",
+                recipient="CategorizerAgent",
+                message_type="COMMAND",
+                intent="BATCH_CLASSIFY_UNCATEGORIZED",
+                user_uuid=user_uuid,
+                payload={"query": query, "include_breakdown": True, "limit": 40}
+            )
+            a2a_resp = await bus.request_reply(a2a_msg)
+            if a2a_resp.status == "SUCCESS":
+                p = a2a_resp.payload
+                classified_count = p.get("classified_count", 0)
+                merchants = p.get("merchants_classified", [])
+                breakdown = p.get("category_breakdown") or {}
+
+                lines = []
+                if classified_count > 0:
+                    lines.append(f"Successfully categorized {classified_count} unclassified merchant anchors across your connected accounts:")
+                    for m in merchants[:8]:
+                        lines.append(f"- {m['merchant']}: {m['category']} ({m['sub_category']}) [{m['transaction_count']} txs, £{m['total_amount']:.2f}]")
+                    if len(merchants) > 8:
+                        lines.append(f"- ...and {len(merchants) - 8} additional merchants.")
+                else:
+                    lines.append("All transactions in your connected accounts are already categorized.")
+
+                cats = breakdown.get("categories", [])
+                if cats:
+                    lines.append("\nCurrent Spending Breakdown by Category:")
+                    for c in cats[:8]:
+                        lines.append(f"- {c['category']}: £{c['total_spent']:.2f} ({c['transaction_count']} transactions)")
+
+                highest = breakdown.get("highest_spending_per_category", [])
+                if highest:
+                    lines.append("\nHighest Spending Transactions by Category:")
+                    for h in highest[:6]:
+                        lines.append(f"- {h['category']}: £{h['amount']:.2f} at {h['description']} ({h['date'] or 'Recent'})")
+
+                output_text = "\n".join(lines)
+                return Command(update={
+                    "messages": [
+                        ToolMessage(content=output_text, tool_call_id=tool_call_id)
+                    ]
+                })
+
+        # Fallback to direct LangGraph model invocation for single merchant queries
         from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
         

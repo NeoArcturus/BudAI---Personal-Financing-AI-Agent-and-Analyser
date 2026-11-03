@@ -105,8 +105,55 @@ async def run_a2a_tests():
     assert analyser_resp.status == "SUCCESS"
     assert "is_surge" in analyser_resp.payload
 
-    # 7. Test BucketTransferAgent (Solvency Guardrail on negative/invalid amount)
-    print("\n--- 6. Testing BucketTransferAgent Solvency Guardrail ---")
+    # 7. Test AnalyserAgent (FETCH_UNCATEGORIZED_BATCH)
+    print("\n--- 6. Testing AnalyserAgent (FETCH_UNCATEGORIZED_BATCH) ---")
+    uncat_msg = A2AMessage(
+        sender="CategorizerAgent",
+        recipient="AnalyserAgent",
+        message_type="QUERY",
+        intent="FETCH_UNCATEGORIZED_BATCH",
+        user_uuid=test_user,
+        payload={"limit": 10}
+    )
+    uncat_resp: A2AResponse = await bus.request_reply(uncat_msg)
+    print(f"AnalyserAgent uncat Response: status={uncat_resp.status}, code={uncat_resp.status_code}")
+    print(f"Payload count: {uncat_resp.payload.get('count', 0)}")
+    assert uncat_resp.status == "SUCCESS"
+    assert "merchants" in uncat_resp.payload
+
+    # 8. Test AnalyserAgent (GET_CATEGORY_BREAKDOWN)
+    print("\n--- 7. Testing AnalyserAgent (GET_CATEGORY_BREAKDOWN) ---")
+    breakdown_msg = A2AMessage(
+        sender="CategorizerAgent",
+        recipient="AnalyserAgent",
+        message_type="QUERY",
+        intent="GET_CATEGORY_BREAKDOWN",
+        user_uuid=test_user
+    )
+    breakdown_resp: A2AResponse = await bus.request_reply(breakdown_msg)
+    print(f"AnalyserAgent breakdown Response: status={breakdown_resp.status}")
+    assert breakdown_resp.status == "SUCCESS"
+    assert "categories" in breakdown_resp.payload
+    assert "highest_spending_per_category" in breakdown_resp.payload
+
+    # 9. Test CategorizerAgent End-to-End A2A Handoff (BATCH_CLASSIFY_UNCATEGORIZED)
+    print("\n--- 8. Testing CategorizerAgent A2A Handoff to Analyser (BATCH_CLASSIFY_UNCATEGORIZED) ---")
+    a2a_batch_msg = A2AMessage(
+        sender="Supervisor",
+        recipient="CategorizerAgent",
+        message_type="COMMAND",
+        intent="BATCH_CLASSIFY_UNCATEGORIZED",
+        user_uuid=test_user,
+        payload={"limit": 5, "include_breakdown": True}
+    )
+    a2a_batch_resp: A2AResponse = await bus.request_reply(a2a_batch_msg)
+    print(f"CategorizerAgent A2A Batch Response: status={a2a_batch_resp.status}")
+    print(f"Classified count: {a2a_batch_resp.payload.get('classified_count', 0)}")
+    assert a2a_batch_resp.status == "SUCCESS"
+    assert "classified_count" in a2a_batch_resp.payload
+
+    # 10. Test BucketTransferAgent (Solvency Guardrail on negative/invalid amount)
+    print("\n--- 9. Testing BucketTransferAgent Solvency Guardrail ---")
     invalid_transfer_msg = A2AMessage(
         sender="HealthWorker",
         recipient="BucketTransferAgent",

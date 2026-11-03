@@ -328,6 +328,116 @@ async def handle_categorizer_agent(msg: A2AMessage) -> A2AResponse:
             }
         )
 
+    elif intent == "BATCH_CLASSIFY_UNCATEGORIZED":
+        from services.a2a.bus import get_a2a_bus
+        bus = get_a2a_bus()
+
+        # Step 1: Request uncategorized batch from AnalyserAgent via A2A
+        ana_req = A2AMessage(
+            sender="CategorizerAgent",
+            recipient="AnalyserAgent",
+            parent_message_id=msg.message_id,
+            correlation_id=msg.correlation_id,
+            message_type="QUERY",
+            intent="FETCH_UNCATEGORIZED_BATCH",
+            user_uuid=msg.user_uuid,
+            payload={"limit": msg.payload.get("limit", 30)},
+            recursion_depth=msg.recursion_depth + 1
+        )
+        ana_resp = await bus.request_reply(ana_req)
+
+        if ana_resp.status != "SUCCESS":
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="CategorizerAgent",
+                recipient=msg.sender,
+                status="ERROR",
+                status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
+                error_message=f"A2A failure querying AnalyserAgent: {ana_resp.error_message}"
+            )
+
+        merchants = ana_resp.payload.get("merchants", [])
+        if not merchants:
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="CategorizerAgent",
+                recipient=msg.sender,
+                status="SUCCESS",
+                status_code=PipelineStatus.TRANSACTIONS_SAVED.value,
+                payload={
+                    "classified_count": 0,
+                    "message": "All transactions are already categorized in the database."
+                }
+            )
+
+        # Step 2: Classify and persist the batch
+        classified_records = []
+        with SessionLocal() as session:
+            for m in merchants:
+                c_name = m.get("clean_merchant_name") or "Unknown"
+                mk_uuid = m.get("merchant_knowledge_uuid")
+                cat, sub_cat, tags, ons = enrich_transaction_taxonomy(
+                    category="",
+                    sub_category="",
+                    description=c_name
+                )
+
+                if mk_uuid:
+                    session.execute(text("""
+                        UPDATE merchant_knowledge
+                        SET category = :cat, sub_category = :sub, tags = :tags
+                        WHERE knowledge_uuid = :uuid
+                    """), {"cat": cat, "sub": sub_cat, "tags": json.dumps(tags), "uuid": mk_uuid})
+
+                    session.execute(text("""
+                        UPDATE transactions
+                        SET sub_category = :sub, tags = :tags
+                        WHERE merchant_knowledge_uuid = :uuid
+                    """), {"sub": sub_cat, "tags": json.dumps(tags), "uuid": mk_uuid})
+
+                classified_records.append({
+                    "merchant": c_name,
+                    "category": cat,
+                    "sub_category": sub_cat,
+                    "transaction_count": m.get("transaction_count", 1),
+                    "total_amount": m.get("total_amount", 0.0)
+                })
+
+            session.commit()
+
+        # Step 3: If caller requested category breakdown / highest spending, hand off to AnalyserAgent
+        breakdown_payload = None
+        if msg.payload.get("include_breakdown", True):
+            breakdown_req = A2AMessage(
+                sender="CategorizerAgent",
+                recipient="AnalyserAgent",
+                parent_message_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                message_type="QUERY",
+                intent="GET_CATEGORY_BREAKDOWN",
+                user_uuid=msg.user_uuid,
+                recursion_depth=msg.recursion_depth + 1
+            )
+            breakdown_resp = await bus.request_reply(breakdown_req)
+            if breakdown_resp.status == "SUCCESS":
+                breakdown_payload = breakdown_resp.payload
+
+        return A2AResponse(
+            reply_to_id=msg.message_id,
+            correlation_id=msg.correlation_id,
+            sender="CategorizerAgent",
+            recipient=msg.sender,
+            status="SUCCESS",
+            status_code=PipelineStatus.TRANSACTIONS_SAVED.value,
+            payload={
+                "classified_count": len(classified_records),
+                "merchants_classified": classified_records,
+                "category_breakdown": breakdown_payload
+            }
+        )
+
     return A2AResponse(
         reply_to_id=msg.message_id,
         correlation_id=msg.correlation_id,
@@ -379,6 +489,141 @@ async def handle_analyser_agent(msg: A2AMessage) -> A2AResponse:
                 "amount": amount,
                 "category_average": round(avg_amount, 2),
                 "variance_percentage": variance_pct
+            }
+        )
+
+    elif intent == "FETCH_UNCATEGORIZED_BATCH":
+        limit = min(int(msg.payload.get("limit", 30)), 50)
+        account_id = msg.payload.get("account_id")
+
+        with SessionLocal() as session:
+            filter_clauses = ["t.user_uuid = :u", "(m.category IS NULL OR m.category = 'Uncategorized' OR m.category = '')"]
+            params = {"u": user_uuid, "lim": limit}
+            if account_id:
+                filter_clauses.append("t.account_id = :acc")
+                params["acc"] = account_id
+
+            where_str = " AND ".join(filter_clauses)
+            query = text(f"""
+                SELECT DISTINCT m.knowledge_uuid, m.clean_merchant_name, count(t.transaction_uuid) as tx_count, sum(t.amount) as total_amount
+                FROM merchant_knowledge m
+                JOIN transactions t ON t.merchant_knowledge_uuid = m.knowledge_uuid
+                WHERE {where_str}
+                GROUP BY m.knowledge_uuid, m.clean_merchant_name
+                ORDER BY count(t.transaction_uuid) DESC
+                LIMIT :lim
+            """)
+            rows = session.execute(query, params).fetchall()
+            merchants = [
+                {
+                    "merchant_knowledge_uuid": str(r[0]),
+                    "clean_merchant_name": r[1] or "Unknown",
+                    "transaction_count": r[2],
+                    "total_amount": round(float(r[3] or 0.0), 2)
+                }
+                for r in rows
+            ]
+
+        return A2AResponse(
+            reply_to_id=msg.message_id,
+            correlation_id=msg.correlation_id,
+            sender="AnalyserAgent",
+            recipient=msg.sender,
+            status="SUCCESS",
+            status_code=PipelineStatus.TRANSACTIONS_SAVED.value,
+            payload={
+                "merchants": merchants,
+                "count": len(merchants),
+                "user_uuid": user_uuid
+            }
+        )
+
+    elif intent == "GET_CATEGORY_BREAKDOWN":
+        with SessionLocal() as session:
+            # Aggregate totals per category
+            cat_query = text("""
+                SELECT COALESCE(m.category, 'Uncategorized') as category,
+                       SUM(ABS(t.amount)) as total_spent,
+                       COUNT(t.transaction_uuid) as count
+                FROM transactions t
+                LEFT JOIN merchant_knowledge m ON t.merchant_knowledge_uuid = m.knowledge_uuid
+                WHERE t.user_uuid = :u AND t.amount < 0
+                GROUP BY COALESCE(m.category, 'Uncategorized')
+                ORDER BY SUM(ABS(t.amount)) DESC
+            """)
+            cat_rows = session.execute(cat_query, {"u": user_uuid}).fetchall()
+            categories = [
+                {
+                    "category": r[0],
+                    "total_spent": round(float(r[1] or 0.0), 2),
+                    "transaction_count": r[2]
+                }
+                for r in cat_rows
+            ]
+
+            # Highest single transaction per category
+            highest_query = text("""
+                SELECT DISTINCT ON (COALESCE(m.category, 'Uncategorized'))
+                       COALESCE(m.category, 'Uncategorized') as category,
+                       t.description,
+                       ABS(t.amount) as amount,
+                       t.date
+                FROM transactions t
+                LEFT JOIN merchant_knowledge m ON t.merchant_knowledge_uuid = m.knowledge_uuid
+                WHERE t.user_uuid = :u AND t.amount < 0
+                ORDER BY COALESCE(m.category, 'Uncategorized'), ABS(t.amount) DESC
+            """)
+            highest_rows = session.execute(highest_query, {"u": user_uuid}).fetchall()
+            highest_spending = [
+                {
+                    "category": r[0],
+                    "description": r[1] or "Transaction",
+                    "amount": round(float(r[2] or 0.0), 2),
+                    "date": r[3].strftime("%Y-%m-%d") if r[3] else None
+                }
+                for r in highest_rows
+            ]
+
+        return A2AResponse(
+            reply_to_id=msg.message_id,
+            correlation_id=msg.correlation_id,
+            sender="AnalyserAgent",
+            recipient=msg.sender,
+            status="SUCCESS",
+            status_code=PipelineStatus.TRANSACTIONS_SAVED.value,
+            payload={
+                "categories": categories,
+                "highest_spending_per_category": highest_spending,
+                "total_categories": len(categories)
+            }
+        )
+
+    elif intent == "GET_SUBSISTENCE_BASELINE":
+        with SessionLocal() as session:
+            floor_query = text("""
+                SELECT COALESCE(SUM(ABS(t.amount)), 0.0) / 3.0
+                FROM transactions t
+                LEFT JOIN merchant_knowledge m ON t.merchant_knowledge_uuid = m.knowledge_uuid
+                WHERE t.user_uuid = :u
+                  AND m.category IN ('Housing', 'Utilities', 'Food & Dining', 'Healthcare', 'Transfers & Payments')
+                  AND t.amount < 0
+                  AND t.date >= NOW() - INTERVAL '90 days'
+            """)
+            res = session.execute(floor_query, {"u": user_uuid}).scalar()
+            monthly_floor = round(float(res or 1200.0), 2)
+            daily_floor = round(monthly_floor / 30.0, 2)
+
+        return A2AResponse(
+            reply_to_id=msg.message_id,
+            correlation_id=msg.correlation_id,
+            sender="AnalyserAgent",
+            recipient=msg.sender,
+            status="SUCCESS",
+            status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+            payload={
+                "monthly_subsistence_floor": monthly_floor,
+                "daily_subsistence_floor": daily_floor,
+                "observation_window_days": 90
             }
         )
 

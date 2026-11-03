@@ -72,7 +72,7 @@ def register_all_a2a_workers() -> None:
         AgentCard(
             name="CategorizerAgent",
             description="Performs canonical 3D taxonomy categorization and staple keyword tagging.",
-            intents_handled=["CLASSIFY_TRANSACTION", "ENRICH_ONS_TAGS"],
+            intents_handled=["CLASSIFY_TRANSACTION", "ENRICH_ONS_TAGS", "BATCH_CLASSIFY_UNCATEGORIZED"],
             avg_latency_ms=10.0
         ),
         handle_categorizer_agent
@@ -83,7 +83,7 @@ def register_all_a2a_workers() -> None:
         AgentCard(
             name="AnalyserAgent",
             description="Audits transaction velocity, spending surges, and cashflow collisions.",
-            intents_handled=["ANALYZE_SPENDING_SURGE"],
+            intents_handled=["ANALYZE_SPENDING_SURGE", "FETCH_UNCATEGORIZED_BATCH", "GET_CATEGORY_BREAKDOWN", "GET_SUBSISTENCE_BASELINE"],
             avg_latency_ms=25.0
         ),
         handle_analyser_agent
