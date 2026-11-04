@@ -22,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={cn(jakarta.variable, jetbrains.variable, "font-sans", inter.variable)} suppressHydrationWarning>
+    <html lang="en" className={cn(inter.variable, jetbrains.variable, jakarta.variable, "font-sans", "dark")} suppressHydrationWarning>
       <body
         className="antialiased selection:bg-primary/30 selection:text-primary bg-background text-foreground"
       >

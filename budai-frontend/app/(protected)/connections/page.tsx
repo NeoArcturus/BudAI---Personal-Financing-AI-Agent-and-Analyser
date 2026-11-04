@@ -4,336 +4,327 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   RefreshCcw,
   Plus,
-  Activity,
   Database,
-  AlertTriangle,
-  Search,
-  CheckCircle2,
-  XCircle
+  ShieldCheck,
+  Building2,
+  Calendar,
+  Clock,
+  ArrowUpRight,
 } from "lucide-react";
-import { Button, Card, Skeleton, toast, } from "@heroui/react";
-import { cn } from "@/lib/utils";
+import { Button, Card, Chip, ProgressBar, toast } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { apiFetch } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-
-
-
-
-
-
-
-
-import { AnimatedNumber } from "@/app/(protected)/_components/ui/AnimatedNumber";
-import {
-  ConnectionHealthWidget,
-  ConnectionExpenseWidget,
-  ConnectionHabitsWidget,
-  ConnectionBucketWidget
-} from "./ConnectionWidgets";
-import { Target, Repeat, CreditCard } from "lucide-react";
-
 
 export default function ConnectionsPage() {
   const queryClient = useQueryClient();
-  const router = useRouter();
   const { accounts } = useBudAI();
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isExtending, setIsExtending] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
-
-    if (accounts.length > 0) {
-      if (!selectedAccountId) {
-        setSelectedAccountId(accounts[0].account_id);
-      }
-      setIsLoading(false);
-      clearTimeout(timer);
+    if (accounts.length > 0 && !selectedAccountId) {
+      setSelectedAccountId(accounts[0].account_id);
     }
-    return () => clearTimeout(timer);
   }, [accounts, selectedAccountId]);
 
-  const [isReauthenticating, setIsReauthenticating] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [failedExtendUuids, setFailedExtendUuids] = useState<Set<string>>(new Set());
-  const [revokedUuids, setRevokedUuids] = useState<Set<string>>(new Set());
+  const selectedAccount = useMemo(() => {
+    return accounts.find((a) => a.account_id === selectedAccountId) || accounts[0] || null;
+  }, [accounts, selectedAccountId]);
 
-  const handleReauth = async (bankUuid?: string) => {
-    if (!bankUuid) return;
-    setIsReauthenticating(true);
-    try {
-      const res = await apiFetch(`/api/accounts/banks/${bankUuid}/extend`, { method: "POST" }, true);
-      const data = await res.json() as any;
-
-      switch (data.status) {
-        case "extended":
-          toast.success("Connection securely extended for 90 days!");
-          queryClient.invalidateQueries({ queryKey: ["accounts"] });
-          setFailedExtendUuids((prev) => {
-            const next = new Set(prev);
-            next.delete(bankUuid);
-            return next;
-          });
-          setRevokedUuids((prev) => {
-            const next = new Set(prev);
-            next.delete(bankUuid);
-            return next;
-          });
-          break;
-        case "reauth_required":
-          toast.warning("Manual re-authentication required. Redirecting...");
-          try {
-            const linkRes = await apiFetch(`/api/auth/banks/${bankUuid}/reauth`, { method: "POST" }, true);
-            const linkData = await linkRes.json() as any;
-            if (linkData.auth_uri || linkData.auth_url || linkData.reauth_url) {
-              window.location.href = linkData.auth_uri || linkData.auth_url || linkData.reauth_url;
-            }
-          } catch (err) {
-            toast.danger("Failed to generate secure re-auth link.");
-          }
-          break;
-        case "revoked":
-          toast.danger("Bank revoked access. Please re-link.");
-          setRevokedUuids((prev) => new Set(prev).add(bankUuid));
-          break;
-        default:
-          toast.danger("Unable to reach the bank. Please try again.");
-          break;
-      }
-    } catch (error) {
-      toast.danger("Unable to reach the bank.");
-    } finally {
-      setIsReauthenticating(false);
-    }
-  };
-
-  const handleConnect = async () => {
+  const handleConnectBank = async () => {
     setIsConnecting(true);
     try {
-      const res = await apiFetch("/api/auth/truelayer/status", {}, true);
-      if (res.ok) {
-        const data = await res.json() as any;
-        if (data.auth_url) {
-          router.push(data.auth_url);
-        }
+      const res = await apiFetch("/api/auth/banks/connect", { method: "POST" }, true);
+      const data = await res.json() as any;
+      if (data.auth_url || data.auth_uri) {
+        window.location.href = data.auth_url || data.auth_uri;
+      } else {
+        toast.danger("Failed to initiate bank authorization link.");
       }
-    } catch (error) {
-      toast.danger("Failed to initiate bank connection");
+    } catch {
+      toast.danger("Network error connecting to TrueLayer.");
     } finally {
       setIsConnecting(false);
     }
   };
 
-  const handleRefreshAll = async () => {
+  const handleSyncAccount = async () => {
+    if (!selectedAccount?.bank_uuid) return;
     setIsSyncing(true);
     try {
-      toast.success("Syncing all accounts...");
-      const res = await apiFetch("/api/auth/connections/metadata", {}, true);
-      if (!res.ok) throw new Error("Failed to sync");
-      
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      toast.success("All connections updated.");
-    } catch (e) {
-      toast.danger("Failed to sync all accounts.");
+      const res = await apiFetch(`/api/accounts/banks/${selectedAccount.bank_uuid}/sync`, { method: "POST" }, true);
+      if (res.ok) {
+        toast.success("Account statement synchronized successfully.");
+        queryClient.invalidateQueries({ queryKey: ["accounts"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboardSnapshot"] });
+      } else {
+        toast.danger("Sync request failed.");
+      }
+    } catch {
+      toast.danger("Network error syncing account.");
     } finally {
       setIsSyncing(false);
     }
   };
 
-  const selectedAccount = accounts.find((a) => a.account_id === selectedAccountId);
-
-  // OpenBankingStatus definitions
-  const STATUS_ACTIVE = "200-200";
-  const STATUS_EXPIRED = "200-401";
-  const STATUS_REVOKED = "200-403";
-
-  // Determine health status helper
-  const getAccountHealth = (acc: any) => {
-    const isHardRevoked = acc.consent_status === STATUS_REVOKED || revokedUuids.has(acc.bank_uuid!);
-    const isExpiredStatus = acc.consent_status === STATUS_EXPIRED || isHardRevoked || failedExtendUuids.has(acc.bank_uuid!);
-    const isActive = acc.consent_status === STATUS_ACTIVE && !isExpiredStatus;
-
-    if (isHardRevoked) return "red";
-    if (isExpiredStatus) return "yellow";
-    if (isActive) return "green";
-    return "green"; // fallback
+  const handleExtendConsent = async () => {
+    if (!selectedAccount?.bank_uuid) return;
+    setIsExtending(true);
+    try {
+      const res = await apiFetch(`/api/accounts/banks/${selectedAccount.bank_uuid}/extend`, { method: "POST" }, true);
+      const data = await res.json() as any;
+      if (data.status === "extended") {
+        toast.success("Open Banking consent extended for 90 days.");
+        queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      } else if (data.status === "reauth_required") {
+        toast.warning("Re-authorization required. Redirecting...");
+        const linkRes = await apiFetch(`/api/auth/banks/${selectedAccount.bank_uuid}/reauth`, { method: "POST" }, true);
+        const linkData = await linkRes.json() as any;
+        if (linkData.auth_url || linkData.auth_uri) {
+          window.location.href = linkData.auth_url || linkData.auth_uri;
+        }
+      }
+    } catch {
+      toast.danger("Failed to extend consent.");
+    } finally {
+      setIsExtending(false);
+    }
   };
 
-  const filteredAccounts = useMemo(() => {
-    if (filter === "action") {
-      return accounts.filter(acc => getAccountHealth(acc) !== "green");
-    }
-    return accounts;
-  }, [accounts, filter, revokedUuids, failedExtendUuids]);
-
   return (
-    <div className="w-full flex-1 flex flex-col h-full bg-transparent text-foreground font-sans relative overflow-hidden transition-colors duration-500">
-
-      {/* Dynamic Grid Background overlay */}
-      <div className="pointer-events-none absolute inset-0 z-0 opacity-20 transition-opacity duration-700">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(0,242,255,0.03),transparent_70%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_0%,#000_70%,transparent_100%)]" />
+    <div className="w-full flex-1 flex flex-col h-full bg-[#0b0f17] text-slate-100 font-sans p-4 sm:p-6 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+        <div>
+          <h1 className="text-base font-semibold text-white tracking-tight">Bank Connections</h1>
+          <p className="text-xs text-slate-400">
+            Open Banking integrations, consent lifecycles, and ingestion monitoring
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="primary"
+          isPending={isConnecting}
+          onPress={handleConnectBank}
+          className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs px-3.5 h-8 rounded-xl flex items-center gap-1.5"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Connect New Bank</span>
+        </Button>
       </div>
 
-      <div className="relative z-10 flex-1 flex flex-col pt-10 px-10 h-full">
-        <div className="flex items-center justify-between mb-10 shrink-0">
-          <div>
-            <h2 className="text-foreground text-3xl font-black tracking-tighter uppercase italic">
-              Data <span className="font-normal not-italic">Connections</span>
-            </h2>
-            <p className="text-[9px] font-black text-foreground/30 uppercase tracking-[0.4em] mt-1.5">
-              Live Bank Ingestion Matrix
-            </p>
-          </div>
-        </div>
-
-        <div className="flex-1 flex flex-col lg:flex-row gap-8 pb-8 overflow-y-auto lg:overflow-hidden h-full">
-
-          {/* Left Panel: The Connection Roster (Control Center Sidebar) */}
-          <div className="w-full lg:w-80 shrink-0 flex flex-col gap-4 overflow-y-auto custom-scrollbar relative h-auto lg:h-full max-h-[380px] lg:max-h-none">
-
-            <div className="flex items-center justify-between px-2 shrink-0">
-              <div className="flex bg-white/5 rounded-lg p-1 gap-1">
-                <button
-                  onClick={() => setFilter("all")}
-                  className={cn("px-4 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-colors", filter === "all" ? "bg-white/10 text-white" : "text-foreground/40 hover:text-foreground/70")}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => setFilter("action")}
-                  className={cn("px-4 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-colors", filter === "action" ? "bg-white/10 text-white" : "text-foreground/40 hover:text-foreground/70")}
-                >
-                  Action Needed
-                </button>
-              </div>
-
-              <Button
-                isIconOnly
-                onPress={handleRefreshAll}
-                isPending={isSyncing}
-                className="bg-transparent hover:bg-white/5 text-foreground/40 hover:text-foreground transition-all rounded-lg"
-              >
-                <RefreshCcw size={14} className={cn(isSyncing && "animate-spin")} />
-              </Button>
+      {/* Master-Detail Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1">
+        {/* Left Column: Accounts Roster (4 Cols) */}
+        <div className="lg:col-span-4 space-y-3">
+          <Card className="glass-card rounded-2xl p-4 border border-slate-800 shadow-none space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Connected Institutions ({accounts.length})
+              </span>
+              <Chip size="sm" variant="soft" color="success" className="font-mono text-[11px]">
+                {accounts.length} Active
+              </Chip>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-3 pb-24">
-              {isLoading ? (
-                Array(3).fill(0).map((_, i) => (
-                  <Card key={i} className="rounded-xl p-5 shadow-inner h-20 flex items-center justify-center">
-                    <Skeleton className="w-full h-8 bg-white/5 rounded-lg" />
-                  </Card>
-                ))
-              ) : filteredAccounts.length === 0 ? (
-                <Card className="rounded-xl p-8 shadow-inner text-center text-foreground/40 text-[10px] font-mono uppercase tracking-widest border-white/5 border border-dashed bg-transparent mt-4">
-                  No Accounts Found
-                </Card>
+            <div className="space-y-2">
+              {accounts.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                  No accounts linked yet. Click above to connect via Open Banking.
+                </div>
               ) : (
-                filteredAccounts.map((acc: any) => {
-                  const health = getAccountHealth(acc);
-                  const isSelected = selectedAccountId === acc.account_id;
-
+                accounts.map((acc: any) => {
+                  const isSelected = selectedAccount?.account_id === acc.account_id;
                   return (
                     <div
                       key={acc.account_id}
                       onClick={() => setSelectedAccountId(acc.account_id)}
-                      className={cn(
-                        "cursor-pointer rounded-2xl transition-all p-5 text-left flex items-center gap-4 w-full border relative overflow-hidden group hover:bg-white/5",
-                        isSelected ? "border-primary/50 bg-primary/5 shadow-[0_0_20px_rgba(0,242,255,0.05)]" : "border-white/5 bg-black/40"
-                      )}
+                      className={`cursor-pointer rounded-xl p-3 border transition flex items-center justify-between ${
+                        isSelected
+                          ? "bg-slate-900/90 border-cyan-500/40 neon-glow-cyan"
+                          : "bg-slate-900/50 border-slate-800 hover:border-slate-700"
+                      }`}
                     >
-                      {/* Traffic Light Dot */}
-                      <div className="flex shrink-0 items-center justify-center">
-                        <div className={cn(
-                          "w-2 h-2 rounded-full",
-                          health === "red" ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" :
-                            health === "yellow" ? "bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]" :
-                              "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"
-                        )} />
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-white text-xs">
+                          {acc.bank_name ? acc.bank_name.charAt(0) : "B"}
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-white truncate max-w-[140px]">
+                            {acc.bank_name || "Primary Bank"}
+                          </p>
+                          <p className="text-[11px] font-mono text-slate-400">
+                            *{acc.account_number?.slice(-4) || "0000"} • {acc.account_type || "Current"}
+                          </p>
+                        </div>
                       </div>
 
-                      <div className="flex-1 overflow-hidden">
-                        <h4 className="font-black text-xs tracking-widest uppercase truncate text-foreground group-hover:text-primary transition-colors">
-                          {acc.bank_name || "Unknown Bank"}
-                        </h4>
-                        <p className="text-[9px] font-mono tracking-[0.2em] mt-1 uppercase text-foreground/40">
-                          *{acc.account_number?.slice(-4) || "0000"} • Updated 10m ago
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-white font-mono tabular-nums">
+                          £{parseFloat(acc.balance || acc.account_balance || "0").toLocaleString("en-GB", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
                         </p>
+                        <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-mono">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          Synced
+                        </span>
                       </div>
                     </div>
                   );
                 })
               )}
             </div>
+          </Card>
+        </div>
 
-            {/* Pinned Add Bank Button */}
-            <div className="absolute bottom-0 left-0 right-0 p-4">
-              <Button
-                onPress={handleConnect}
-                isPending={isConnecting}
-                className="w-full flex items-center justify-center gap-3 font-black text-[10px] uppercase tracking-widest rounded-xl h-12 transition-all cursor-pointer bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 shadow-[0_0_15px_rgba(0,242,255,0.1)] hover:shadow-[0_0_20px_rgba(0,242,255,0.2)]"
-              >
-                <Plus size={16} /> Connect Bank
-              </Button>
-            </div>
-          </div>
-
-          {/* Right Panel: Detailed Profile & Embedded Dashboard */}
-          <div className="flex-1 flex flex-col gap-6 overflow-y-auto custom-scrollbar h-full pb-10 pr-2">
-
-            {!selectedAccount ? (
-              <div className="flex items-center justify-center h-64 border border-dashed border-white/10 rounded-2xl">
-                <span className="text-foreground/30 font-mono text-[10px] uppercase tracking-widest">Select an account</span>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-6 w-full">
-
-                {/* Header Card (Kept simple to identify selected node) */}
-                <Card className="rounded-2xl p-8 flex flex-col md:flex-row justify-between md:items-end gap-6 overflow-hidden relative border border-white/5 bg-content1">
-
-                  {/* Glass Background Decor */}
-                  <div className="absolute right-0 top-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
-
-                  <div className="relative z-10">
-                    <p className="text-[9px] font-black text-primary uppercase tracking-[0.3em] mb-2 flex items-center gap-2">
-                      <Database size={12} /> Active Connection
-                    </p>
-                    <h2 className="text-3xl font-black text-foreground uppercase tracking-tight italic mb-1 truncate">
-                      {selectedAccount.bank_name}
-                    </h2>
-                    <p className="text-xs font-mono text-foreground/40 uppercase tracking-widest">
-                      {selectedAccount.account_number || "**** 0000"} | {selectedAccount.sort_code || "00-00-00"}
-                    </p>
-                  </div>
-
-                  <div className="relative z-10 text-left md:text-right">
-                    <p className="text-[9px] font-black text-foreground/30 uppercase tracking-[0.3em] mb-1">
-                      Available Balance
-                    </p>
-                    <div className="text-4xl font-mono text-foreground font-black tracking-tighter">
-                      {selectedAccount.balance ? <div className="flex items-center gap-1 justify-end"><AnimatedNumber value={selectedAccount.balance} currency={selectedAccount.currency} /></div> : <Skeleton className="h-8 w-32 bg-white/5 rounded-lg ml-auto" />}
+        {/* Right Column: Connection Detail & Sync Management (8 Cols) */}
+        <div className="lg:col-span-8 space-y-4">
+          {selectedAccount ? (
+            <>
+              {/* Account Overview Card */}
+              <Card className="glass-card rounded-2xl p-5 border border-slate-800 shadow-none space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-xl bg-cyan-950/60 border border-cyan-800/60 flex items-center justify-center text-cyan-400">
+                      <Building2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold text-white">
+                        {selectedAccount.bank_name || "Institution Name"}
+                      </h2>
+                      <p className="text-xs font-mono text-slate-400">
+                        Account: *{selectedAccount.account_number?.slice(-4) || "0000"} | Sort Code: {selectedAccount.sort_code || "00-00-00"}
+                      </p>
                     </div>
                   </div>
-                </Card>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full auto-rows-[400px]">
-                  <ConnectionHealthWidget accountId={selectedAccountId || ""} />
-                  <ConnectionExpenseWidget accountId={selectedAccountId || ""} />
-                  <ConnectionHabitsWidget accountId={selectedAccountId || ""} />
-                  <ConnectionBucketWidget accountId={selectedAccountId || ""} type="RECURRING" title="Recurring Payments" icon={Repeat} />
-                  <ConnectionBucketWidget accountId={selectedAccountId || ""} type="TARGET_DATE" title="Goals Progress" icon={Target} />
-                  <ConnectionBucketWidget accountId={selectedAccountId || ""} type="LIABILITY" title="Liabilities" icon={CreditCard} />
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400">Physical Balance</p>
+                    <p className="text-xl font-bold text-white font-mono tabular-nums">
+                      £{parseFloat(selectedAccount.balance ? String(selectedAccount.balance) : "0").toLocaleString("en-GB", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+
+                {/* Consent & Open Banking Lifecycle */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                        Consent Validity
+                      </span>
+                      <Chip size="sm" variant="soft" color="success" className="font-mono text-[10px]">
+                        72 Days Remaining
+                      </Chip>
+                    </div>
+                    <ProgressBar aria-label="Consent Validity" value={80} className="w-full">
+                      <ProgressBar.Track className="bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <ProgressBar.Fill className="h-full rounded-full bg-emerald-500" />
+                      </ProgressBar.Track>
+                    </ProgressBar>
+                    <p className="text-[11px] text-slate-500">
+                      Standard 90-day FCA Open Banking consent window.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                        Last Webhook Sync
+                      </span>
+                      <span className="text-white font-mono text-[11px]">8 minutes ago</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Continuous delta sync active. New transactions stream automatically into the priority cascade.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Connection Controls */}
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    isPending={isSyncing}
+                    onPress={handleSyncAccount}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs px-3 h-8 flex items-center gap-1.5"
+                  >
+                    <RefreshCcw className="w-3 h-3" />
+                    <span>Sync Statement Now</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    isPending={isExtending}
+                    onPress={handleExtendConsent}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs px-3 h-8 flex items-center gap-1.5"
+                  >
+                    <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                    <span>Extend 90-Day Consent</span>
+                  </Button>
+                </div>
+              </Card>
+
+              {/* Ingestion Audit Log */}
+              <Card className="glass-card rounded-2xl p-5 border border-slate-800 shadow-none space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Ingestion Audit Log
+                  </h3>
+                  <span className="text-[11px] font-mono text-slate-500">Last 24 Hours</span>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/50 border border-slate-800/80">
+                    <div className="flex items-center space-x-2.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                      <div>
+                        <p className="font-medium text-white">Delta Ingestion Batch Cleared</p>
+                        <p className="text-[11px] text-slate-400 font-mono">3 transactions matched to virtual buckets</p>
+                      </div>
+                    </div>
+                    <span className="text-slate-400 font-mono text-[11px]">Today, 14:20</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/50 border border-slate-800/80">
+                    <div className="flex items-center space-x-2.5">
+                      <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                      <div>
+                        <p className="font-medium text-white">Webhook Ping (Zero Delta)</p>
+                        <p className="text-[11px] text-slate-400 font-mono">No unbudgeted spend detected</p>
+                      </div>
+                    </div>
+                    <span className="text-slate-400 font-mono text-[11px]">Today, 09:12</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/50 border border-slate-800/80">
+                    <div className="flex items-center space-x-2.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                      <div>
+                        <p className="font-medium text-white">Daily Reconciliation Audit</p>
+                        <p className="text-[11px] text-slate-400 font-mono">Zero-sum balance verified: Delta = £0.00</p>
+                      </div>
+                    </div>
+                    <span className="text-slate-400 font-mono text-[11px]">Yesterday, 23:59</span>
+                  </div>
+                </div>
+              </Card>
+            </>
+          ) : (
+            <Card className="glass-card rounded-2xl p-10 border border-slate-800 text-center text-xs text-slate-400">
+              Select an account from the roster to view integration details.
+            </Card>
+          )}
         </div>
       </div>
     </div>

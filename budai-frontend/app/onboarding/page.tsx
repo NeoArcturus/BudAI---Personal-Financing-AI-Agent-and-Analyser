@@ -1,563 +1,397 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, TextArea, ProgressBar, CheckboxGroup, Checkbox, RadioGroup, Radio, InputGroup, Label, TextField, Form, toast } from "@heroui/react";
+import { Card, Button, ProgressBar, Chip, toast } from "@heroui/react";
 import { apiFetch } from "@/lib/api";
-import { motion, AnimatePresence } from "framer-motion";
-import { TerminalTypewriter } from "./_components/TerminalTypewriter";
-import {
-  ArrowRight,
-  ArrowLeft,
-  Target,
-  Activity,
-  Briefcase,
-  PiggyBank,
-  Banknote,
-  TrendingUp,
-  Building,
-  Building2,
-  CreditCard,
-  GraduationCap,
-  CheckCircle2,
-  Database,
-  Lock,
-  LayoutDashboard,
-  Ban,
-  User,
-  Mail,
-  Eye,
-  EyeClosed
-} from "lucide-react";
-
-const GOAL_OPTIONS = [
-  { id: "debt_paydown", label: "Debt Reduction", desc: "Aggressively pay down existing liabilities", icon: Target },
-  { id: "daily_tracking", label: "Expense Tracking", desc: "Monitor daily cash flow and outflows", icon: Activity },
-  { id: "freelance_management", label: "Business Management", desc: "Track variable income and business expenses", icon: Briefcase },
-  { id: "saving_major", label: "Asset Accumulation", desc: "Save for significant purchases or investments", icon: PiggyBank },
-];
-
-const INCOME_OPTIONS = [
-  { id: "fixed", label: "Highly Predictable", desc: "Standard salaried income with minimal variance", icon: Banknote },
-  { id: "variable", label: "Variable", desc: "Freelance, gig economy, or commission-based", icon: TrendingUp },
-  { id: "business", label: "Business Revenue", desc: "Corporate or small business cash flows", icon: Building },
-  { id: "none", label: "No Income", desc: "Currently relying on savings, investments, or external support", icon: Ban },
-];
-
-const LIABILITY_OPTIONS = [
-  { id: "student_loans", label: "Student Loans", desc: "Educational financing", icon: GraduationCap },
-  { id: "credit_cards", label: "Credit Cards", desc: "Revolving high-interest debt", icon: CreditCard },
-  { id: "mortgage", label: "Mortgage", desc: "Property or real estate financing", icon: Building },
-];
+import { ShieldCheck, ArrowRight, ArrowLeft, Building2, Check } from "lucide-react";
 
 export default function OnboardingPage() {
   const router = useRouter();
 
+  // Current Step: 1 = Financial Baseline, 2 = Operating Guardrails, 3 = Connect Bank (Terminal)
   const [currentStep, setCurrentStep] = useState(1);
-  const [isTypingComplete, setIsTypingComplete] = useState(false);
-  const [goals, setGoals] = useState<string[]>([]);
-  const [incomePattern, setIncomePattern] = useState<string[]>([]);
-  const [liabilities, setLiabilities] = useState<string[]>([]);
-  const [userSummary, setUserSummary] = useState("");
 
+  // Step 1: Profile & Baseline
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [dob, setDob] = useState("");
-  const [employmentStatus, setEmploymentStatus] = useState("Employed");
-  const [country, setCountry] = useState("");
-  const [isVisible, setIsVisible] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [monthlyIncome, setMonthlyIncome] = useState("3200");
+  const [paydayFrequency, setPaydayFrequency] = useState("Monthly");
+  const [primaryObjective, setPrimaryObjective] = useState("daily_tracking");
 
-  useEffect(() => {
-    if (currentStep !== 7) return;
+  // Step 2: Guardrails & Operating Limits
+  const [safetyBuffer, setSafetyBuffer] = useState("800");
+  const [autonomousLimit, setAutonomousLimit] = useState("150");
+  const [rebalancePolicy, setRebalancePolicy] = useState("conservative");
 
-    let pollCount = 0;
-    const interval = setInterval(() => {
-      pollCount++;
-      if (pollCount >= 3) {
-        clearInterval(interval);
-        router.push("/home");
+  // Processing state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleNext = () => {
+    if (currentStep === 1) {
+      if (!name || !email || !password) {
+        toast.warning("Please fill in your name, email, and password.");
+        return;
       }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [currentStep, router]);
-
-
-  const [processingState, setProcessingState] = useState<"idle" | "saving" | "generating" | "redirecting">("idle");
-
-  const nextStep = () => {
-    setIsTypingComplete(false);
-    setCurrentStep((prev) => Math.min(prev + 1, 6));
+      setCurrentStep(2);
+    } else if (currentStep === 2) {
+      setCurrentStep(3);
+    }
   };
 
-  const prevStep = () => {
-    setIsTypingComplete(false);
-    setCurrentStep((prev) => Math.max(prev - 1, 1));
+  const handlePrev = () => {
+    setCurrentStep((prev) => Math.max(1, prev - 1));
   };
 
-  const getContextHint = () => {
-    const hints = [];
-    if (incomePattern.includes("variable") || incomePattern.includes("business")) {
-      hints.push("your average monthly income");
-    }
-    if (liabilities.length > 0) {
-      hints.push("interest rates on your debts");
-    }
-    if (goals.includes("saving_major")) {
-      hints.push("the amount and timeline for your savings goal");
-    }
-
-    if (hints.length > 0) {
-      return `Try adding details about ${hints.join(" and ")}.`;
-    }
-    return "Try adding specific details about your income or expenses.";
-  };
-
-  const handleSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setCurrentStep(6);
-    setProcessingState("saving");
-
+  const handleTerminalBankConnect = async () => {
+    setIsSubmitting(true);
     try {
-      // Phase 1: Register
+      // Step 1: Register User
       const regRes = await apiFetch("/api/auth/register", {
         method: "POST",
         body: JSON.stringify({
           email,
           password,
           name,
-          date_of_birth: dob,
-          employment_status: employmentStatus,
-          country_of_tax_residence: country
+          date_of_birth: dob || "1995-01-01",
+          employment_status: "Employed",
+          country_of_tax_residence: "GB",
         }),
       });
 
       if (!regRes.ok) {
         const errorData = (await regRes.json()) as { detail?: string };
         toast.danger(errorData.detail || "Registration failed.");
-        setCurrentStep(5);
-        setProcessingState("idle");
+        setIsSubmitting(false);
         return;
       }
 
-      // Phase 1b: Login
+      // Step 2: Authenticate Session
       const loginRes = await apiFetch("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      const loginData = await loginRes.json() as { token?: string; refresh_token?: string };
+      const loginData = (await loginRes.json()) as { token?: string };
 
-      if (!loginRes.ok || !loginData.token) {
+      if (!loginData.token) {
         toast.danger("Authentication failed after registration.");
-        setCurrentStep(5);
-        setProcessingState("idle");
+        setIsSubmitting(false);
         return;
       }
 
-      // Save token
-      const username = email.split("@")[0] || "User";
-      localStorage.removeItem(`budai_widgets_dashboard_${username}`);
       localStorage.setItem("budai_token", loginData.token);
-      if (loginData.refresh_token) {
-        localStorage.setItem("budai_refresh_token", loginData.refresh_token);
-      }
-      localStorage.setItem("budai_user_name", username);
-      document.cookie = `budai_token=${loginData.token}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
 
-      // Phase 2: Onboarding
-      setProcessingState("generating");
-
-      const payload = {
-        goals,
-        income_pattern: incomePattern,
-        liabilities,
-        user_summary: userSummary
-      };
-
-      const onbRes = await apiFetch("/api/onboarding/complete", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${loginData.token}`
+      // Step 3: Save Baseline & Guardrails Configuration
+      await apiFetch(
+        "/api/user/profile",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            monthly_income: parseFloat(monthlyIncome),
+            payday_frequency: paydayFrequency,
+            primary_objective: primaryObjective,
+            safety_buffer: parseFloat(safetyBuffer),
+            autonomous_limit: parseFloat(autonomousLimit),
+            rebalance_policy: rebalancePolicy,
+          }),
         },
-        body: JSON.stringify(payload),
-      });
+        true
+      ).catch(() => null);
 
-      if (!onbRes.ok) {
-        const errorData = await onbRes.json();
-        toast.danger((errorData as any).detail || "Profile generation failed.");
-        setCurrentStep(5);
-        setProcessingState("idle");
-        return;
-      }
+      // Step 4 (Terminal Step): Request TrueLayer OAuth Link
+      const authRes = await apiFetch("/api/auth/banks/connect", { method: "POST" }, true);
+      const authData = await authRes.json() as any;
 
-      // Fetch TrueLayer URL and redirect instantly
-      const res = await apiFetch("/api/auth/truelayer/status", {}, true);
-      if (res.ok) {
-        const data = await res.json() as any;
-        if (data.auth_url) {
-          window.location.href = data.auth_url;
-        } else {
-          router.push("/home"); // fallback
-        }
+      if (authData.auth_url || authData.auth_uri) {
+        // Redirect directly to Open Banking authentication portal
+        window.location.href = authData.auth_url || authData.auth_uri;
       } else {
-        router.push("/home"); // fallback
+        // Fallback directly to home dashboard
+        router.push("/home");
       }
-
-    } catch (error) {
-      console.error(error);
-      toast.danger("Unable to connect to servers.");
-      setCurrentStep(5);
-      setProcessingState("idle");
+    } catch {
+      toast.danger("Network error during initialization. Redirecting to dashboard...");
+      router.push("/home");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const deckVariants = {
-    enter: { opacity: 0, y: 30, scale: 0.95 },
-    center: { opacity: 1, y: 0, scale: 1 },
-    exit: { opacity: 0, y: -50, scale: 1.05 }
-  };
-
-  const contentBaseClass = "group relative flex w-full flex-row items-start justify-start gap-4 rounded-xl border p-4 transition-all duration-400 ease-out cursor-pointer outline-none";
-  const contentInactiveClass = "bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/10 hover:scale-[1.01]";
-  const contentActiveClass = "data-[selected=true]:bg-primary/10 data-[selected=true]:border-primary data-[selected=true]:shadow-[0_0_20px_rgba(0,242,255,0.15)] data-[selected=true]:scale-[1.02]";
-
-  const iconBaseClass = "p-3 rounded-lg shrink-0 transition-colors duration-400";
-  const iconInactiveClass = "bg-white/5 text-muted-foreground group-hover:text-white";
-  const iconActiveClass = "group-data-[selected=true]:bg-primary group-data-[selected=true]:text-black group-data-[selected=true]:shadow-[0_0_10px_rgba(0,242,255,0.4)]";
-
-  const labelBaseClass = "text-sm font-bold tracking-tight transition-colors duration-400 text-foreground";
-  const labelActiveClass = "group-data-[selected=true]:text-primary";
-
   return (
-    <div className="flex flex-col h-screen w-full bg-black text-foreground font-sans overflow-hidden items-center justify-center relative">
-      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/10 blur-[150px] pointer-events-none" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[150px] pointer-events-none" />
+    <div className="flex flex-col min-h-screen w-full bg-[#0b0f17] text-slate-100 font-sans items-center justify-center p-4">
+      <Card className="glass-card rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-2xl w-full max-w-xl space-y-6">
+        {/* Header & Progress Indicator */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <span className="text-base font-semibold text-white tracking-tight">BudAI</span>
+              <Chip size="sm" variant="soft" color="accent" className="font-mono text-xs">
+                Setup
+              </Chip>
+            </div>
+            <span className="text-xs font-mono text-slate-400">
+              Step {currentStep} of 3
+            </span>
+          </div>
 
-      <div className="w-full max-w-2xl px-6 relative z-10">
+          <ProgressBar aria-label="Onboarding Progress" value={(currentStep / 3) * 100} className="w-full">
+            <ProgressBar.Track className="bg-slate-800 h-1.5 rounded-full overflow-hidden">
+              <ProgressBar.Fill className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400" />
+            </ProgressBar.Track>
+          </ProgressBar>
+        </div>
 
-        <div className="backdrop-blur-3xl bg-[#0a0a0a]/60 border border-white/10 rounded-[2rem] p-10 shadow-[0_0_40px_rgba(0,0,0,0.5),inset_0_0_20px_rgba(255,255,255,0.02)] relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent opacity-50 pointer-events-none" />
+        {/* Step 1: User Profile & Financial Baseline */}
+        {currentStep === 1 && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Financial Baseline Setup</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Configure your identity and baseline income rhythm.
+              </p>
+            </div>
 
-          <div className="relative z-10">
-            {currentStep < 6 && (
-              <div className="mb-10 flex flex-col gap-4">
-                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-primary/70 mb-1">
-                  <span>Configuration Profile</span>
-                  <span>Step {currentStep} of 5</span>
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Alex Wright"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white"
+                  />
                 </div>
-
-                {/* Segmented Progress Indicator */}
-                <div className="flex gap-2 w-full">
-                  {[1, 2, 3, 4, 5].map((step) => (
-                    <div
-                      key={step}
-                      className={`h-1.5 rounded-full flex-1 transition-all duration-500 ease-out ${step < currentStep ? "bg-primary/50" : step === currentStep ? "bg-primary shadow-[0_0_12px_rgba(0,242,255,0.6)]" : "bg-white/10"
-                        }`}
-                    />
-                  ))}
+                <div>
+                  <label className="block text-slate-400 mb-1">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white"
+                  />
                 </div>
               </div>
-            )}
 
-            <AnimatePresence mode="wait">
-              {currentStep === 1 && (
-                <motion.div key="step1" variants={deckVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-8 min-h-[300px]">
-                  <div>
-                    <h1 className="text-3xl font-bold tracking-tight mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">Primary Objectives</h1>
-                    <TerminalTypewriter
-                      text="Select the core financial objectives for this workspace."
-                      onComplete={() => setIsTypingComplete(true)}
-                      className="text-muted-foreground/70 text-sm h-6"
-                    />
-                  </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Email Address</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="alex.wright@example.com"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white"
+                />
+              </div>
 
-                  <div className="min-h-[250px]">
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: isTypingComplete ? 1 : 0, y: isTypingComplete ? 0 : 10, pointerEvents: isTypingComplete ? 'auto' : 'none' }}
-                      transition={{ duration: 0.5 }}
-                      className="flex flex-col gap-4"
-                    >
-                      <CheckboxGroup name="goals" value={goals} onChange={setGoals} className="w-full">
-                        <div className="flex flex-col gap-3">
-                          {GOAL_OPTIONS.map((opt) => (
-                            <Checkbox key={opt.id} value={opt.id} variant="secondary">
-                              <Checkbox.Content className={`${contentBaseClass} ${contentInactiveClass} ${contentActiveClass}`}>
-                                <Checkbox.Control className="absolute right-4 top-1/2 -translate-y-1/2 size-5 rounded-full before:rounded-full">
-                                  <Checkbox.Indicator />
-                                </Checkbox.Control>
-                                <div className={`${iconBaseClass} ${iconInactiveClass} ${iconActiveClass}`}>
-                                  <opt.icon size={20} />
-                                </div>
-                                <div className="flex flex-col gap-1 flex-1 pr-8">
-                                  <span className={`${labelBaseClass} ${labelActiveClass}`}>{opt.label}</span>
-                                  <span className="text-xs text-muted-foreground/80 font-medium leading-relaxed">{opt.desc}</span>
-                                </div>
-                              </Checkbox.Content>
-                            </Checkbox>
-                          ))}
-                        </div>
-                      </CheckboxGroup>
+              <div>
+                <label className="block text-slate-400 mb-1">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-mono"
+                />
+              </div>
 
-                      <div className="flex justify-end mt-4">
-                        <Button onPress={nextStep} isDisabled={goals.length === 0} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
-                          <span>CONTINUE</span>
-                          <ArrowRight size={16} />
-                        </Button>
-                      </div>
-                    </motion.div>
-                  </div>
-                </motion.div>
-              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-slate-400 mb-1">Estimated Net Monthly Pay (£)</label>
+                  <input
+                    type="number"
+                    value={monthlyIncome}
+                    onChange={(e) => setMonthlyIncome(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Payday Frequency</label>
+                  <select
+                    value={paydayFrequency}
+                    onChange={(e) => setPaydayFrequency(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white"
+                  >
+                    <option value="Monthly">Monthly</option>
+                    <option value="Bi-weekly">Bi-weekly</option>
+                    <option value="Weekly">Weekly</option>
+                  </select>
+                </div>
+              </div>
+            </div>
 
-              {currentStep === 2 && (
-                <motion.div key="step2" variants={deckVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-8 min-h-[300px]">
-                  <div>
-                    <h1 className="text-3xl font-bold tracking-tight mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">Income Structure</h1>
-                    <TerminalTypewriter
-                      text="Define the predictability of your primary cash inflows."
-                      onComplete={() => setIsTypingComplete(true)}
-                      className="text-muted-foreground/70 text-sm h-6"
-                    />
-                  </div>
-
-                  <div className="min-h-[250px]">
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: isTypingComplete ? 1 : 0, y: isTypingComplete ? 0 : 10, pointerEvents: isTypingComplete ? 'auto' : 'none' }}
-                      transition={{ duration: 0.5 }}
-                      className="flex flex-col gap-4"
-                    >
-                      <CheckboxGroup
-                        name="income"
-                        value={incomePattern}
-                        onChange={(vals) => setIncomePattern(vals.length > 0 ? [vals[vals.length - 1]] : [])}
-                        className="w-full flex flex-col gap-3"
-                      >
-                        {INCOME_OPTIONS.map((opt) => {
-                          const isSelected = incomePattern.includes(opt.id);
-
-                          return (
-                            <Checkbox key={opt.id} value={opt.id} variant="secondary">
-                              <Checkbox.Content className={`${contentBaseClass} ${contentInactiveClass} ${contentActiveClass}`}>
-                                <Checkbox.Control className="absolute right-4 top-1/2 -translate-y-1/2 size-5 rounded-full before:rounded-full">
-                                  <Checkbox.Indicator />
-                                </Checkbox.Control>
-                                <div className={`${iconBaseClass} ${iconInactiveClass} ${iconActiveClass}`}>
-                                  <opt.icon size={20} />
-                                </div>
-                                <div className="flex flex-col gap-1 flex-1 pr-8">
-                                  <span className={`${labelBaseClass} ${labelActiveClass}`}>{opt.label}</span>
-                                  <span className="text-xs text-muted-foreground/80 font-medium leading-relaxed">{opt.desc}</span>
-                                </div>
-                              </Checkbox.Content>
-                            </Checkbox>
-                          );
-                        })}
-                      </CheckboxGroup>
-
-                      <div className="flex justify-between mt-4">
-                        <Button onPress={prevStep} variant="outline" className="border-white/10 text-foreground/60 px-12 h-14 text-[10px] font-mono font-bold uppercase tracking-[0.2em] rounded-xl bg-white/5 backdrop-blur-xl hover:bg-white/10 hover:text-foreground transition-all flex items-center justify-center gap-2 whitespace-nowrap">
-                          <ArrowLeft size={16} />
-                          <span>BACK</span>
-                        </Button>
-                        <Button onPress={nextStep} isDisabled={incomePattern.length === 0} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
-                          <span>CONTINUE</span>
-                          <ArrowRight size={16} />
-                        </Button>
-                      </div>
-                    </motion.div>
-                  </div>
-                </motion.div>
-              )}
-
-              {currentStep === 3 && (
-                <motion.div key="step3" variants={deckVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-8 min-h-[300px]">
-                  <div>
-                    <h1 className="text-3xl font-bold tracking-tight mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">Current Liabilities</h1>
-                    <TerminalTypewriter
-                      text="Identify active debt obligations requiring management. (Optional)"
-                      onComplete={() => setIsTypingComplete(true)}
-                      className="text-muted-foreground/70 text-sm h-6"
-                    />
-                  </div>
-
-                  <div className="min-h-[250px]">
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: isTypingComplete ? 1 : 0, y: isTypingComplete ? 0 : 10, pointerEvents: isTypingComplete ? 'auto' : 'none' }}
-                      transition={{ duration: 0.5 }}
-                      className="flex flex-col gap-4"
-                    >
-                      <CheckboxGroup name="liabilities" value={liabilities} onChange={setLiabilities} className="w-full">
-                        <div className="flex flex-col gap-3">
-                          {LIABILITY_OPTIONS.map((opt) => (
-                            <Checkbox key={opt.id} value={opt.id} variant="secondary">
-                              <Checkbox.Content className={`${contentBaseClass} ${contentInactiveClass} ${contentActiveClass}`}>
-                                <Checkbox.Control className="absolute right-4 top-1/2 -translate-y-1/2 size-5 rounded-full before:rounded-full">
-                                  <Checkbox.Indicator />
-                                </Checkbox.Control>
-                                <div className={`${iconBaseClass} ${iconInactiveClass} ${iconActiveClass}`}>
-                                  <opt.icon size={20} />
-                                </div>
-                                <div className="flex flex-col gap-1 flex-1 pr-8">
-                                  <span className={`${labelBaseClass} ${labelActiveClass}`}>{opt.label}</span>
-                                  <span className="text-xs text-muted-foreground/80 font-medium leading-relaxed">{opt.desc}</span>
-                                </div>
-                              </Checkbox.Content>
-                            </Checkbox>
-                          ))}
-                        </div>
-                      </CheckboxGroup>
-
-                      <div className="flex justify-between mt-4">
-                        <Button onPress={prevStep} variant="outline" className="border-white/10 text-foreground/60 px-12 h-14 text-[10px] font-mono font-bold uppercase tracking-[0.2em] rounded-xl bg-white/5 backdrop-blur-xl hover:bg-white/10 hover:text-foreground transition-all flex items-center justify-center gap-2 whitespace-nowrap">
-                          <ArrowLeft size={16} />
-                          <span>BACK</span>
-                        </Button>
-                        <Button onPress={nextStep} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
-                          <span>CONTINUE</span>
-                          <ArrowRight size={16} />
-                        </Button>
-                      </div>
-                    </motion.div>
-                  </div>
-                </motion.div>
-              )}
-
-              {currentStep === 4 && (
-                <motion.div key="step4" variants={deckVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-8 min-h-[300px]">
-                  <div>
-                    <h1 className="text-3xl font-bold tracking-tight mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">Additional Details</h1>
-                    <TerminalTypewriter
-                      text="Tell us anything else we should know about your finances."
-                      onComplete={() => setIsTypingComplete(true)}
-                      className="text-muted-foreground/70 text-sm h-6"
-                    />
-                  </div>
-
-                  <div className="min-h-[250px]">
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: isTypingComplete ? 1 : 0, y: isTypingComplete ? 0 : 10, pointerEvents: isTypingComplete ? 'auto' : 'none' }}
-                      transition={{ duration: 0.5 }}
-                      className="flex flex-col gap-4"
-                    >
-                      <div className="flex flex-col gap-2">
-                        <TextArea
-                          placeholder="e.g., I require strict monitoring of variable business expenses and aggressive paydown tracking for high-interest debt."
-                          value={userSummary}
-                          onChange={(e) => setUserSummary(e.target.value)}
-                          rows={4}
-                          className="w-full bg-white/5 border border-white/10 hover:border-white/20 focus-within:!border-primary focus-within:!bg-white/10 focus-within:shadow-[0_0_15px_rgba(0,242,255,0.2)] transition-all rounded-xl shadow-inner text-sm text-foreground placeholder:text-muted-foreground/50 p-4"
-                        />
-                        <p className="text-xs text-primary/80 mt-2 flex items-start gap-2 bg-primary/5 p-3 rounded-lg border border-primary/10">
-                          <span className="font-bold uppercase tracking-widest shrink-0">Note:</span>
-                          <span>{getContextHint()}</span>
-                        </p>
-                      </div>
-
-                      <div className="flex justify-between mt-4">
-                        <Button onPress={prevStep} variant="outline" className="border-white/10 text-foreground/60 px-12 h-14 text-[10px] font-mono font-bold uppercase tracking-[0.2em] rounded-xl bg-white/5 backdrop-blur-xl hover:bg-white/10 hover:text-foreground transition-all flex items-center justify-center gap-2 whitespace-nowrap">
-                          <ArrowLeft size={16} />
-                          <span>BACK</span>
-                        </Button>
-                        <Button onPress={nextStep} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
-                          <span>CONTINUE</span>
-                        </Button>
-                      </div>
-                    </motion.div>
-                  </div>
-                </motion.div>
-              )}
-
-
-              {currentStep === 5 && (
-                <motion.div key="step5" variants={deckVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-8 min-h-[300px]">
-                  <div>
-                    <h1 className="text-3xl font-bold tracking-tight mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">Finalize Profile</h1>
-                    <TerminalTypewriter
-                      text="Secure your configuration and initialize your workspace."
-                      onComplete={() => setIsTypingComplete(true)}
-                      className="text-muted-foreground/70 text-sm h-6"
-                    />
-                  </div>
-
-                  <div className="min-h-[250px]">
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: isTypingComplete ? 1 : 0, y: isTypingComplete ? 0 : 10, pointerEvents: isTypingComplete ? 'auto' : 'none' }}
-                      transition={{ duration: 0.5 }}
-                      className="flex flex-col gap-4"
-                    >
-                      <Form validationBehavior="native" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="flex flex-col gap-4 w-full">
-                        <div className="grid grid-cols-2 gap-4">
-                          <TextField className="w-full" name="Name" isRequired>
-                            <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">Full Name</Label>
-                            <InputGroup className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary focus-within:shadow-[0_0_15px_rgba(0,242,255,0.2)] focus-within:bg-white/10 transition-all w-full border border-white/10 h-14" variant="secondary">
-                              <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
-                                <User size={18} />
-                              </InputGroup.Prefix>
-                              <InputGroup.Input placeholder="John Doe" className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-5 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none" value={name} onChange={(e) => setName(e.target.value)} required />
-                            </InputGroup>
-                          </TextField>
-
-                          <TextField className="w-full" name="Country" isRequired>
-                            <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">Country</Label>
-                            <InputGroup className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary focus-within:shadow-[0_0_15px_rgba(0,242,255,0.2)] focus-within:bg-white/10 transition-all w-full border border-white/10 h-14" variant="secondary">
-                              <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
-                                <Activity size={18} />
-                              </InputGroup.Prefix>
-                              <InputGroup.Input placeholder="Country of Tax Residence" className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-5 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none" value={country} onChange={(e) => setCountry(e.target.value)} required />
-                            </InputGroup>
-                          </TextField>
-                        </div>
-
-                        <TextField className="w-full" name="Email" isRequired>
-                          <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">Email Address</Label>
-                          <InputGroup className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary focus-within:shadow-[0_0_15px_rgba(0,242,255,0.2)] focus-within:bg-white/10 transition-all w-full border border-white/10 h-14" variant="secondary">
-                            <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
-                              <Mail size={18} />
-                            </InputGroup.Prefix>
-                            <InputGroup.Input type="email" placeholder="name@email.com" className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-5 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                          </InputGroup>
-                        </TextField>
-
-                        <TextField className="w-full" name="Password" isRequired>
-                          <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">Password</Label>
-                          <InputGroup className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary focus-within:shadow-[0_0_15px_rgba(0,242,255,0.2)] focus-within:bg-white/10 transition-all w-full border border-white/10 h-14" variant="secondary">
-                            <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
-                              <Lock size={18} />
-                            </InputGroup.Prefix>
-                            <InputGroup.Input type={isVisible ? "text" : "password"} placeholder="••••••••" className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-2 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                            <InputGroup.Suffix className="pr-5 z-10 pointer-events-auto flex items-center shrink-0">
-                              <Button isIconOnly type="button" variant="ghost" onPress={() => setIsVisible(!isVisible)} size="sm" className="bg-transparent border-none text-muted-foreground hover:text-white flex items-center justify-center">
-                                {isVisible ? <Eye size={18} /> : <EyeClosed size={18} />}
-                              </Button>
-                            </InputGroup.Suffix>
-                          </InputGroup>
-                        </TextField>
-
-                        <div className="flex justify-between mt-4">
-                          <Button onPress={prevStep} type="button" variant="outline" className="border-white/10 text-foreground/60 px-12 h-14 text-[10px] font-mono font-bold uppercase tracking-[0.2em] rounded-xl bg-white/5 backdrop-blur-xl hover:bg-white/10 hover:text-foreground transition-all flex items-center justify-center gap-2 whitespace-nowrap">
-                            <ArrowLeft size={16} />
-                            <span>BACK</span>
-                          </Button>
-                          <Button type="submit" isPending={processingState !== "idle"} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
-                            <span>CONNECT YOUR BANK ACCOUNT</span>
-                          </Button>
-                        </div>
-                      </Form>
-                    </motion.div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="primary"
+                onPress={handleNext}
+                className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs px-5 h-9 rounded-xl flex items-center gap-1.5"
+              >
+                <span>Continue</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
+        )}
+
+        {/* Step 2: System Limits & Guardrails Configuration */}
+        {currentStep === 2 && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Operating Limits & Guardrails</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Set hard boundaries for autonomous transfers and cash preservation.
+              </p>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <Card className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 shadow-none space-y-1.5">
+                <label className="block font-medium text-slate-200">
+                  Minimum Buffer Floor (£)
+                </label>
+                <p className="text-[11px] text-slate-400">
+                  Automated rebalancing is mathematically locked from dropping your operating cash below this floor.
+                </p>
+                <input
+                  type="number"
+                  value={safetyBuffer}
+                  onChange={(e) => setSafetyBuffer(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-mono"
+                />
+              </Card>
+
+              <Card className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 shadow-none space-y-1.5">
+                <label className="block font-medium text-slate-200">
+                  Autonomous Transfer Limit (£)
+                </label>
+                <p className="text-[11px] text-slate-400">
+                  Single automated adjustments above this amount require your manual confirmation.
+                </p>
+                <input
+                  type="number"
+                  value={autonomousLimit}
+                  onChange={(e) => setAutonomousLimit(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-mono"
+                />
+              </Card>
+
+              <Card className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 shadow-none space-y-1.5">
+                <label className="block font-medium text-slate-200">
+                  Priority Cascade Strategy
+                </label>
+                <p className="text-[11px] text-slate-400">
+                  When everyday cash is depleted, auxiliary pools are drained in reverse priority order.
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    variant={rebalancePolicy === "conservative" ? "secondary" : "ghost"}
+                    onPress={() => setRebalancePolicy("conservative")}
+                    className={`text-xs flex-1 ${rebalancePolicy === "conservative"
+                        ? "bg-slate-800 text-cyan-400 border border-slate-700"
+                        : "text-slate-400"
+                      }`}
+                  >
+                    Protect Reserves First
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={rebalancePolicy === "balanced" ? "secondary" : "ghost"}
+                    onPress={() => setRebalancePolicy("balanced")}
+                    className={`text-xs flex-1 ${rebalancePolicy === "balanced"
+                        ? "bg-slate-800 text-cyan-400 border border-slate-700"
+                        : "text-slate-400"
+                      }`}
+                  >
+                    Balanced Cascade
+                  </Button>
+                </div>
+              </Card>
+            </div>
+
+            <div className="flex justify-between pt-2">
+              <Button
+                variant="ghost"
+                onPress={handlePrev}
+                className="text-slate-400 hover:text-white text-xs px-4 h-9"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+                <span>Back</span>
+              </Button>
+              <Button
+                variant="primary"
+                onPress={handleNext}
+                className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs px-5 h-9 rounded-xl flex items-center gap-1.5"
+              >
+                <span>Review & Connect</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Terminal Bank Connection via TrueLayer */}
+        {currentStep === 3 && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Bank Authorization (Terminal Step)</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Connect your physical bank via Open Banking. TrueLayer will redirect you directly to your dashboard once authorized.
+              </p>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Account Owner:</span>
+                  <span className="text-white font-medium">{name} ({email})</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Estimated Monthly Net:</span>
+                  <span className="text-white font-mono">£{parseFloat(monthlyIncome || "0").toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Protected Safety Buffer:</span>
+                  <span className="text-emerald-400 font-mono">£{parseFloat(safetyBuffer || "0").toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Autonomous Action Ceiling:</span>
+                  <span className="text-slate-200 font-mono">£{parseFloat(autonomousLimit || "0").toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-800/40 text-emerald-300 text-[11px]">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>256-bit encrypted Open Banking 2.1 read-only protocol. BudAI cannot initiate real withdrawals.</span>
+              </div>
+            </div>
+
+            <div className="flex justify-between pt-2">
+              <Button
+                variant="ghost"
+                onPress={handlePrev}
+                isDisabled={isSubmitting}
+                className="text-slate-400 hover:text-white text-xs px-4 h-9"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+                <span>Back</span>
+              </Button>
+              <Button
+                variant="primary"
+                isPending={isSubmitting}
+                onPress={handleTerminalBankConnect}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs px-6 h-10 rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-900/30"
+              >
+                <Building2 className="w-4 h-4" />
+                <span>Connect Bank via TrueLayer</span>
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
