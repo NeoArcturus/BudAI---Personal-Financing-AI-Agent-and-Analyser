@@ -66,17 +66,16 @@ def flow_event_bus_sync(user_uuid: str):
 
 
 @task(retries=3, retry_delay_seconds=2)
-def task_fetch_and_store_transactions_chunk(
+def task_fetch_and_store_transactions_1yr(
     account_id: str,
     user_uuid: str,
     bank_uuid: str,
     from_date: str,
-    to_date: str,
-    chunk_index: int
+    to_date: str
 ) -> int:
     """
-    Synchronously fetches and stores a single chronological window of transactions
-    directly from TrueLayer (without relying on inbound webhooks).
+    Synchronously fetches and stores 1 full year of transactions directly
+    from TrueLayer at once without sliding windows or webhooks.
     """
     from models.database_models import Bank
     from services.api_integrator.truelayer_sync import TrueLayerSync
@@ -103,26 +102,23 @@ def task_fetch_and_store_transactions_chunk(
 
         res = syncer._make_request(url, access_token, provider_id, params=params)
         if res is None:
-            logger.warning(f"No response from TrueLayer for {account_id} chunk {chunk_index} ({from_date} to {to_date})")
+            logger.warning(f"No response from TrueLayer for {account_id} 1-year pull ({from_date} to {to_date})")
             return 0
 
         if res.status_code == 200:
             tx_data = res.json().get("results", [])
             if tx_data:
                 syncer.process_and_store_transactions(session, tx_data, user_uuid, bank_uuid, account_id)
-                # After the first (most recent 90-day) window completes, alert the frontend immediately
-                if chunk_index == 0:
-                    try:
-                        from config import redis_client
-                        payload = {
-                            "event_type": "TRANSACTIONS_UPDATED",
-                            "account_id": account_id,
-                            "chunk_index": 0,
-                            "count": len(tx_data)
-                        }
-                        redis_client.publish(f"budai_events_{user_uuid}", json.dumps(payload))
-                    except Exception as re:
-                        logger.warning(f"Redis publish notice failed: {re}")
+                try:
+                    from config import redis_client
+                    payload = {
+                        "event_type": "TRANSACTIONS_UPDATED",
+                        "account_id": account_id,
+                        "count": len(tx_data)
+                    }
+                    redis_client.publish(f"budai_events_{user_uuid}", json.dumps(payload))
+                except Exception as re:
+                    logger.warning(f"Redis publish notice failed: {re}")
                 return len(tx_data)
             return 0
 
@@ -130,46 +126,35 @@ def task_fetch_and_store_transactions_chunk(
             logger.info(f"Open Banking boundary or account opening date reached at {from_date} for {account_id}: {res.status_code}")
             return 0
 
-        logger.warning(f"Unexpected status code {res.status_code} fetching chunk {chunk_index} for {account_id}: {res.text}")
+        logger.warning(f"Unexpected status code {res.status_code} fetching transactions for {account_id}: {res.text}")
         return 0
 
 
 @flow(name="Prefect_Ingest_Account_Transactions_1Yr")
 def flow_ingest_account_transactions_1yr(account_id: str, user_uuid: str, bank_uuid: str) -> dict:
     """
-    Prefect OSS Flow to pull 1 full year (365 days) of transactions directly upon account creation.
-    Splits the 365-day range into 4 x 90-day sliding windows to strictly comply with Open Banking API limits.
+    Prefect OSS Flow to pull 1 full year (365 days) of transactions directly at once upon account creation.
+    Performs a single request directly to TrueLayer without webhooks or window chunking.
     """
     from datetime import datetime, timedelta
-    import time
 
     logger.info(f"Starting Prefect OSS 1-year transaction pull for account {account_id} (user {user_uuid})")
 
     now = datetime.utcnow()
-    windows = [
-        # (from_date, to_date)
-        ((now - timedelta(days=89)).strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d")),
-        ((now - timedelta(days=179)).strftime("%Y-%m-%d"), (now - timedelta(days=90)).strftime("%Y-%m-%d")),
-        ((now - timedelta(days=269)).strftime("%Y-%m-%d"), (now - timedelta(days=180)).strftime("%Y-%m-%d")),
-        ((now - timedelta(days=365)).strftime("%Y-%m-%d"), (now - timedelta(days=270)).strftime("%Y-%m-%d")),
-    ]
+    from_date = (now - timedelta(days=365)).strftime("%Y-%m-%d")
+    to_date = now.strftime("%Y-%m-%d")
 
     total_ingested = 0
-    for idx, (from_d, to_d) in enumerate(windows):
-        try:
-            count = task_fetch_and_store_transactions_chunk(
-                account_id=account_id,
-                user_uuid=user_uuid,
-                bank_uuid=bank_uuid,
-                from_date=from_d,
-                to_date=to_d,
-                chunk_index=idx
-            )
-            total_ingested += count
-            if idx < len(windows) - 1:
-                time.sleep(0.3)
-        except Exception as chunk_err:
-            logger.warning(f"Error fetching chunk {idx} ({from_d} to {to_d}) for account {account_id}: {chunk_err}")
+    try:
+        total_ingested = task_fetch_and_store_transactions_1yr(
+            account_id=account_id,
+            user_uuid=user_uuid,
+            bank_uuid=bank_uuid,
+            from_date=from_date,
+            to_date=to_date
+        )
+    except Exception as fetch_err:
+        logger.warning(f"Error fetching 1-year transactions ({from_date} to {to_date}) for account {account_id}: {fetch_err}")
 
     # Post-ingestion reconciliation and delta sync
     try:

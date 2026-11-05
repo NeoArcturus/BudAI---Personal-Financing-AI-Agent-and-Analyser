@@ -134,18 +134,39 @@ class TrueLayerSync:
                             "currency": acc_det.get("currency", "GBP"),
                             "account_type": acc_det.get("account_type", "TRANSACTION")
                         })
-                        # Trigger Prefect OSS 1-year direct transaction ingestion flow
+
+                        # Waterfall: As soon as account is inserted, pull 1-year transactions at once without webhook
                         try:
-                            from services.orchestration.prefect_flows import flow_ingest_account_transactions_1yr
-                            import threading
-                            threading.Thread(
-                                target=flow_ingest_account_transactions_1yr,
-                                args=(acc_id, user_uuid, bank_uuid),
-                                daemon=True
-                            ).start()
-                            logger.info(f"Dispatched Prefect OSS 1-year transaction pull for account {acc_id}")
-                        except Exception as flow_err:
-                            logger.error(f"Failed to dispatch Prefect 1-year ingestion flow: {flow_err}")
+                            now_dt = datetime.utcnow()
+                            from_1yr = (now_dt - timedelta(days=365)).strftime("%Y-%m-%d")
+                            to_today = now_dt.strftime("%Y-%m-%d")
+                            tx_url = f"{self.base_url}/{acc_id}/transactions"
+                            tx_params = {"from": from_1yr, "to": to_today}
+
+                            logger.info(f"Waterfall 1-year transactions pull for account {acc_id} ({from_1yr} to {to_today})")
+                            tx_res = self._make_request(tx_url, access_token, provider_id, params=tx_params)
+                            ingested_count = 0
+                            if tx_res is not None and tx_res.status_code == 200:
+                                tx_data = tx_res.json().get("results", [])
+                                if tx_data:
+                                    self.process_and_store_transactions(session, tx_data, user_uuid, bank_uuid, acc_id)
+                                    ingested_count = len(tx_data)
+                                    logger.info(f"Successfully stored {ingested_count} transactions for account {acc_id}")
+                                    try:
+                                        from config import redis_client
+                                        redis_client.publish(f"budai_events_{user_uuid}", json.dumps({
+                                            "event_type": "TRANSACTIONS_UPDATED",
+                                            "account_id": acc_id,
+                                            "count": ingested_count
+                                        }))
+                                    except Exception as re:
+                                        logger.warning(f"Redis publish notice failed: {re}")
+                            elif tx_res is not None:
+                                logger.warning(f"TrueLayer 1-year pull returned status {tx_res.status_code} for account {acc_id}: {tx_res.text}")
+                            else:
+                                logger.warning(f"No response from TrueLayer for account {acc_id} 1-year pull")
+                        except Exception as pull_err:
+                            logger.error(f"Failed waterfall 1-year transaction pull for account {acc_id}: {pull_err}")
                     
                     log_pipeline_data(
                         logger=logger,
@@ -158,8 +179,14 @@ class TrueLayerSync:
                             "accounts_count": len(initialized_accounts),
                             "accounts": initialized_accounts
                         },
-                        message=f"Initialized {len(initialized_accounts)} accounts for provider {provider_id}"
+                        message=f"Initialized {len(initialized_accounts)} accounts and ingested transactions for provider {provider_id}"
                     )
+                    # Trigger physical delta sync and agent evaluation loop
+                    try:
+                        from services.orchestration.prefect_flows import flow_event_bus_sync
+                        flow_event_bus_sync(user_uuid)
+                    except Exception as sync_err:
+                        logger.error(f"Post-initialization delta sync failed for user {user_uuid}: {sync_err}")
                     try:
                         import asyncio
                         from utils.cache_utils import clear_user_cache
