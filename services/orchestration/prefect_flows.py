@@ -65,3 +65,148 @@ def flow_event_bus_sync(user_uuid: str):
         flow_agent_evaluation_loop(sync_result, user_uuid)
 
 
+@task(retries=3, retry_delay_seconds=2)
+def task_fetch_and_store_transactions_chunk(
+    account_id: str,
+    user_uuid: str,
+    bank_uuid: str,
+    from_date: str,
+    to_date: str,
+    chunk_index: int
+) -> int:
+    """
+    Synchronously fetches and stores a single chronological window of transactions
+    directly from TrueLayer (without relying on inbound webhooks).
+    """
+    from models.database_models import Bank
+    from services.api_integrator.truelayer_sync import TrueLayerSync
+    from cryptography.fernet import Fernet
+    from config import ENCRYPTION_KEY
+
+    cipher_suite = Fernet(ENCRYPTION_KEY)
+    syncer = TrueLayerSync(user_id=user_uuid)
+
+    with SessionLocal() as session:
+        bank = session.query(Bank).filter_by(bank_uuid=bank_uuid, user_uuid=user_uuid).first()
+        if not bank:
+            logger.warning(f"Bank {bank_uuid} not found for account {account_id}")
+            return 0
+
+        enc_token = bank.access_token
+        if isinstance(enc_token, memoryview):
+            enc_token = enc_token.tobytes()
+        access_token = cipher_suite.decrypt(bytes(enc_token)).decode()
+        provider_id = bank.truelayer_provider_id
+
+        url = f"{syncer.base_url}/{account_id}/transactions"
+        params = {"from": from_date, "to": to_date}
+
+        res = syncer._make_request(url, access_token, provider_id, params=params)
+        if res is None:
+            logger.warning(f"No response from TrueLayer for {account_id} chunk {chunk_index} ({from_date} to {to_date})")
+            return 0
+
+        if res.status_code == 200:
+            tx_data = res.json().get("results", [])
+            if tx_data:
+                syncer.process_and_store_transactions(session, tx_data, user_uuid, bank_uuid, account_id)
+                # After the first (most recent 90-day) window completes, alert the frontend immediately
+                if chunk_index == 0:
+                    try:
+                        from config import redis_client
+                        payload = {
+                            "event_type": "TRANSACTIONS_UPDATED",
+                            "account_id": account_id,
+                            "chunk_index": 0,
+                            "count": len(tx_data)
+                        }
+                        redis_client.publish(f"budai_events_{user_uuid}", json.dumps(payload))
+                    except Exception as re:
+                        logger.warning(f"Redis publish notice failed: {re}")
+                return len(tx_data)
+            return 0
+
+        if res.status_code in [400, 422]:
+            logger.info(f"Open Banking boundary or account opening date reached at {from_date} for {account_id}: {res.status_code}")
+            return 0
+
+        logger.warning(f"Unexpected status code {res.status_code} fetching chunk {chunk_index} for {account_id}: {res.text}")
+        return 0
+
+
+@flow(name="Prefect_Ingest_Account_Transactions_1Yr")
+def flow_ingest_account_transactions_1yr(account_id: str, user_uuid: str, bank_uuid: str) -> dict:
+    """
+    Prefect OSS Flow to pull 1 full year (365 days) of transactions directly upon account creation.
+    Splits the 365-day range into 4 x 90-day sliding windows to strictly comply with Open Banking API limits.
+    """
+    from datetime import datetime, timedelta
+    import time
+
+    logger.info(f"Starting Prefect OSS 1-year transaction pull for account {account_id} (user {user_uuid})")
+
+    now = datetime.utcnow()
+    windows = [
+        # (from_date, to_date)
+        ((now - timedelta(days=89)).strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d")),
+        ((now - timedelta(days=179)).strftime("%Y-%m-%d"), (now - timedelta(days=90)).strftime("%Y-%m-%d")),
+        ((now - timedelta(days=269)).strftime("%Y-%m-%d"), (now - timedelta(days=180)).strftime("%Y-%m-%d")),
+        ((now - timedelta(days=365)).strftime("%Y-%m-%d"), (now - timedelta(days=270)).strftime("%Y-%m-%d")),
+    ]
+
+    total_ingested = 0
+    for idx, (from_d, to_d) in enumerate(windows):
+        try:
+            count = task_fetch_and_store_transactions_chunk(
+                account_id=account_id,
+                user_uuid=user_uuid,
+                bank_uuid=bank_uuid,
+                from_date=from_d,
+                to_date=to_d,
+                chunk_index=idx
+            )
+            total_ingested += count
+            if idx < len(windows) - 1:
+                time.sleep(0.3)
+        except Exception as chunk_err:
+            logger.warning(f"Error fetching chunk {idx} ({from_d} to {to_d}) for account {account_id}: {chunk_err}")
+
+    # Post-ingestion reconciliation and delta sync
+    try:
+        sync_result = task_physical_delta_sync(user_uuid)
+
+        from config import redis_client
+        try:
+            redis_client.publish(f"budai_events_{user_uuid}", json.dumps({
+                "event_type": "TRANSACTIONS_UPDATED",
+                "account_id": account_id,
+                "total_ingested": total_ingested
+            }))
+            redis_client.publish(f"budai_events_{user_uuid}", json.dumps({
+                "event_type": "BUCKET_BALANCES_UPDATED",
+                "user_uuid": user_uuid
+            }))
+        except Exception:
+            pass
+
+        if sync_result and sync_result.get("status") in ["synced", "aligned"]:
+            flow_agent_evaluation_loop(sync_result, user_uuid)
+
+    except Exception as post_err:
+        logger.error(f"Post-ingestion delta sync failed for user {user_uuid}: {post_err}")
+
+    log_pipeline_data(
+        logger=logger,
+        pipeline="prefect_ingest_1yr",
+        stage="completed",
+        data={
+            "account_id": account_id,
+            "user_uuid": user_uuid,
+            "total_transactions_ingested": total_ingested
+        },
+        message=f"Completed Prefect OSS 1-year transaction pull for account {account_id}. Ingested {total_ingested} transactions."
+    )
+    return {"status": "success", "account_id": account_id, "total_ingested": total_ingested}
+
+
+

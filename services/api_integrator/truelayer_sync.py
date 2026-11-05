@@ -134,28 +134,18 @@ class TrueLayerSync:
                             "currency": acc_det.get("currency", "GBP"),
                             "account_type": acc_det.get("account_type", "TRANSACTION")
                         })
-                        tx_url = f"{self.base_url}/{acc_id}/transactions"
-                        
-                        target_acc = session.query(Account).filter_by(account_id=acc_id).first()
-                        if target_acc and target_acc.last_synced_at:
-                            from_date = (target_acc.last_synced_at - timedelta(days=3)).strftime('%Y-%m-%d')
-                        else:
-                            from_date = (datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d')
-                            
-                        to_date = datetime.now().strftime('%Y-%m-%d')
-                        import os
-                        webhook_base = os.getenv("WEBHOOK_BASE_URL", "https://api.budai.app").strip("\"'").rstrip("/").strip("\"'").rstrip("/")
-                        webhook_url = f"{webhook_base}/api/webhooks/truelayer?user_uuid={user_uuid}&bank_uuid={bank_uuid}&acc_id={acc_id}"
-                        
-                        tx_params = {
-                            "from": from_date, 
-                            "to": to_date, 
-                            "async": "true", 
-                            "webhook_uri": webhook_url
-                        }
-                        
-                        self._make_request(
-                            tx_url, access_token, provider_id, params=tx_params)
+                        # Trigger Prefect OSS 1-year direct transaction ingestion flow
+                        try:
+                            from services.orchestration.prefect_flows import flow_ingest_account_transactions_1yr
+                            import threading
+                            threading.Thread(
+                                target=flow_ingest_account_transactions_1yr,
+                                args=(acc_id, user_uuid, bank_uuid),
+                                daemon=True
+                            ).start()
+                            logger.info(f"Dispatched Prefect OSS 1-year transaction pull for account {acc_id}")
+                        except Exception as flow_err:
+                            logger.error(f"Failed to dispatch Prefect 1-year ingestion flow: {flow_err}")
                     
                     log_pipeline_data(
                         logger=logger,
@@ -229,13 +219,23 @@ class TrueLayerSync:
                     overlap_start = last_synced - pd.Timedelta(days=3)
                     params["from"] = overlap_start.strftime('%Y-%m-%d')
                 else:
-                    pass
-                import os
-                webhook_base = os.getenv("WEBHOOK_BASE_URL", "https://api.budai.app").strip("\"'").rstrip("/").strip("\"'").rstrip("/")
-                params["async"] = "true"
-                params["webhook_uri"] = f"{webhook_base}/api/webhooks/truelayer?user_uuid={user_uuid}&bank_uuid={b_uuid}&acc_id={acc_id}"
+                    params["from"] = (datetime.utcnow() - timedelta(days=89)).strftime('%Y-%m-%d')
 
+                # Direct synchronous pull without webhooks
                 res = self._make_request(url, access_token, p_id, params=params)
+                if res is not None and res.status_code == 200:
+                    tx_data = res.json().get("results", [])
+                    if tx_data:
+                        with SessionLocal() as s3:
+                            self.process_and_store_transactions(s3, tx_data, user_uuid, b_uuid, acc_id)
+                        from config import redis_client
+                        try:
+                            redis_client.publish(f"budai_events_{user_uuid}", json.dumps({
+                                "event_type": "TRANSACTIONS_UPDATED",
+                                "account_id": acc_id
+                            }))
+                        except Exception:
+                            pass
             except Exception as e:
                 logger.error(json.dumps({"message": f"Failed to fetch API transactions for {acc_id}: {e}", "status_code": 500}))
         except Exception:
