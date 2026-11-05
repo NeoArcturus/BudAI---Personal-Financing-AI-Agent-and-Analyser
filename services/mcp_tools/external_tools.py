@@ -33,10 +33,23 @@ def export_advisory_state(user_uuid: str, chart_type: str, raw_data: dict, ai_an
         str: A success message indicating the export path or an error.
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: export_advisory_state", "status_code": 200}))
-    from services.mcp_bridge import MCPBridge
-    bridge = MCPBridge()
     try:
-        file_path = bridge.write_advisory_file(user_uuid, chart_type, raw_data, ai_analysis)
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        export_dir = os.path.join(base_dir, "agent_cache", "exports")
+        os.makedirs(export_dir, exist_ok=True)
+        filename = f"AdvisoryState_{user_uuid}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        file_path = os.path.join(export_dir, filename)
+
+        payload = {
+            "user_uuid": user_uuid,
+            "chart_type": chart_type,
+            "exported_at": datetime.utcnow().isoformat(),
+            "raw_data": raw_data,
+            "ai_analysis": ai_analysis
+        }
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+
         _res = f"Operational state successfully exported to {file_path}."
         logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
@@ -59,8 +72,6 @@ def export_custom_statement(user_uuid: str, ai_summary: str) -> str:
         str: A success message with the file download path or an error.
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: export_custom_statement", "status_code": 200}))
-    from services.mcp_bridge import MCPBridge
-    bridge = MCPBridge()
     try:
         output = io.StringIO()
         writer = csv.writer(output)
@@ -77,10 +88,17 @@ def export_custom_statement(user_uuid: str, ai_summary: str) -> str:
                 date_str = tx.date.strftime("%Y-%m-%d") if tx.date else ""
                 amount_str = f"£{tx.amount:.2f}" if tx.amount is not None else "£0.00"
                 writer.writerow([date_str, tx.description or "", cat or "Uncategorized", amount_str])
-        filename = f"Statement_{user_uuid}_{datetime.now().strftime('%Y%m%d')}.csv"
-        file_path = os.path.join(bridge.workspace_dir, "exports", filename)
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        _res = bridge.generate_outbound_statement(file_path, output.getvalue())
+        
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        export_dir = os.path.join(base_dir, "agent_cache", "exports")
+        os.makedirs(export_dir, exist_ok=True)
+        filename = f"Statement_{user_uuid}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        file_path = os.path.join(export_dir, filename)
+        
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(output.getvalue())
+
+        _res = f"Custom statement successfully generated at {file_path}."
         logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
@@ -90,22 +108,29 @@ def export_custom_statement(user_uuid: str, ai_summary: str) -> str:
         return _res
 
 @tool(args_schema=MemorySearchInput)
-def search_user_memory(query: str) -> str:
+def search_user_memory(query: str, user_uuid: str = "") -> str:
     """
     Searches the user's persistent knowledge graph for specific facts or preferences.
     
     Args:
         query (str): The search term or question to query against the memory graph.
+        user_uuid (str, optional): The user UUID.
         
     Returns:
         str: The retrieved contextual memory or facts.
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: search_user_memory", "status_code": 200}))
-    from services.mcp_bridge import MCPBridge
-    bridge = MCPBridge()
     try:
-        result = bridge.call_tool_sync("memory", "search_financial_history_semantic", {"query": query})
-        _res = result
+        from services.memory_service import MemoryService
+        mem = MemoryService()
+        results = mem.semantic_search(query, user_uuid=user_uuid, limit=5)
+        
+        if not results or not results.get('documents') or not results['documents'][0]:
+            _res = "No matching historical facts found."
+        else:
+            formatted = [f"- {d}" for d in results['documents'][0] if d]
+            _res = "Retrieved Memory Context:\n" + "\n".join(formatted)
+
         logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:

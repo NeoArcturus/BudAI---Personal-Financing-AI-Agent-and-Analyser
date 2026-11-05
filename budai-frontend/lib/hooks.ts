@@ -237,12 +237,41 @@ export function useUserProfile() {
     queryKey: ["user-profile"],
     queryFn: async () => {
       const res = await apiFetch("/api/auth/me", {}, true);
-      const data = await res.json() as { is_onboarded?: boolean };
+      const data = (await res.json()) as { is_onboarded?: boolean; user_uuid?: string };
       return data;
     },
     refetchInterval: (query) => {
       return query.state.data?.is_onboarded ? false : 2000;
     },
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useBuckets() {
+  return useQuery({
+    queryKey: ["buckets"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/buckets/", {}, true);
+      if (!res.ok) return [];
+      const data = (await res.json()) as { status?: string; buckets?: any[] };
+      return data.buckets || [];
+    },
+    staleTime: 1000 * 60 * 2,
+    refetchInterval: 1000 * 30,
+  });
+}
+
+export function useSubscriptions(userUuid?: string) {
+  return useQuery({
+    queryKey: ["subscriptions", userUuid],
+    queryFn: async () => {
+      if (!userUuid) return [];
+      const res = await apiFetch(`/api/analytics/subscriptions?user_uuid=${userUuid}`, {}, true);
+      if (!res.ok) return [];
+      const data = (await res.json()) as { subscriptions?: any[] };
+      return data.subscriptions || [];
+    },
+    enabled: !!userUuid,
     staleTime: 1000 * 60 * 5,
   });
 }

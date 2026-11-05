@@ -29,18 +29,25 @@ def fetch_balances(state: Annotated[ReconState, InjectedState]) -> str:
         
         return json.dumps({"physical_balance": float(physical), "virtual_balance": float(virtual)})
 
+import uuid
+from models.database_models import SystemAlert
+
 @tool
 def fire_audit_alert(user_uuid: str, delta: float) -> str:
-    """Fires a system alert if the balances do not match."""
+    """Fires a system alert if the physical and virtual balances do not match."""
     with SessionLocal() as session:
-        alert_query = text("""
-            INSERT INTO system_alerts (id, user_id, event_type, message, urgency_level)
-            VALUES (gen_random_uuid(), :uuid, 'SYSTEM_AUDIT_FAILURE', 
-            :msg, 5)
-        """)
-        session.execute(alert_query, {"uuid": user_uuid, "msg": f"Math error detected! Discrepancy of {delta} found."})
+        alert = SystemAlert(
+            id=str(uuid.uuid4()),
+            user_id=user_uuid,
+            title="System Audit Discrepancy",
+            event_type="SYSTEM_AUDIT_FAILURE",
+            message=f"Zero-sum reconciliation discrepancy detected: physical balance deviates from virtual buckets by £{delta:.2f}.",
+            urgency_level=5,
+            status_code="308-500"
+        )
+        session.add(alert)
         session.commit()
-    return "Alert fired successfully."
+    return "Audit failure alert fired successfully."
 
 class DatabaseReconciliationAgent:
     """

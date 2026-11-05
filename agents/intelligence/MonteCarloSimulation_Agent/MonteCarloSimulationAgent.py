@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Annotated, Sequence, TypedDict
+from typing import Annotated, Sequence, TypedDict, Optional
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool, InjectedToolCallId
@@ -16,11 +16,53 @@ class AgentState(TypedDict):
     user_uuid: str
 
 @tool
-def run_monte_carlo(user_uuid: str, iterations: int) -> str:
-    """Runs Monte Carlo simulations for financial stress-testing."""
-    return f"Ran {iterations} Monte Carlo simulations for {user_uuid}." 
+def run_monte_carlo(
+    state: Annotated[AgentState, InjectedState],
+    days: int = 30,
+    stress_test_active: bool = True,
+    macro_environment: str = "Stable"
+) -> str:
+    """Runs Monte Carlo simulations (Bates stochastic jump-diffusion) to stress-test the user's financial runway under adverse economic conditions."""
+    user_uuid = state.get("user_uuid")
+    from services.analytics.forecast_service import compute_balance_forecast
+    from services.api_integrator.account_reader import AccountReader
+    reader = AccountReader(user_uuid)
+    accounts = reader.get_all_accounts(skip_sync=True)
+    if not accounts:
+        return json.dumps({"status": "no_accounts", "message": "No active connected accounts found."})
+    target_account = accounts[0]["account_id"]
+    res = compute_balance_forecast(
+        user_uuid=user_uuid,
+        account_id=target_account,
+        days=days,
+        stress_test_active=stress_test_active,
+        macro_environment=macro_environment
+    )
+    series_data = res.get("series", [{}])[0].get("data", [])
+    if not series_data:
+        return json.dumps({"status": "error", "message": "Simulation yielded no trajectory."})
+    start_bal = series_data[0].get("Expected Balance", 0.0)
+    end_careless = series_data[-1].get("careless_scenario", 0.0)
+    end_expected = series_data[-1].get("Expected Balance", 0.0)
+    end_optimal = series_data[-1].get("optimal_scenario", 0.0)
+    ruin_days = [d["Day"] for d in series_data if d.get("careless_scenario", 0.0) <= 0.0]
+    return json.dumps({
+        "status": "success",
+        "account_id": target_account,
+        "starting_balance": start_bal,
+        "days": days,
+        "stress_test_active": stress_test_active,
+        "macro_environment": macro_environment,
+        "terminal_outcomes": {
+            "expected": end_expected,
+            "careless_95pct_risk": end_careless,
+            "optimal": end_optimal
+        },
+        "critical_ruin_day": ruin_days[0] if ruin_days else None,
+        "upcoming_scheduled_expenses_count": len(res.get("timeline", []))
+    })
 
-tools = []
+tools = [run_monte_carlo]
 
 class MonteCarloSimulationAgent:
     """

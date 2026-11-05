@@ -1,25 +1,27 @@
 import json
 import logging
+from typing import Optional, List, Any
 from langchain_core.tools import tool
 from services.mcp_tools.shared_utils import (
     GenerateFinancialForecastInput, GenerateExpenseForecastInput,
     GenerateHypotheticalScenarioInput, ForecastBudgetImpactInput,
     _cache_chart_data, _parse_accounts
 )
-from agents.core_financial.Forecaster_Agent.ForecasterAgent import ForecasterAgent
+from services.analytics.forecast_service import forecaster_engine
 from services.logger_setup import get_core_logger
 
 logger = get_core_logger(__name__)
 
 
 @tool(args_schema=GenerateHypotheticalScenarioInput)
-def generate_hypothetical_scenario(user_uuid: str, account_ids: list[str], days: int = 30, injections: list = None) -> str:
+def generate_hypothetical_scenario(user_uuid: str, account_ids: Optional[List[str]] = None, account_id: Optional[str] = None, days: int = 30, injections: list = None) -> str:
     """
     Generate a financial forecast based on a hypothetical scenario with multiple custom financial injections.
     
     Args:
         user_uuid (str): The unique identifier of the user.
         account_ids (list[str]): The target account (must be exactly one).
+        account_id (str): The target account identifier.
         days (int): The number of days to forecast.
         injections (list, optional): List of custom injections/events to apply.
         
@@ -29,11 +31,12 @@ def generate_hypothetical_scenario(user_uuid: str, account_ids: list[str], days:
     logger.info(json.dumps({"message": f"Executing MCP Tool: generate_hypothetical_scenario", "status_code": 200}))
     try:
         if injections is None: injections = []
-        accounts, suffix = _parse_accounts(account_ids, user_uuid)
+        target_accounts = account_ids or ([account_id] if account_id else [])
+        accounts, suffix = _parse_accounts(target_accounts, user_uuid)
         if not accounts: return "Error: No accounts found."
         if len(accounts) > 1: return "Please specify exactly one account for scenario analysis."
         
-        agent = ForecasterAgent()
+        agent = forecaster_engine
         payload, timeline_events = [], []
         
         clean_injections = []
@@ -86,13 +89,23 @@ def generate_hypothetical_scenario(user_uuid: str, account_ids: list[str], days:
         return _res
 
 @tool(args_schema=GenerateFinancialForecastInput)
-def generate_financial_forecast(user_uuid: str, account_ids: list[str], days: int = 30, discipline_multiplier: float = 1.0, drift_adjustment: float = 0.0, stress_test_active: bool = False, macro_environment: str = "Stable") -> str:
+def generate_financial_forecast(
+    user_uuid: str, 
+    account_ids: Optional[List[str]] = None, 
+    account_id: Optional[str] = None, 
+    days: int = 30, 
+    discipline_multiplier: float = 1.0, 
+    drift_adjustment: float = 0.0, 
+    stress_test_active: bool = False, 
+    macro_environment: str = "Stable"
+) -> str:
     """
     Generate a high-precision multi-path financial forecast with 1 million paths and deterministic transaction mapping.
     
     Args:
         user_uuid (str): The unique identifier of the user.
-        account_ids (list[str]): The target account (must be exactly one).
+        account_ids (list[str], optional): The target account list.
+        account_id (str, optional): The target account ID.
         days (int): The number of days to forecast.
         discipline_multiplier (float): Factor to scale expenditure discipline.
         drift_adjustment (float): Factor to adjust the geometric drift.
@@ -104,11 +117,12 @@ def generate_financial_forecast(user_uuid: str, account_ids: list[str], days: in
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: generate_financial_forecast", "status_code": 200}))
     try:
-        accounts, suffix = _parse_accounts(account_ids, user_uuid)
+        target_accounts = account_ids or ([account_id] if account_id else [])
+        accounts, suffix = _parse_accounts(target_accounts, user_uuid)
         if not accounts: return "Error: No accounts found."
         if len(accounts) > 1: return "Please specify exactly one account for forecasting. The ForecasterAgent cannot process multiple accounts simultaneously."
         
-        agent = ForecasterAgent()
+        agent = forecaster_engine
         payload, timeline_events = [], []
         for acc in accounts:
             real_balance = agent.fetch_live_balance(acc, user_uuid)
@@ -141,14 +155,19 @@ def generate_financial_forecast(user_uuid: str, account_ids: list[str], days: in
         return _res
 
 @tool(args_schema=GenerateExpenseForecastInput)
-def generate_expense_forecast(user_uuid: str, account_id: str, days: int = 30) -> str:
+def generate_expense_forecast(
+    user_uuid: str, 
+    account_id: Optional[str] = None, 
+    account_ids: Optional[List[str]] = None, 
+    days: int = 30
+) -> str:
     """
     Calculate future expense projections using 1 million paths and historical spending velocity.
     
     Args:
         user_uuid (str): The unique identifier of the user.
-        account_id (str): The specific account ID to analyze.
-        account_ids (list[str]): The target account (must be exactly one).
+        account_id (str, optional): The specific account ID to analyze.
+        account_ids (list[str], optional): The target account list.
         days (int): The number of days to forecast.
         
     Returns:
@@ -156,10 +175,14 @@ def generate_expense_forecast(user_uuid: str, account_id: str, days: int = 30) -
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: generate_expense_forecast", "status_code": 200}))
     try:
-        agent = ForecasterAgent()
-        current_balance = agent.fetch_live_balance(account_id, user_uuid)
-        E0, mu_E = agent.fetch_expense_parameters(account_id, user_uuid, 60)
-        df_temp, timeline = agent.run_expense_simulation(account_id, E0, mu_E, user_uuid, days, 1000000, current_balance=current_balance)
+        target_account = account_id or (account_ids[0] if account_ids else "")
+        if not target_account:
+            return "Error: No target account specified."
+            
+        agent = forecaster_engine
+        current_balance = agent.fetch_live_balance(target_account, user_uuid)
+        E0, mu_E = agent.fetch_expense_parameters(target_account, user_uuid, 60)
+        df_temp, timeline = agent.run_expense_simulation(target_account, E0, mu_E, user_uuid, days, 1000000, current_balance=current_balance)
         
         bank_data = []
         if not df_temp.empty:
@@ -167,7 +190,7 @@ def generate_expense_forecast(user_uuid: str, account_id: str, days: int = 30) -
             for i in range(days + 1):
                 bank_data.append({"Day": f"Day {i}", "Projected Spend": round(float(exp_vals[i]), 2)})
                 
-        payload = [{"bank_name": account_id, "data": bank_data}]
+        payload = [{"bank_name": target_account, "data": bank_data}]
         timeline_events = timeline
         
         cache_id = _cache_chart_data({"series": payload, "timeline": timeline_events})
@@ -193,13 +216,19 @@ def generate_expense_forecast(user_uuid: str, account_id: str, days: int = 30) -
         return _res
 
 @tool(args_schema=ForecastBudgetImpactInput)
-def forecast_budget_impact(user_uuid: str, account_ids: list[str], days: int = 30) -> str:
+def forecast_budget_impact(
+    user_uuid: str, 
+    account_ids: Optional[List[str]] = None, 
+    account_id: Optional[str] = None, 
+    days: int = 30
+) -> str:
     """
     Run a detailed financial forecast incorporating the user's live budget pacing (Spend Velocity & Variance) to clamp the deterministic floor in the Monte Carlo simulation.
     
     Args:
         user_uuid (str): The unique identifier of the user.
-        account_ids (list[str]): The target account (must be exactly one).
+        account_ids (list[str], optional): The target account list.
+        account_id (str, optional): The target account ID.
         days (int): The number of days to forecast.
         
     Returns:
@@ -211,6 +240,7 @@ def forecast_budget_impact(user_uuid: str, account_ids: list[str], days: int = 3
         engine = BudgetEngine(user_uuid)
         budgets = engine.get_variance_for_category(None)
         
+        target_accounts = account_ids or ([account_id] if account_id else [])
         total_overspend = 0.0
         for b in budgets:
             if b['variance'] < 0:
@@ -227,7 +257,7 @@ def forecast_budget_impact(user_uuid: str, account_ids: list[str], days: int = 3
             
         _res = generate_hypothetical_scenario.invoke({
             "user_uuid": user_uuid,
-            "account_ids": account_ids,
+            "account_ids": target_accounts,
             "days": days,
             "injections": injections
         })

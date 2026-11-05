@@ -99,7 +99,7 @@ def generate_proactive_insights_task():
             HumanMessage(content=f"Please analyze spending trends for user {user_id}.")
         ]
         try:
-            agent.app.invoke({"messages": messages, "user_id": user_id}, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_session_id": user_id, "langfuse_tags": ["proactive-insights"]}})
+            agent.app.invoke({"messages": messages, "user_uuid": user_id, "user_id": user_id}, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_session_id": user_id, "langfuse_tags": ["proactive-insights"]}})
         except Exception as e:
             from services.logger_setup import get_core_logger
             logger = get_core_logger(__name__)

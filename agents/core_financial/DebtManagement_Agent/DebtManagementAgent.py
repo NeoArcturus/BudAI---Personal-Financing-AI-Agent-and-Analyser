@@ -18,23 +18,72 @@ class AgentState(TypedDict):
 
 from sqlalchemy import text
 from config import SessionLocal
+from models.database_models import Bucket, BucketType
+from sqlmodel import select
+from services.api_integrator.account_reader import AccountReader
+import pandas as pd
 
 @tool
 def fetch_liabilities(state: Annotated[AgentState, InjectedState]) -> str:
-    """Fetches all liability buckets and their interest rates."""
+    """Fetches all liability buckets and their balances."""
     user_uuid = state.get("user_uuid")
     with SessionLocal() as session:
-        res = session.execute(text("SELECT bucket_name, balance, interest_rate FROM buckets WHERE user_uuid = :u AND bucket_type = 'LIABILITY'"), {"u": user_uuid}).fetchall()
-        if not res: return "No liabilities found."
-        return "\n".join([f"{r[0]}: Balance={r[1]}, APR={r[2]}%" for r in res])
+        liabilities = session.execute(
+            select(Bucket).where(
+                Bucket.user_id == user_uuid,
+                Bucket.type == BucketType.LIABILITY,
+                Bucket.is_active == True
+            )
+        ).scalars().all()
+        if not liabilities:
+            return "No liability buckets found for this user."
+        return "\n".join([f"{b.name} (ID: {b.id}): Balance=£{b.cached_balance:.2f}, Priority Index={b.priority_index}" for b in liabilities])
 
 @tool
 def calculate_payoff_velocity(strategy: str, state: Annotated[AgentState, InjectedState]) -> str:
-    """Calculates time to debt freedom based on strategy (avalanche/snowball)."""
-    return f"Calculated {strategy} velocity based on current liability balances."
+    """Calculates time to debt freedom based on strategy (avalanche/snowball) using empirical monthly surplus."""
+    user_uuid = state.get("user_uuid")
+    with SessionLocal() as session:
+        liabilities = session.execute(
+            select(Bucket).where(
+                Bucket.user_id == user_uuid,
+                Bucket.type == BucketType.LIABILITY,
+                Bucket.is_active == True
+            )
+        ).scalars().all()
+        if not liabilities:
+            return "No liabilities to calculate payoff velocity."
+            
+        total_debt = sum(abs(b.cached_balance) for b in liabilities)
+        
+        # Estimate monthly net cashflow from 90 days of transactions
+        reader = AccountReader(user_id=user_uuid)
+        df = reader.get_transactions(user_uuid=user_uuid)
+        monthly_surplus = 200.0
+        if not df.empty and 'amount' in df.columns:
+            df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0)
+            inflows = df[df['amount'] > 0]['amount'].sum()
+            outflows = df[df['amount'] < 0]['amount'].abs().sum()
+            net_90 = inflows - outflows
+            monthly_surplus = max(float(net_90 / 3.0), 50.0)
+            
+        months = total_debt / monthly_surplus if monthly_surplus > 0 else 999.0
+        
+        # Strategy breakdown
+        # Snowball: lowest balance first
+        # Avalanche: highest priority index / APR first
+        ordered = sorted(liabilities, key=lambda x: abs(x.cached_balance)) if strategy.lower() == "snowball" else sorted(liabilities, key=lambda x: x.priority_index, reverse=True)
+        priority_order = [f"{b.name}: £{abs(b.cached_balance):.2f}" for b in ordered]
+        
+        return json.dumps({
+            "strategy": strategy.upper(),
+            "total_debt": round(total_debt, 2),
+            "estimated_monthly_surplus": round(monthly_surplus, 2),
+            "months_to_debt_free": round(months, 1),
+            "priority_order": priority_order
+        })
 
-
-tools = []
+tools = [fetch_liabilities, calculate_payoff_velocity]
 
 class DebtManagementAgent:
     """

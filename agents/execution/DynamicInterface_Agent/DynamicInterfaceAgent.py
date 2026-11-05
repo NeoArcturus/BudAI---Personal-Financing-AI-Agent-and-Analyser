@@ -16,8 +16,10 @@ class AgentState(TypedDict):
     user_uuid: str
 
 
+import uuid
 from sqlalchemy import text
 from config import SessionLocal
+from models.database_models import SystemAlert
 import json
 
 @tool
@@ -25,19 +27,27 @@ def push_chart_config(chart_json: str, state: Annotated[AgentState, InjectedStat
     """Pushes a JSON chart configuration to the frontend WebSocket."""
     user_uuid = state.get("user_uuid")
     try:
-        # Validate JSON
-        parsed = json.loads(chart_json)
-        # Store in db for frontend to pickup via WebSocket push
+        parsed = json.loads(chart_json) if isinstance(chart_json, str) else chart_json
+        payload_str = json.dumps(parsed) if isinstance(parsed, dict) else str(chart_json)
         with SessionLocal() as session:
-            session.execute(text("INSERT INTO system_alerts (user_uuid, alert_type, message, severity) VALUES (:u, 'DYNAMIC_UI', :m, 'INFO')"), 
-                {"u": user_uuid, "m": chart_json})
+            alert = SystemAlert(
+                id=str(uuid.uuid4()),
+                user_id=user_uuid,
+                title="Dynamic Chart Configuration",
+                event_type="DYNAMIC_UI",
+                message=payload_str,
+                urgency_level=1,
+                status_code="308-200",
+                action_type="RENDER_CHART",
+                action_payload=parsed if isinstance(parsed, dict) else None
+            )
+            session.add(alert)
             session.commit()
         return "Successfully pushed chart configuration to UI."
     except Exception as e:
         return f"Failed to push chart: {e}"
 
-
-tools = []
+tools = [push_chart_config]
 
 class DynamicInterfaceAgent:
     """

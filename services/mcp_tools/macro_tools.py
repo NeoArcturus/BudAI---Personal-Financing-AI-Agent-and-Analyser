@@ -71,7 +71,7 @@ def get_financial_news(query: str = "") -> str:
 
 def perform_currency_conversion(amount: float, from_currency: str, to_currency: str) -> str:
     """
-    Convert an amount from one currency to another using live exchange rates.
+    Convert an amount from one currency to another using live exchange rates and USD reference triangulation.
     
     Args:
         amount (float): The amount of money to convert.
@@ -79,26 +79,18 @@ def perform_currency_conversion(amount: float, from_currency: str, to_currency: 
         to_currency (str): The target currency symbol.
         
     Returns:
-        str: The conversion result along with the applied rate.
+        str: The conversion result along with the applied rate and reference method.
     """
-    ticker_symbol = f"{from_currency}{to_currency}=X"
+    from services.analytics.fx_service import get_cross_fx_rate
     try:
-        ticker = yf.Ticker(ticker_symbol)
-        info = ticker.fast_info
-        rate = info.get('last_price')
-        
-        if rate is None:
-            rate = ticker.info.get('currentPrice') or ticker.info.get('regularMarketPrice')
-            
-        if rate:
-            converted_amount = amount * rate
-            _res = f"CONVERSION_RESULT: {amount} {from_currency} = {converted_amount:.2f} {to_currency} (Rate: {rate:.4f}). [RESULT_VALUE: {converted_amount:.2f}]"
-            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-            return _res
-        else:
-            _res = f"Could not find exchange rate for {ticker_symbol}. Ensure currency codes are valid."
-            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-            return _res
+        data = get_cross_fx_rate(from_currency=from_currency, to_currency=to_currency, amount=amount)
+        rate = data["rate"]
+        converted_amount = data["converted_amount"]
+        triangulated = data["triangulated"]
+        method_str = "via USD Triangulation" if triangulated else "Direct Market Rate"
+        _res = f"CONVERSION_RESULT: {amount} {from_currency.upper()} = {converted_amount:.2f} {to_currency.upper()} (Rate: {rate:.6f}, {method_str}). [RESULT_VALUE: {converted_amount:.2f}]"
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
+        return _res
     except Exception as e:
         logger.error(json.dumps({"message": f"Currency Conversion Error: {e}", "status_code": 500}))
         _res = f"Error performing currency conversion: {str(e)}"

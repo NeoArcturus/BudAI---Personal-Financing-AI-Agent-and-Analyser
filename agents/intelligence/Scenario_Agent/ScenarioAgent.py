@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Annotated, Sequence, TypedDict
+from typing import Annotated, Sequence, TypedDict, Optional
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
@@ -21,10 +21,13 @@ class AgentState(TypedDict):
     user_uuid: str
 
 @tool
-async def generate_hypothetical_scenario_wrapper(account_id: str, days: int, injections: list[dict], state: Annotated[AgentState, InjectedState]) -> str:
+async def generate_hypothetical_scenario_wrapper(state: Annotated[AgentState, InjectedState], account_id: Optional[str] = None, days: int = 30, injections: Optional[list[dict]] = None) -> str:
     """Generates a financial forecast based on a hypothetical scenario."""
     user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("forecaster", "generate_hypothetical_scenario", {"user_uuid": user_uuid, "account_id": account_id, "days": days, "injections": injections})
+    payload = {"user_uuid": user_uuid, "days": days, "injections": injections or []}
+    if account_id:
+        payload["account_id"] = account_id
+    return await bridge.call_tool("forecaster", "generate_hypothetical_scenario", payload)
 
 @tool
 async def perform_currency_conversion_wrapper(amount: float, from_currency: str, to_currency: str, state: Annotated[AgentState, InjectedState]) -> str:

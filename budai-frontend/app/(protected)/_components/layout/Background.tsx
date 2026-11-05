@@ -1,20 +1,18 @@
-"use client";
-
-import React from "react";
 import Image from "next/image";
 
 export default function GlobalBackground() {
   return (
     <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden select-none bg-black">
       <Image
-        src="/bg 3.jpg"
-        alt="Background"
+        src="/background.jpg"
+        alt=""
         fill
-        className="object-cover opacity-100"
         priority
+        quality={90}
+        className="object-cover object-center"
       />
-      <div className="absolute inset-0 bg-black/10 z-10" />
-      <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-[#0c131d]/80 z-20" />
+      {/* Ambient overlay ensuring crisp contrast and institutional readability */}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/60 pointer-events-none" />
     </div>
   );
 }

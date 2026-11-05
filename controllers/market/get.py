@@ -147,3 +147,19 @@ async def get_market_news(current_user: User):
     except Exception as e:
         logger.error(json.dumps({"message": f"Market news failed: {e}", "status_code": 500}))
         raise HTTPException(status_code=500, detail="Failed to fetch news")
+
+
+async def calculate_fx_rate(from_currency: str, to_currency: str, amount: float = 1.0) -> dict:
+    """
+    Calculates live FX conversion rate between two currencies with USD reference triangulation.
+    """
+    from services.analytics.fx_service import get_cross_fx_rate
+    try:
+        res = get_cross_fx_rate(from_currency=from_currency, to_currency=to_currency, amount=amount)
+        return {"status": "success", "data": res}
+    except ValueError as ve:
+        logger.warning(json.dumps({"message": f"FX rate calculation error: {ve}", "status_code": 400}))
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(json.dumps({"message": f"Unexpected FX calculation failure: {e}", "status_code": 500}))
+        raise HTTPException(status_code=500, detail=f"Failed to calculate exchange rate: {str(e)}")

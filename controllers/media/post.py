@@ -4,21 +4,23 @@ import json
 import re
 from datetime import datetime, timedelta
 from sqlalchemy import text
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pydantic import BaseModel
 from models.database_models import User
 from config import SessionLocal
 from services.logger_setup import get_core_logger
 
+from services.analytics.forecast_service import (
+    compute_balance_forecast,
+    compute_expense_forecast
+)
 from services.mcp_tools.forecaster_tools import generate_financial_forecast, generate_expense_forecast
-
-
 from services.mcp_tools.core_query_tools import (
     query_transactions, aggregate_financial_data
 )
 from services.mcp_tools.health_tools import (
     analyze_critical_survival_metrics, analyze_wealth_acceleration_metrics,
-    plot_health_radar, get_financial_health_metrics
+    plot_health_radar, get_financial_health_metrics, _calculate_health_data
 )
 
 logger = get_core_logger(__name__)
@@ -40,27 +42,96 @@ TOOL_MAPPING = {
 
 async def execute_tool(request: MediaExecuteRequest, current_user: User):
     """
-    Executes a specified financial MCP tool (like charting or forecasting) requested by the frontend
-    and returns its output or cached result.
-    
-    Args:
-        request (MediaExecuteRequest): Payload containing the tool name and parameters.
-        current_user (User): The authenticated user making the request.
-        
-    Returns:
-        dict: A standardized payload containing execution metadata and the tool's data/chart output.
-        
-    Raises:
-        HTTPException (404): If the requested tool name is invalid.
-        HTTPException (500): If the tool execution fails.
+    Legacy dispatcher shim for /api/media/execute.
+    Routes core operations directly to modern analytical service layers while
+    maintaining backward compatibility for legacy clients.
     """
     start_time = time.time()
     tool_name = request.tool_name
-    params = request.parameters
+    params = dict(request.parameters)
     user_uuid = current_user.user_uuid
     
     bank_name_or_id = params.get("bank_name_or_id")
+    target_account = bank_name_or_id or params.get("account_id") or (params.get("account_ids") or [""])[0]
     
+    # 1. Fast-path: Direct dispatch for balance forecast
+    if tool_name == "generate_financial_forecast":
+        try:
+            days = int(params.get("days", 30))
+            discipline = float(params.get("discipline_multiplier", 1.0))
+            drift = float(params.get("drift_adjustment", 0.0))
+            stress = bool(params.get("stress_test_active", False))
+            macro = str(params.get("macro_environment", "Stable"))
+            
+            data = compute_balance_forecast(
+                user_uuid=user_uuid,
+                account_id=str(target_account),
+                days=days,
+                discipline_multiplier=discipline,
+                drift_adjustment=drift,
+                stress_test_active=stress,
+                macro_environment=macro
+            )
+            return {
+                "status": "success",
+                "metadata": {
+                    "execution_time_ms": int((time.time() - start_time) * 1000),
+                    "tool_executed": tool_name,
+                    "query_type": "DIRECT_SERVICE_EXECUTION",
+                    "resolved_accounts": [{"bank_name": target_account or "Default"}]
+                },
+                "data": data
+            }
+        except Exception as e:
+            logger.error(json.dumps({"message": f"Direct forecast execution failed: {e}", "status_code": 500}))
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # 2. Fast-path: Direct dispatch for expense forecast
+    if tool_name == "generate_expense_forecast":
+        try:
+            days = int(params.get("days", 30))
+            data = compute_expense_forecast(
+                user_uuid=user_uuid,
+                account_id=str(target_account),
+                days=days
+            )
+            return {
+                "status": "success",
+                "metadata": {
+                    "execution_time_ms": int((time.time() - start_time) * 1000),
+                    "tool_executed": tool_name,
+                    "query_type": "DIRECT_SERVICE_EXECUTION",
+                    "resolved_accounts": [{"bank_name": target_account or "Default"}]
+                },
+                "data": data
+            }
+        except Exception as e:
+            logger.error(json.dumps({"message": f"Direct expense forecast failed: {e}", "status_code": 500}))
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # 3. Fast-path: Direct dispatch for health metrics
+    if tool_name == "get_financial_health_metrics":
+        try:
+            overall, metrics, recommendations = _calculate_health_data(user_uuid)
+            return {
+                "status": "success",
+                "metadata": {
+                    "execution_time_ms": int((time.time() - start_time) * 1000),
+                    "tool_executed": tool_name,
+                    "query_type": "DIRECT_SERVICE_EXECUTION",
+                    "resolved_accounts": [{"bank_name": "All Accounts"}]
+                },
+                "data": json.dumps({
+                    "overall_score": round(overall, 1),
+                    "metrics": metrics,
+                    "recommendations": recommendations[:3]
+                })
+            }
+        except Exception as e:
+            logger.error(json.dumps({"message": f"Direct health metrics failed: {e}", "status_code": 500}))
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # 4. Cached retrieval fallback
     if isinstance(bank_name_or_id, str) and bank_name_or_id.startswith("CACHE_"):
         with SessionLocal() as session:
             row = session.execute(
@@ -69,11 +140,10 @@ async def execute_tool(request: MediaExecuteRequest, current_user: User):
             ).fetchone()
             if row:
                 chart_data = json.loads(row[0])
-                execution_time = int((time.time() - start_time) * 1000)
                 return {
                     "status": "success",
                     "metadata": {
-                        "execution_time_ms": execution_time,
+                        "execution_time_ms": int((time.time() - start_time) * 1000),
                         "tool_executed": tool_name,
                         "query_type": "CACHED_RETRIEVAL",
                         "resolved_accounts": [{"bank_name": "Cached Data"}]
@@ -86,12 +156,12 @@ async def execute_tool(request: MediaExecuteRequest, current_user: User):
         
     try:
         params["user_uuid"] = user_uuid
-        
-        if "account_ids" not in params:
-            if bank_name_or_id:
-                params["account_ids"] = [bank_name_or_id]
-            else:
-                params["account_ids"] = []
+        if target_account:
+            params["account_id"] = str(target_account)
+            params["account_ids"] = [str(target_account)]
+        else:
+            params.setdefault("account_id", "")
+            params.setdefault("account_ids", [])
         
         tool_obj = TOOL_MAPPING[tool_name]
         

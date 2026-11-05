@@ -4,7 +4,7 @@ import os
 import asyncio
 from datetime import datetime, timedelta
 from services.api_integrator.account_reader import AccountReader
-from agents.core_financial.Forecaster_Agent.ForecasterAgent import ForecasterAgent
+from services.analytics.forecast_service import forecaster_engine
 from services.logger_setup import get_core_logger
 from services.mcp_bridge import MCPBridge
 
@@ -47,8 +47,7 @@ class ProfileBuilder:
             net_cash_flow = inflow + outflow
 
             logger.debug(json.dumps({"message": f"Detecting upcoming expenses (Zero DB hit)", "status_code": 100}))
-            forecaster = ForecasterAgent()
-            _, timeline = forecaster.detect_upcoming_expenses(self.user_uuid, df_input=df)
+            _, timeline = forecaster_engine.detect_upcoming_expenses(self.user_uuid, df_input=df)
             upcoming_str = ", ".join(
                 [f"{b['merchant']}: £{abs(b['amount']):.2f} (in {b['day']} days)" for b in timeline])
 

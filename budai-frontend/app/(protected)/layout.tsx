@@ -3,10 +3,10 @@ import { SearchProvider } from "@/app/context/SearchContext";
 import GlobalSearchModal from "@/app/(protected)/_components/layout/SearchModal";
 import GlobalChatButton from "@/app/(protected)/_components/layout/ChatButton";
 import { TopNavbar } from "@/app/(protected)/_components/layout/Navbar";
+import { FloatingBottomNav } from "@/app/(protected)/_components/layout/FloatingBottomNav";
+import GlobalBackground from "@/app/(protected)/_components/layout/Background";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { Account } from "@/types";
-
 
 export default async function ProtectedLayout({
   children,
@@ -77,12 +77,13 @@ export default async function ProtectedLayout({
       initialSessions={initialSessions}
     >
       <SearchProvider>
-        <div className="flex flex-col h-screen w-full bg-transparent font-sans overflow-hidden relative transition-colors duration-500">
-
+        <div className="flex flex-col h-screen w-full bg-transparent text-foreground font-sans overflow-hidden relative transition-colors duration-300">
+          <GlobalBackground />
           <TopNavbar />
           <div className="relative z-10 flex-1 flex w-full h-full overflow-hidden">
             {children}
           </div>
+          <FloatingBottomNav />
         </div>
         <GlobalChatButton />
         <GlobalSearchModal />

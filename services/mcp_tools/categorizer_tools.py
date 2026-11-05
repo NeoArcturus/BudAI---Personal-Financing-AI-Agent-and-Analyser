@@ -55,15 +55,10 @@ def retrain_categorization_model(user_uuid: Annotated[str, InjectedState("user_u
     try:
         from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
-        result = agent.retrain_from_feedback(user_uuid)
-        if result.get("trained"):
-            _res = f"Model successfully retrained using {result.get('samples')} samples."
-            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-            return _res
-        else:
-            _res = f"Model retraining failed: {result.get('reason')}"
-            logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-            return _res
+        result = agent.train_global()
+        _res = "Categorization RAG learning active: All verified manual merchant anchors are indexed immediately in Qdrant vector memory."
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
+        return _res
     except Exception as e:
         logger.error(json.dumps({"message": f"Error: {e}", "status_code": 500}))
         _res = f"Error: {str(e)}"

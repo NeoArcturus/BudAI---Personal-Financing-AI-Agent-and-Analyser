@@ -97,6 +97,7 @@ class ExportAnalyzedStatementInput(BaseModel):
 
 class MemorySearchInput(BaseModel):
     query: str = Field(..., description="Search concept.")
+    user_uuid: Optional[str] = Field(default="", description="The user UUID.")
 
 class MemoryExtractionInput(BaseModel):
     entities: list = Field(..., description="Entity list.")

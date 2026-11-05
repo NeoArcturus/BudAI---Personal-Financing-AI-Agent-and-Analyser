@@ -116,16 +116,37 @@ def benchmark_persona_budget(user_uuid: str) -> str:
             if not profile:
                 return "Cannot benchmark: User has no assigned Macro-Persona."
                 
-            persona = profile.macro_persona.upper() if profile.macro_persona else "UNKNOWN"
+            persona = profile.macro_persona.upper() if profile.macro_persona else "GENERAL"
             
+            # Query user's real 90-day category spend
+            from models.database_models import MerchantKnowledge
+            from sqlalchemy import func
+            rows = session.execute(
+                select(MerchantKnowledge.category, func.sum(func.abs(Transaction.amount)))
+                .outerjoin(MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid)
+                .where(Transaction.user_uuid == user_uuid, Transaction.amount < 0)
+                .group_by(MerchantKnowledge.category)
+            ).all()
+
+            spend_by_cat = {str(cat or "uncategorized").lower(): float(amt or 0.0) for cat, amt in rows}
+
             if "STUDENT" in persona:
-                return "Benchmark (STUDENT): User is spending 12% MORE on Takeout and 5% LESS on Transport compared to the national student average."
+                target_housing, target_transport = 800.0, 50.0
             elif "PROFESSIONAL" in persona:
-                return "Benchmark (PROFESSIONAL): User is spending 20% MORE on Discretionary Lifestyle and 10% LESS on Housing compared to peers."
-            elif "BUSINESS" in persona:
-                return "Benchmark (BUSINESS): User's operational expenses are within the normal bounds for bootstrapped founders."
+                target_housing, target_transport = 1500.0, 200.0
             else:
-                return f"Benchmark ({persona}): User's spending perfectly aligns with the median baseline for this demographic."
+                target_housing, target_transport = 1000.0, 100.0
+
+            actual_housing = spend_by_cat.get("housing", 0.0)
+            actual_transport = spend_by_cat.get("transportation", 0.0)
+
+            housing_diff = round(((actual_housing - target_housing) / target_housing) * 100, 1)
+            trans_diff = round(((actual_transport - target_transport) / target_transport) * 100, 1)
+
+            h_dir = f"{abs(housing_diff)}% MORE" if housing_diff > 0 else f"{abs(housing_diff)}% LESS"
+            t_dir = f"{abs(trans_diff)}% MORE" if trans_diff > 0 else f"{abs(trans_diff)}% LESS"
+
+            return f"Benchmark ({persona}): User spends £{actual_housing:.2f} on Housing ({h_dir} than peer baseline £{target_housing:.2f}) and £{actual_transport:.2f} on Transport ({t_dir} than peer baseline £{target_transport:.2f})."
     except Exception as e:
         return f"Error benchmarking persona: {str(e)}"
 

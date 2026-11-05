@@ -18,42 +18,58 @@ class AgentState(TypedDict):
 
 from sqlalchemy import text
 from config import SessionLocal
+from models.database_models import Bucket
+from sqlmodel import select
 
 @tool
 def fetch_bucket_balances(state: Annotated[AgentState, InjectedState]) -> str:
     """Fetches the current balances of all virtual buckets."""
     user_uuid = state.get("user_uuid")
     with SessionLocal() as session:
-        res = session.execute(text("SELECT bucket_name, bucket_type, balance FROM buckets WHERE user_uuid = :u"), {"u": user_uuid}).fetchall()
-        if not res: return "No buckets found."
-        return "\n".join([f"{r[0]} ({r[1]}): {r[2]}" for r in res])
+        buckets = session.execute(
+            select(Bucket).where(Bucket.user_id == user_uuid, Bucket.is_active == True)
+        ).scalars().all()
+        if not buckets:
+            return "No buckets found for user."
+        return "\n".join([f"{b.name} (Type: {b.type.value if hasattr(b.type, 'value') else b.type}, ID: {b.id}): £{b.cached_balance:.2f}" for b in buckets])
 
 @tool
 def execute_virtual_transfer(source_bucket: str, dest_bucket: str, amount: float, state: Annotated[AgentState, InjectedState]) -> str:
-    """Executes a strict double-entry virtual transfer between buckets."""
+    """Executes a strict double-entry virtual transfer between buckets. Accepts bucket names or IDs."""
     user_uuid = state.get("user_uuid")
+    from services.bucket_service import execute_bucket_transfer as core_transfer
     with SessionLocal() as session:
         try:
-            # Check source balance
-            src = session.execute(text("SELECT bucket_uuid, balance FROM buckets WHERE user_uuid = :u AND bucket_name = :n"), {"u": user_uuid, "n": source_bucket}).fetchone()
-            dst = session.execute(text("SELECT bucket_uuid, balance FROM buckets WHERE user_uuid = :u AND bucket_name = :n"), {"u": user_uuid, "n": dest_bucket}).fetchone()
-            if not src or not dst: return "Invalid bucket names."
-            if src[1] < amount: return f"Insufficient funds in {source_bucket}."
+            buckets = session.execute(
+                select(Bucket).where(Bucket.user_id == user_uuid, Bucket.is_active == True)
+            ).scalars().all()
             
-            # Double entry
-            session.execute(text("UPDATE buckets SET balance = balance - :a WHERE bucket_uuid = :id"), {"a": amount, "id": src[0]})
-            session.execute(text("UPDATE buckets SET balance = balance + :a WHERE bucket_uuid = :id"), {"a": amount, "id": dst[0]})
+            src = next((b for b in buckets if b.id == source_bucket or b.name.lower() == source_bucket.lower()), None)
+            dst = next((b for b in buckets if b.id == dest_bucket or b.name.lower() == dest_bucket.lower()), None)
             
-            session.execute(text("INSERT INTO virtual_transfers (from_bucket_uuid, to_bucket_uuid, amount, user_uuid) VALUES (:f, :t, :a, :u)"), 
-                {"f": src[0], "t": dst[0], "a": amount, "u": user_uuid})
+            if not src or not dst:
+                return f"Invalid bucket names or IDs: source='{source_bucket}', dest='{dest_bucket}'."
+            if src.id == dst.id:
+                return "Source and destination buckets cannot be the same."
+            if amount <= 0:
+                return "Transfer amount must be strictly greater than 0."
+            if src.cached_balance < amount and getattr(src.type, "value", str(src.type)) != "DEFAULT":
+                return f"Insufficient funds in {src.name} (Balance: £{src.cached_balance:.2f}, Requested: £{amount:.2f})."
+                
+            tx = core_transfer(
+                session=session,
+                user_uuid=user_uuid,
+                source_bucket_id=src.id,
+                target_bucket_id=dst.id,
+                amount=amount
+            )
             session.commit()
-            return f"Successfully transferred {amount} from {source_bucket} to {dest_bucket}."
+            return f"Successfully transferred £{amount:.2f} from {src.name} to {dst.name} (Transfer ID: {tx.id})."
         except Exception as e:
             session.rollback()
-            return f"Transfer failed: {e}"
+            return f"Transfer failed: {str(e)}"
 
-
-tools = []
+tools = [fetch_bucket_balances, execute_virtual_transfer]
 
 class BucketTransferAgent:
     """

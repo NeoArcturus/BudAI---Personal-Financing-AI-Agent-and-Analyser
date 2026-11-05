@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -141,3 +142,85 @@ async def get_proactive_insights(current_user: User = Depends(get_current_user))
             })
             
     return {"status": "success", "data": payload}
+
+
+@router.get("/forecast/balance")
+async def get_balance_forecast(
+    account_id: str = Query(..., description="Target Bank Account ID or Bank Name"),
+    days: int = Query(30, ge=1, le=365, description="Forecast horizon in days"),
+    discipline_multiplier: float = Query(1.0, description="Spending discipline multiplier"),
+    drift_adjustment: float = Query(0.0, description="Drift adjustment parameter"),
+    stress_test_active: bool = Query(False, description="Adverse stress test flag"),
+    macro_environment: str = Query("Stable", description="Macroeconomic scenario: 'Stable', 'Inflationary', 'Recession'"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Computes a deterministic multi-path balance forecast directly for widget consumption.
+    Bypasses LLM prompt generation, regex scraping, and ephemeral chart_cache storage.
+    """
+    from services.analytics.forecast_service import compute_balance_forecast
+    try:
+        forecast_result = compute_balance_forecast(
+            user_uuid=current_user.user_uuid,
+            account_id=account_id,
+            days=days,
+            discipline_multiplier=discipline_multiplier,
+            drift_adjustment=drift_adjustment,
+            stress_test_active=stress_test_active,
+            macro_environment=macro_environment
+        )
+        return {"status": "success", "data": forecast_result}
+    except Exception as e:
+        logger.error(json.dumps({"message": f"Balance forecast calculation failed: {e}", "status_code": 500}))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/forecast/expense")
+async def get_expense_forecast(
+    account_id: str = Query(..., description="Target Bank Account ID or Bank Name"),
+    days: int = Query(30, ge=1, le=365, description="Forecast horizon in days"),
+    discipline_multiplier: float = Query(1.0, description="Spending discipline multiplier"),
+    drift_adjustment: float = Query(0.0, description="Drift adjustment parameter"),
+    stress_test_active: bool = Query(False, description="Adverse stress test flag"),
+    macro_environment: str = Query("Stable", description="Macroeconomic scenario: 'Stable', 'Inflationary', 'Recession'"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Computes projected cumulative expense velocities directly for widget consumption.
+    """
+    from services.analytics.forecast_service import compute_expense_forecast
+    try:
+        expense_result = compute_expense_forecast(
+            user_uuid=current_user.user_uuid,
+            account_id=account_id,
+            days=days,
+            discipline_multiplier=discipline_multiplier,
+            drift_adjustment=drift_adjustment,
+            stress_test_active=stress_test_active,
+            macro_environment=macro_environment
+        )
+        return {"status": "success", "data": expense_result}
+    except Exception as e:
+        logger.error(json.dumps({"message": f"Expense forecast calculation failed: {e}", "status_code": 500}))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/health-metrics")
+async def get_financial_health(current_user: User = Depends(get_current_user)):
+    """
+    Retrieves the user's financial health score, radar metrics, and top recommendations.
+    """
+    from services.mcp_tools.health_tools import _calculate_health_data
+    try:
+        overall, metrics, recommendations = _calculate_health_data(current_user.user_uuid)
+        return {
+            "status": "success",
+            "data": {
+                "overall_score": round(overall, 1),
+                "metrics": metrics,
+                "recommendations": recommendations[:3]
+            }
+        }
+    except Exception as e:
+        logger.error(json.dumps({"message": f"Health metrics computation failed: {e}", "status_code": 500}))
+        raise HTTPException(status_code=500, detail=str(e))

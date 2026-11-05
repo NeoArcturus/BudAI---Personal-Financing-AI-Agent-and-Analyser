@@ -16,11 +16,28 @@ class AgentState(TypedDict):
     user_uuid: str
 
 @tool
-def extract_receipt_data(document_id: str) -> str:
+def extract_receipt_data(document_id: str, state: Annotated[AgentState, InjectedState]) -> str:
     """Extracts merchant, amount, and date from a receipt image/PDF."""
-    return f"Extracted data from document {document_id}." 
+    user_uuid = state.get("user_uuid")
+    possible_paths = [
+        f"agent_cache/exports/{document_id}",
+        f"uploads/{document_id}",
+        document_id
+    ]
+    found_path = next((p for p in possible_paths if os.path.exists(p)), None)
+    if not found_path:
+        return json.dumps({
+            "status": "not_found",
+            "message": f"Document {document_id} not found in workspace storage.",
+            "document_id": document_id
+        })
+    return json.dumps({
+        "status": "success",
+        "file_path": found_path,
+        "message": f"Document {document_id} ready for OCR processing."
+    })
 
-tools = []
+tools = [extract_receipt_data]
 
 class DocumentProcessingAgent:
     """

@@ -67,9 +67,21 @@ def analyze_critical_survival_metrics(user_uuid: str) -> str:
         str: Analysis summary of survival metrics and runway.
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: analyze_critical_survival_metrics", "status_code": 200}))
-    _res = "Your survival metrics are stable. You have 45 days of runway."
-    logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-    return _res
+    try:
+        analyzer = FinancialHealthAnalyzer(user_uuid)
+        runway = analyzer.calculate_liquid_runway()
+        absorption = analyzer.calculate_shock_absorption()
+        drag = analyzer.calculate_interest_drag()
+        
+        runway_desc = f"{runway:.1f} days" if runway != float('inf') else "Unlimited (Zero burn)"
+        absorption_desc = f"{absorption:.1f} months" if absorption != float('inf') else "Full reserve"
+        
+        _res = f"Survival Metrics: Liquid runway is {runway_desc}. Emergency shock absorption buffer is {absorption_desc}. Fixed interest drag represents {drag:.1f}% of recurring cash flow."
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
+        return _res
+    except Exception as e:
+        logger.error(json.dumps({"message": f"Survival metrics error: {e}", "status_code": 500}))
+        return f"Error computing survival metrics: {str(e)}"
 
 @tool(args_schema=AnalyzeWealthAccelerationMetricsInput)
 def analyze_wealth_acceleration_metrics(user_uuid: str) -> str:
@@ -83,9 +95,17 @@ def analyze_wealth_acceleration_metrics(user_uuid: str) -> str:
         str: Summary of net worth acceleration trends.
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: analyze_wealth_acceleration_metrics", "status_code": 200}))
-    _res = "Your wealth acceleration is increasing by 4.2% MoM."
-    logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-    return _res
+    try:
+        analyzer = FinancialHealthAnalyzer(user_uuid)
+        velocity = analyzer.calculate_net_worth_velocity()
+        mpc = analyzer.calculate_mpc()
+        
+        _res = f"Wealth Acceleration Metrics: Net worth velocity is £{velocity:.2f}/month. Marginal propensity to consume (MPC) is {mpc:.2f}."
+        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
+        return _res
+    except Exception as e:
+        logger.error(json.dumps({"message": f"Wealth acceleration error: {e}", "status_code": 500}))
+        return f"Error computing wealth acceleration: {str(e)}"
 
 @tool(args_schema=PlotHealthRadarInput)
 def plot_health_radar(user_uuid: str) -> str:

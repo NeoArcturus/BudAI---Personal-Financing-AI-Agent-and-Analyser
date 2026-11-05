@@ -15,12 +15,43 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     user_uuid: str
 
-@tool
-def check_goal_progress(user_uuid: str) -> str:
-    """Calculates progress towards target-date financial goals."""
-    return f"Checked goal progress for {user_uuid}." 
+from config import SessionLocal
+from models.database_models import Bucket, BucketType
+from sqlmodel import select
+from datetime import datetime, timezone
 
-tools = []
+@tool
+def check_goal_progress(state: Annotated[AgentState, InjectedState]) -> str:
+    """Calculates progress towards target-date and accumulating financial goals."""
+    user_uuid = state.get("user_uuid")
+    with SessionLocal() as session:
+        goals = session.execute(
+            select(Bucket).where(
+                Bucket.user_id == user_uuid,
+                Bucket.type.in_([BucketType.TARGET_DATE, BucketType.ACCUMULATING]),
+                Bucket.is_active == True
+            )
+        ).scalars().all()
+        if not goals:
+            return "No target-date or accumulating goal buckets found."
+        
+        now = datetime.now(timezone.utc)
+        results = []
+        for g in goals:
+            target = g.target_amount or 0.0
+            pct = round((g.cached_balance / target) * 100, 1) if target > 0 else 100.0
+            days_left = (g.target_date.replace(tzinfo=timezone.utc) - now).days if g.target_date else None
+            results.append({
+                "goal_name": g.name,
+                "current_savings": round(g.cached_balance, 2),
+                "target_amount": round(target, 2),
+                "progress_pct": pct,
+                "shortfall": max(0.0, round(target - g.cached_balance, 2)),
+                "days_remaining": days_left
+            })
+        return json.dumps(results)
+
+tools = [check_goal_progress]
 
 class GoalTrackingAgent:
     """

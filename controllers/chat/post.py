@@ -37,10 +37,19 @@ async def run_graph_task(task_id: str, state_input: dict):
         config["metadata"] = {"session_id": state_input.get("session_id", "default"), "user_id": str(state_input.get("user_uuid", "system"))}
         config["callbacks"] = [langfuse_handler]
 
-        async with await budai_app.astream_events(state_input, version="v3", config=config) as stream:
-            async for message in stream.messages:
-                async for delta in message.text:
-                    full_response.append(delta)
+        async for event in budai_app.astream_events(state_input, version="v2", config=config):
+            if event.get("event") == "on_chat_model_stream":
+                chunk = event.get("data", {}).get("chunk")
+                if chunk and hasattr(chunk, "content") and chunk.content:
+                    delta = chunk.content
+                    if isinstance(delta, str):
+                        full_response.append(delta)
+                    elif isinstance(delta, list):
+                        for part in delta:
+                            if isinstance(part, str):
+                                full_response.append(part)
+                            elif isinstance(part, dict) and "text" in part:
+                                full_response.append(part["text"])
 
         redis_client.set(f"task:{task_id}", json.dumps({
             "status": "completed",

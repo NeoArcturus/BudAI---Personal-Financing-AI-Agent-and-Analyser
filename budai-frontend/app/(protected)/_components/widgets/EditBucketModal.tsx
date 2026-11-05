@@ -67,13 +67,19 @@ export const EditBucketModal = ({ isOpen, onOpenChange, bucket }: EditBucketModa
         payload.target_date = new Date(`${targetDate.year}-${String(targetDate.month).padStart(2, "0")}-${String(targetDate.day).padStart(2, "0")}`).toISOString();
       }
 
-      const res = await apiFetch("/api/buckets/", {
-        method: "POST",
+      const bucketId = bucket?.id || bucket?.bucket_id || bucket?.bucket_uuid;
+      if (!bucketId) {
+        toast("Missing bucket identifier.", { variant: "danger" } as any);
+        return;
+      }
+
+      const res = await apiFetch(`/api/buckets/${bucketId}`, {
+        method: "PATCH",
         body: payload as any,
       }, true);
 
       if (res.ok) {
-        toast("Bucket created successfully.");
+        toast("Bucket updated successfully.");
         queryClient.invalidateQueries({ queryKey: ["buckets"] });
         setName("");
         setBucketType("TARGET_DATE");

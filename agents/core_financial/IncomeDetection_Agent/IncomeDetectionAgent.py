@@ -15,12 +15,51 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     user_uuid: str
 
-@tool
-def analyze_income_streams(user_uuid: str) -> str:
-    """Analyzes incoming transactions to identify true payroll vs transfers."""
-    return f"Analyzed income streams for {user_uuid}." 
+from services.api_integrator.account_reader import AccountReader
+import pandas as pd
 
-tools = []
+@tool
+def analyze_income_streams(state: Annotated[AgentState, InjectedState]) -> str:
+    """Analyzes incoming transactions to identify true payroll deposits vs ad-hoc transfers."""
+    user_uuid = state.get("user_uuid")
+    reader = AccountReader(user_id=user_uuid)
+    df = reader.get_transactions(user_uuid=user_uuid)
+    if df.empty or 'amount' not in df.columns:
+        return json.dumps({"status": "no_data", "message": "No transaction history available."})
+    
+    df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0)
+    inflows = df[df['amount'] > 0].copy()
+    if inflows.empty:
+        return json.dumps({"status": "no_inflows", "message": "No incoming deposits recorded."})
+    
+    # Group by description
+    grouped = inflows.groupby('description').agg(
+        total_amount=('amount', 'sum'),
+        count=('amount', 'count'),
+        avg_amount=('amount', 'mean')
+    ).reset_index()
+    
+    streams = []
+    for _, row in grouped.iterrows():
+        count = int(row['count'])
+        avg_val = round(float(row['avg_amount']), 2)
+        desc = str(row['description'])
+        is_payroll = count >= 2 and avg_val >= 500.0
+        streams.append({
+            "source": desc,
+            "stream_type": "PAYROLL" if is_payroll else "TRANSFER_OR_OTHER",
+            "frequency_occurrences": count,
+            "average_amount": avg_val,
+            "total_received": round(float(row['total_amount']), 2)
+        })
+        
+    return json.dumps({
+        "status": "success",
+        "total_inflows_recorded": round(float(inflows['amount'].sum()), 2),
+        "income_streams": sorted(streams, key=lambda x: x['total_received'], reverse=True)
+    })
+
+tools = [analyze_income_streams]
 
 class IncomeDetectionAgent:
     """

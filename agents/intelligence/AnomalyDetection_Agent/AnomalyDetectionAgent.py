@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Annotated, Sequence, TypedDict
+from typing import Annotated, Sequence, TypedDict, Optional
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool, InjectedToolCallId
@@ -16,11 +16,47 @@ class AgentState(TypedDict):
     user_uuid: str
 
 @tool
-def scan_for_anomalies(user_uuid: str) -> str:
-    """Scans recent transactions for statistical anomalies."""
-    return f"Scanned for anomalies for {user_uuid}." 
+def scan_for_anomalies(state: Annotated[AgentState, InjectedState], lookback_days: int = 30) -> str:
+    """Scans recent transactions for statistical anomalies, z-score spikes, and flagged semantic outliers."""
+    user_uuid = state.get("user_uuid")
+    from services.mcp_tools.lifestyle_tools import get_semantic_anomalies
+    from services.api_integrator.account_reader import AccountReader
+    import pandas as pd
+    import numpy as np
 
-tools = []
+    semantic_res = get_semantic_anomalies(user_uuid)
+    reader = AccountReader(user_id=user_uuid)
+    df = reader.get_transactions(user_uuid=user_uuid)
+    
+    anomalies = []
+    if not df.empty and 'amount' in df.columns:
+        df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0)
+        expenses = df[df['amount'] < 0].copy()
+        if len(expenses) >= 5:
+            amounts = expenses['amount'].abs()
+            mean = amounts.mean()
+            std = amounts.std()
+            if std > 0:
+                for _, row in expenses.iterrows():
+                    amt = abs(row['amount'])
+                    z = (amt - mean) / std
+                    if z > 2.5 or (amt > 3.0 * mean and amt > 80.0):
+                        anomalies.append({
+                            "date": str(row.get('date', '')),
+                            "description": str(row.get('description', '')),
+                            "amount": float(row['amount']),
+                            "z_score": round(float(z), 2),
+                            "severity": "CRITICAL" if z > 4.0 else "WARNING"
+                        })
+    
+    return json.dumps({
+        "status": "success",
+        "semantic_anomalies": semantic_res,
+        "statistical_outliers": anomalies[:10],
+        "total_statistical_anomalies": len(anomalies)
+    })
+
+tools = [scan_for_anomalies]
 
 class AnomalyDetectionAgent:
     """

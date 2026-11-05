@@ -19,16 +19,10 @@ interface HealthDataResponse {
   metricsData: HealthMetrics | null;
 }
 
-const healthFetcher = async ([_key, localAccountId]: [string, string]): Promise<HealthDataResponse> => {
+const healthFetcher = async ([_key, _accountId]: [string, string]): Promise<HealthDataResponse> => {
   const metricsRes = await apiFetch(
-    "/api/media/execute",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        tool_name: "get_financial_health_metrics",
-        parameters: { user_uuid: "CURRENT_USER" },
-      }),
-    },
+    "/api/widgets/health-metrics",
+    { method: "GET" },
     true,
   );
 
@@ -38,28 +32,37 @@ const healthFetcher = async ([_key, localAccountId]: [string, string]): Promise<
     throw error;
   }
 
-  const metricsResult = await metricsRes.json() as any;
-  let metricsData = null;
-  let radarData = null;
+  const metricsResult = (await metricsRes.json()) as any;
+  let metricsData: HealthMetrics | null = null;
+  let radarData: any[] | null = null;
 
   if (metricsResult && metricsResult.data) {
     try {
-      metricsData = typeof metricsResult.data === "string" ? JSON.parse(metricsResult.data) : metricsResult.data;
-      if (metricsData) {
-        metricsData.overall_score = Number(metricsData.overall_score) || 0;
-        
-        if (Array.isArray(metricsData.recommendations)) {
-          metricsData.recommendations = metricsData.recommendations.map((r: any) => ({
-            ...r,
-            desc: typeof r.desc === "string" ? r.desc.replace(/nan/gi, "0") : r.desc
-          }));
-        }
+      const raw =
+        typeof metricsResult.data === "string"
+          ? JSON.parse(metricsResult.data)
+          : metricsResult.data;
+      if (raw) {
+        metricsData = {
+          overall_score: Number(raw.overall_score) || 0,
+          recommendations: Array.isArray(raw.recommendations)
+            ? raw.recommendations.map((r: any) => ({
+                ...r,
+                desc:
+                  typeof r.desc === "string"
+                    ? r.desc.replace(/nan/gi, "0")
+                    : r.desc,
+              }))
+            : [],
+          metrics: Array.isArray(raw.metrics)
+            ? raw.metrics.map((m: any) => ({
+                ...m,
+                Score: Number(m.Score) || 0,
+              }))
+            : [],
+        };
 
-        if (Array.isArray(metricsData.metrics)) {
-          metricsData.metrics = metricsData.metrics.map((m: any) => ({
-            ...m,
-            Score: Number(m.Score) || 0
-          }));
+        if (metricsData.metrics && metricsData.metrics.length > 0) {
           radarData = [{ bank_name: "Overall Health", data: metricsData.metrics }];
         }
       }
@@ -70,7 +73,7 @@ const healthFetcher = async ([_key, localAccountId]: [string, string]): Promise<
 
   return {
     radarData,
-    metricsData
+    metricsData,
   };
 };
 

@@ -15,12 +15,43 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     user_uuid: str
 
-@tool
-def run_hdbscan_clustering(user_uuid: str) -> str:
-    """Runs HDBSCAN clustering on merchant vectors to find lifestyle shifts."""
-    return f"Ran HDBSCAN clustering for {user_uuid}." 
+from services.mcp_tools.lifestyle_tools import (
+    get_user_lifestyle_profile,
+    get_semantic_anomalies,
+    benchmark_persona_budget,
+    get_lifestyle_trajectory
+)
 
-tools = []
+@tool
+def get_user_lifestyle_profile_wrapper(state: Annotated[AgentState, InjectedState]) -> str:
+    """Retrieves the user's Macro-Persona and top HDBSCAN micro-lifestyles."""
+    user_uuid = state.get("user_uuid")
+    return get_user_lifestyle_profile.invoke({"user_uuid": user_uuid})
+
+@tool
+def get_semantic_anomalies_wrapper(state: Annotated[AgentState, InjectedState]) -> str:
+    """Fetches recent transactions flagged as semantic outliers."""
+    user_uuid = state.get("user_uuid")
+    return get_semantic_anomalies.invoke({"user_uuid": user_uuid})
+
+@tool
+def benchmark_persona_budget_wrapper(state: Annotated[AgentState, InjectedState]) -> str:
+    """Benchmarks the user's category spending velocity against demographic peers."""
+    user_uuid = state.get("user_uuid")
+    return benchmark_persona_budget.invoke({"user_uuid": user_uuid})
+
+@tool
+def get_lifestyle_trajectory_wrapper(state: Annotated[AgentState, InjectedState]) -> str:
+    """Fetches the temporal shift and trajectory across user micro-lifestyle clusters over time."""
+    user_uuid = state.get("user_uuid")
+    return get_lifestyle_trajectory.invoke({"user_uuid": user_uuid})
+
+tools = [
+    get_user_lifestyle_profile_wrapper,
+    get_semantic_anomalies_wrapper,
+    benchmark_persona_budget_wrapper,
+    get_lifestyle_trajectory_wrapper
+]
 
 class LifestyleClusteringAgent:
     """

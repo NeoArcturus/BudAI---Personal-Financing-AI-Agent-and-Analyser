@@ -1,7 +1,7 @@
 import os
 import re
 from datetime import datetime
-from typing import Annotated, Sequence, TypedDict
+from typing import Annotated, Sequence, TypedDict, Optional
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool, InjectedToolCallId
@@ -26,28 +26,40 @@ class AgentState(TypedDict):
     chart_type: str
 
 @tool
-async def generate_expense_forecast_wrapper(account_id: str, days: int, state: Annotated[AgentState, InjectedState]) -> str:
+async def generate_expense_forecast_wrapper(state: Annotated[AgentState, InjectedState], account_id: Optional[str] = None, days: int = 30) -> str:
     """Forecast future expenses for selected accounts."""
     user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("forecaster", "generate_expense_forecast", {"account_id": account_id, "days": days, "user_uuid": user_uuid})
+    payload = {"days": days, "user_uuid": user_uuid}
+    if account_id:
+        payload["account_id"] = account_id
+    return await bridge.call_tool("forecaster", "generate_expense_forecast", payload)
 
 @tool
-async def generate_financial_forecast_wrapper(account_id: str, days: int, discipline_multiplier: float, state: Annotated[AgentState, InjectedState]) -> str:
+async def generate_financial_forecast_wrapper(state: Annotated[AgentState, InjectedState], account_id: Optional[str] = None, days: int = 30, discipline_multiplier: float = 1.0) -> str:
     """Forecast overall financial balance for selected accounts."""
     user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("forecaster", "generate_financial_forecast", {"account_id": account_id, "days": days, "discipline_multiplier": discipline_multiplier, "user_uuid": user_uuid})
+    payload = {"days": days, "discipline_multiplier": discipline_multiplier, "user_uuid": user_uuid}
+    if account_id:
+        payload["account_id"] = account_id
+    return await bridge.call_tool("forecaster", "generate_financial_forecast", payload)
 
 @tool
-async def generate_hypothetical_scenario_wrapper(account_id: str, days: int, injections: list[dict], state: Annotated[AgentState, InjectedState]) -> str:
+async def generate_hypothetical_scenario_wrapper(state: Annotated[AgentState, InjectedState], account_id: Optional[str] = None, days: int = 30, injections: Optional[list[dict]] = None) -> str:
     """Generates a financial forecast based on a hypothetical scenario."""
     user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("forecaster", "generate_hypothetical_scenario", {"user_uuid": user_uuid, "account_id": account_id, "days": days, "injections": injections})
+    payload = {"user_uuid": user_uuid, "days": days, "injections": injections or []}
+    if account_id:
+        payload["account_id"] = account_id
+    return await bridge.call_tool("forecaster", "generate_hypothetical_scenario", payload)
 
 @tool
-async def forecast_budget_impact_wrapper(account_id: str, days: int, state: Annotated[AgentState, InjectedState]) -> str:
+async def forecast_budget_impact_wrapper(state: Annotated[AgentState, InjectedState], account_id: Optional[str] = None, days: int = 30) -> str:
     """Run a detailed financial forecast incorporating the user's live budget pacing (Spend Velocity & Variance)."""
     user_uuid = state.get("user_uuid")
-    return await bridge.call_tool("forecaster", "forecast_budget_impact", {"account_id": account_id, "days": days, "user_uuid": user_uuid})
+    payload = {"days": days, "user_uuid": user_uuid}
+    if account_id:
+        payload["account_id"] = account_id
+    return await bridge.call_tool("forecaster", "forecast_budget_impact", payload)
 
 @tool
 async def get_connected_accounts_wrapper(state: Annotated[AgentState, InjectedState]) -> str:

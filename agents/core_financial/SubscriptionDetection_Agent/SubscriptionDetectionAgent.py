@@ -16,30 +16,47 @@ class AgentState(TypedDict):
     user_uuid: str
 
 
+import uuid
 from sqlalchemy import text
 from config import SessionLocal
+from models.database_models import SystemAlert, Subscription
+from sqlmodel import select
 
 @tool
 def scan_recurring_payments(state: Annotated[AgentState, InjectedState]) -> str:
-    """Scans transaction history for recurring payment patterns."""
+    """Scans transaction history for recurring payment patterns and active subscriptions."""
     user_uuid = state.get("user_uuid")
     with SessionLocal() as session:
-        res = session.execute(text("SELECT merchant_name, amount, frequency FROM subscriptions WHERE user_uuid = :u AND is_active = true"), {"u": user_uuid}).fetchall()
-        if not res: return "No active subscriptions found."
-        return "\n".join([f"{r[0]}: {r[1]} ({r[2]})" for r in res])
+        subs = session.execute(
+            select(Subscription).where(Subscription.user_uuid == user_uuid)
+        ).scalars().all()
+        if not subs:
+            return "No active subscriptions found."
+        lines = []
+        for s in subs:
+            hike_note = " [PRICE HIKE DETECTED]" if s.is_price_hike else ""
+            lines.append(f"{s.merchant_name}: £{s.expected_amount:.2f} ({s.predicted_frequency}) Next: {s.next_expected_date.strftime('%Y-%m-%d')}{hike_note}")
+        return "\n".join(lines)
 
 @tool
 def flag_subscription_hike(merchant: str, increase_amount: float, state: Annotated[AgentState, InjectedState]) -> str:
-    """Flags a subscription price hike for the user."""
+    """Flags a subscription price hike for the user and persists a system alert."""
     user_uuid = state.get("user_uuid")
     with SessionLocal() as session:
-        session.execute(text("INSERT INTO system_alerts (user_uuid, alert_type, message, severity) VALUES (:u, 'SUBSCRIPTION_HIKE', :m, 'WARNING')"), 
-            {"u": user_uuid, "m": f"Subscription hike detected for {merchant}: +{increase_amount}"})
+        alert = SystemAlert(
+            id=str(uuid.uuid4()),
+            user_id=user_uuid,
+            event_type="SUBSCRIPTION_HIKE",
+            title=f"Price Hike: {merchant}",
+            message=f"Subscription price increase detected for {merchant}: +£{increase_amount:.2f}",
+            urgency_level=3,
+            status_code="308-200"
+        )
+        session.add(alert)
         session.commit()
-    return f"Flagged {merchant} hike of {increase_amount}."
+    return f"Flagged {merchant} hike of £{increase_amount:.2f}."
 
-
-tools = []
+tools = [scan_recurring_payments, flag_subscription_hike]
 
 class SubscriptionDetectionAgent:
     """

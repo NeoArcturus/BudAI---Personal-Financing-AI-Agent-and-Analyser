@@ -16,31 +16,50 @@ class AgentState(TypedDict):
     user_uuid: str
 
 
+import uuid
 from sqlalchemy import text
 from config import SessionLocal
+from models.database_models import SystemAlert
+from sqlmodel import select
 
 @tool
 def fetch_pending_alerts(state: Annotated[AgentState, InjectedState]) -> str:
-    """Fetches all unsent system alerts for the user."""
+    """Fetches all unread system alerts for the user."""
     user_uuid = state.get("user_uuid")
     with SessionLocal() as session:
-        res = session.execute(text("SELECT message, severity FROM system_alerts WHERE user_uuid = :u AND is_read = false"), {"u": user_uuid}).fetchall()
-        if not res: return "No pending alerts."
-        return "\n".join([f"[{r[1]}] {r[0]}" for r in res])
+        alerts = session.execute(
+            select(SystemAlert).where(
+                SystemAlert.user_id == user_uuid,
+                SystemAlert.is_read == False
+            ).order_by(SystemAlert.timestamp.desc())
+        ).scalars().all()
+        if not alerts:
+            return "No pending alerts."
+        return "\n".join([f"[Urgency: {a.urgency_level}] {a.title or a.event_type}: {a.message}" for a in alerts])
 
 @tool
 def send_daily_digest(digest_content: str, state: Annotated[AgentState, InjectedState]) -> str:
-    """Sends the batched daily digest notification to the user."""
+    """Sends the batched daily digest notification to the user and marks prior pending alerts as read."""
     user_uuid = state.get("user_uuid")
     with SessionLocal() as session:
-        session.execute(text("UPDATE system_alerts SET is_read = true WHERE user_uuid = :u"), {"u": user_uuid})
-        session.execute(text("INSERT INTO system_alerts (user_uuid, alert_type, message, severity) VALUES (:u, 'DAILY_DIGEST', :m, 'INFO')"), 
-            {"u": user_uuid, "m": digest_content})
+        session.execute(
+            text("UPDATE system_alerts SET is_read = true WHERE user_id = :u AND is_read = false"),
+            {"u": user_uuid}
+        )
+        digest = SystemAlert(
+            id=str(uuid.uuid4()),
+            user_id=user_uuid,
+            title="Daily Financial Digest",
+            event_type="DAILY_DIGEST",
+            message=digest_content,
+            urgency_level=2,
+            status_code="308-200"
+        )
+        session.add(digest)
         session.commit()
     return "Sent daily digest and marked pending alerts as read."
 
-
-tools = []
+tools = [fetch_pending_alerts, send_daily_digest]
 
 class NotificationBatchingAgent:
     """

@@ -186,7 +186,7 @@ export function ConnectionHabitsWidget({ accountId }: { accountId: string }) {
 export function ConnectionBucketWidget({ accountId, type, title, icon }: { accountId: string, type: string, title: string, icon: any }) {
   const { data: buckets = [], isLoading } = useQuery({
     queryKey: ["buckets"],
-    queryFn: () => apiFetch("/api/buckets").then(res => res.json())
+    queryFn: () => apiFetch("/api/buckets/").then(res => res.json())
   });
 
   const filteredBuckets = useMemo(() => {

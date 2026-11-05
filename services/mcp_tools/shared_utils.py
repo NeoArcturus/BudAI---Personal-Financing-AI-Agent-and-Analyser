@@ -3,23 +3,50 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, List
+from typing import Any, List, Optional
 import pandas as pd
 from sqlalchemy import text
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from config import SessionLocal
 from services.logger_setup import get_core_logger
 
 logger = get_core_logger(__name__)
 
+def _reconcile_account_payload(data: Any) -> Any:
+    if isinstance(data, dict):
+        if "arguments" in data and isinstance(data["arguments"], dict):
+            data = data["arguments"]
+
+        raw_target = data.get("account_id") or data.get("bank_name_or_id") or data.get("account_ids")
+        if raw_target is not None:
+            if isinstance(raw_target, (list, tuple, set)):
+                items = [str(x).strip() for x in raw_target if x]
+                first_val = items[0] if items else ""
+                data["account_id"] = first_val
+                data["account_ids"] = items
+            else:
+                s_val = str(raw_target).strip()
+                data["account_id"] = s_val
+                data["account_ids"] = [s_val] if s_val else []
+        else:
+            data.setdefault("account_id", "")
+            data.setdefault("account_ids", [])
+    return data
+
 class GenerateFinancialForecastInput(BaseModel):
     user_uuid: str = Field(default="", description="The user UUID.")
-    account_id: str = Field(..., description="List of accounts.")
+    account_id: Optional[str] = Field(default="", description="Target account ID.")
+    account_ids: Optional[List[str]] = Field(default_factory=list, description="List of target account IDs.")
     days: int = Field(default=30)
     discipline_multiplier: float = Field(default=1.0)
     drift_adjustment: float = Field(default=0.0)
     stress_test_active: bool = Field(default=False)
     macro_environment: str = Field(default="Stable")
+
+    @model_validator(mode="before")
+    @classmethod
+    def reconcile_accounts(cls, data: Any) -> Any:
+        return _reconcile_account_payload(data)
 
 class GetBudgetVarianceInput(BaseModel):
     user_uuid: str = Field(default="", description="The user UUID.")
@@ -27,17 +54,25 @@ class GetBudgetVarianceInput(BaseModel):
 
 class ForecastBudgetImpactInput(BaseModel):
     user_uuid: str = Field(default="", description="The user UUID.")
-    account_id: str = Field(..., description="List of accounts.")
+    account_id: Optional[str] = Field(default="", description="Target account ID.")
+    account_ids: Optional[List[str]] = Field(default_factory=list, description="List of target account IDs.")
     days: int = Field(default=30)
 
-
-
-
+    @model_validator(mode="before")
+    @classmethod
+    def reconcile_accounts(cls, data: Any) -> Any:
+        return _reconcile_account_payload(data)
 
 class GenerateExpenseForecastInput(BaseModel):
     user_uuid: str = Field(default="", description="The user UUID.")
-    account_id: str = Field(...)
+    account_id: Optional[str] = Field(default="", description="Target account ID.")
+    account_ids: Optional[List[str]] = Field(default_factory=list, description="List of target account IDs.")
     days: int = Field(default=30)
+
+    @model_validator(mode="before")
+    @classmethod
+    def reconcile_accounts(cls, data: Any) -> Any:
+        return _reconcile_account_payload(data)
 
 class ScenarioInjection(BaseModel):
     day: int = Field(..., description="The day (from today) the event occurs.")
@@ -47,9 +82,15 @@ class ScenarioInjection(BaseModel):
 
 class GenerateHypotheticalScenarioInput(BaseModel):
     user_uuid: str = Field(default="", description="The user UUID.")
-    account_id: str = Field(..., description="List of account IDs or bank names.")
+    account_id: Optional[str] = Field(default="", description="Target account ID.")
+    account_ids: Optional[List[str]] = Field(default_factory=list, description="List of target account IDs.")
     days: int = Field(default=30, description="Forecast horizon in days.")
-    injections: List[ScenarioInjection] = Field(..., description="List of hypothetical financial events to inject into the forecast.")
+    injections: List[ScenarioInjection] = Field(default_factory=list, description="List of hypothetical financial events to inject into the forecast.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def reconcile_accounts(cls, data: Any) -> Any:
+        return _reconcile_account_payload(data)
 
 class AnalyzeCriticalSurvivalMetricsInput(BaseModel):
     user_uuid: str = Field(default="", description="The user UUID.")
@@ -88,8 +129,18 @@ def _parse_accounts(account_id, user_uuid):
     resolved_names = []
     resolved_ids = []
     
+    targets = []
+    if isinstance(account_id, (list, tuple, set)):
+        for item in account_id:
+            if isinstance(item, (list, tuple, set)):
+                targets.extend([str(x).strip() for x in item if x])
+            elif item:
+                targets.append(str(item).strip())
+    elif account_id:
+        targets.append(str(account_id).strip())
+
     with SessionLocal() as session:
-        if not account_id:
+        if not targets:
             rows = session.execute(text("""
                 SELECT a.account_id, b.bank_name
                 FROM accounts a
@@ -100,8 +151,7 @@ def _parse_accounts(account_id, user_uuid):
                 resolved_ids.append(r[0])
                 resolved_names.append(r[1])
         else:
-            for ident in [account_id]:
-                ident_clean = str(ident).strip()
+            for ident_clean in targets:
                 row = session.execute(text("""
                     SELECT a.account_id, b.bank_name
                     FROM accounts a

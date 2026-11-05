@@ -57,25 +57,50 @@ def create_new_bucket(
 def execute_bucket_transfer(
     session: Session,
     user_uuid: str,
-    source_bucket_id: str,
+    source_bucket_id: Optional[str],
     target_bucket_id: str,
     amount: float
 ):
-    from models.database_models import VirtualTransfer
+    from models.database_models import VirtualTransfer, BucketType
+    
+    if amount <= 0:
+        raise ValueError("Transfer amount must be strictly greater than 0.")
+        
+    # Auto-resolve missing or DEFAULT source bucket
+    if not source_bucket_id or (isinstance(source_bucket_id, str) and source_bucket_id.strip() in ("", "DEFAULT")):
+        default_source = session.query(Bucket).filter_by(
+            user_id=user_uuid, type=BucketType.DEFAULT, is_active=True
+        ).first()
+        if not default_source:
+            raise ValueError("Default spending bucket not found for user.")
+        source_bucket_id = default_source.id
+
+    # Auto-resolve DEFAULT target bucket keyword if passed
+    if isinstance(target_bucket_id, str) and target_bucket_id.strip() == "DEFAULT":
+        default_target = session.query(Bucket).filter_by(
+            user_id=user_uuid, type=BucketType.DEFAULT, is_active=True
+        ).first()
+        if not default_target:
+            raise ValueError("Default spending bucket not found for user.")
+        target_bucket_id = default_target.id
+
     # Verify ownership
     source = session.query(Bucket).filter_by(id=source_bucket_id, user_id=user_uuid).first()
     target = session.query(Bucket).filter_by(id=target_bucket_id, user_id=user_uuid).first()
     
     if not source or not target:
         raise ValueError("Invalid source or target bucket.")
+
+    if source.id == target.id:
+        raise ValueError("Source and destination buckets cannot be identical.")
         
-    if source.cached_balance < amount:
+    if source.cached_balance < amount and getattr(source.type, "value", str(source.type)) != "DEFAULT":
         raise ValueError(f"Insufficient funds. The source bucket only has £{source.cached_balance:.2f} available.")
         
     transfer = VirtualTransfer(
         id=str(uuid.uuid4()),
-        source_bucket_id=source_bucket_id,
-        target_bucket_id=target_bucket_id,
+        source_bucket_id=source.id,
+        target_bucket_id=target.id,
         amount=amount
     )
     session.add(transfer)
