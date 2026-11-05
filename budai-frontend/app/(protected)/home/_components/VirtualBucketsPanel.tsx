@@ -27,10 +27,12 @@ import { TransferMoneyModal } from "@/app/(protected)/_components/widgets/Transf
 
 interface VirtualBucketsPanelProps {
   currency?: string;
+  initialData?: any[];
 }
 
 export const VirtualBucketsPanel = ({
   currency = "GBP",
+  initialData = [],
 }: VirtualBucketsPanelProps) => {
   const { accounts, activeAccountId } = useBudAI();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -75,8 +77,9 @@ export const VirtualBucketsPanel = ({
           };
         };
       }
-      return { buckets: [] };
+      return { buckets: initialData };
     },
+    initialData: initialData.length > 0 ? { buckets: initialData } : undefined,
     refetchInterval: 15000,
   });
 
@@ -406,11 +409,17 @@ export const VirtualBucketsPanel = ({
             const bType = bucket.bucket_type || bucket.type || "DEFAULT";
             const meta = getBucketTypeMeta(bType);
             const Icon = meta.icon;
-            const balance = bucket.cached_balance || 0;
+            const isDefault =
+              bType === "DEFAULT" ||
+              (typeof bucket.name === "string" &&
+                bucket.name.toLowerCase().includes("unallocated"));
+            const rawBalance = bucket.cached_balance || 0;
+            const balance = isDefault
+              ? (rawBalance > 0 ? rawBalance : Math.max(0, diff))
+              : rawBalance;
             const target = bucket.target_amount || 0;
             const progress =
               target > 0 ? Math.min(100, Math.round((balance / target) * 100)) : 0;
-            const isDefault = bType === "DEFAULT";
 
             return (
               <div
@@ -541,7 +550,13 @@ export const VirtualBucketsPanel = ({
       />
       {(() => {
         const defaultBucket =
-          buckets.find((b: any) => b.type === "DEFAULT") || buckets[0];
+          buckets.find(
+            (b: any) =>
+              b.type === "DEFAULT" ||
+              b.bucket_type === "DEFAULT" ||
+              (typeof b.name === "string" &&
+                b.name.toLowerCase().includes("unallocated"))
+          ) || buckets[0];
         const defaultBucketId =
           defaultBucket?.id ||
           defaultBucket?.bucket_id ||
@@ -555,6 +570,7 @@ export const VirtualBucketsPanel = ({
             defaultSourceId={defaultBucketId}
             defaultTargetId={transferTargetId}
             currency={activeAccountCurrency}
+            unassignedBalance={Math.max(0, diff)}
           />
         );
       })()}

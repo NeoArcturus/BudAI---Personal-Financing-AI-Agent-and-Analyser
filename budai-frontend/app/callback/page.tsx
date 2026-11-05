@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, Spinner } from "@heroui/react";
 import { ShieldCheck, AlertTriangle } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, notifyAuthChange } from "@/lib/api";
 
 function CallbackContent() {
   const router = useRouter();
@@ -38,6 +38,7 @@ function CallbackContent() {
         }, true);
 
         if (res.ok) {
+          notifyAuthChange();
           setStatus("success");
           setTimeout(() => {
             router.push("/connections");

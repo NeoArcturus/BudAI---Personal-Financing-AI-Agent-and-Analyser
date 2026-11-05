@@ -123,6 +123,7 @@ const BudAIContext = createContext<BudAIContextType | undefined>(undefined);
 
 export const BudAIProvider = ({
   children,
+  initialAccounts = [],
   initialSessions = [],
 }: {
   children: React.ReactNode;
@@ -161,7 +162,7 @@ export const BudAIProvider = ({
     return () => window.removeEventListener("budai-unauthorized", handleUnauthorized);
   }, [router]);
 
-  const { data: fetchedAccounts = [] } = useAccounts();
+  const { data: fetchedAccounts = initialAccounts } = useAccounts(initialAccounts);
   const { data: serverSessions = [] } = useChatSessions();
 
   useEffect(() => {

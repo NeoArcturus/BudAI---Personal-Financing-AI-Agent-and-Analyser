@@ -34,10 +34,12 @@ interface AlertItem {
 
 interface AutomatedActivityPanelProps {
   currency?: string;
+  initialData?: AlertItem[];
 }
 
 export const AutomatedActivityPanel = ({
   currency = "GBP",
+  initialData = [],
 }: AutomatedActivityPanelProps) => {
   const queryClient = useQueryClient();
   const [safetyCushion, setSafetyCushion] = useState<number>(500);
@@ -89,7 +91,7 @@ export const AutomatedActivityPanel = ({
     }
   };
 
-  const { data: alerts = [], isLoading } = useQuery({
+  const { data: alerts = initialData, isLoading } = useQuery({
     queryKey: ["notifications"],
     queryFn: async () => {
       const res = await apiFetch("/api/notifications?limit=10", {}, true);
@@ -97,9 +99,11 @@ export const AutomatedActivityPanel = ({
         const data = (await res.json()) as AlertItem[];
         return data || [];
       }
-      return [];
+      return initialData;
     },
-    refetchInterval: 15000,
+    initialData: initialData.length > 0 ? initialData : undefined,
+    refetchInterval: 30000,
+    staleTime: 10000,
   });
 
   const handleDismiss = async (id: string) => {

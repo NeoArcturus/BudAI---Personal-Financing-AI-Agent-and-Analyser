@@ -75,7 +75,10 @@ export default function DashboardClient({
         <div className="flex flex-col lg:flex-row items-start gap-6 w-full">
           {/* Left Column (Money Buckets) */}
           <div className="w-full lg:w-[320px] xl:w-[360px] 2xl:w-[400px] shrink-0">
-            <VirtualBucketsPanel currency={activeCurrency} />
+            <VirtualBucketsPanel
+              currency={activeCurrency}
+              initialData={initialBuckets}
+            />
           </div>
 
           {/* Center Column (Financial Analysis & Transactions) - Un-squeezed & expansive */}
@@ -86,7 +89,10 @@ export default function DashboardClient({
 
           {/* Right Column (Activity & Safety Safeguards) */}
           <div className="w-full lg:w-[320px] xl:w-[360px] 2xl:w-[400px] shrink-0">
-            <AutomatedActivityPanel currency={activeCurrency} />
+            <AutomatedActivityPanel
+              currency={activeCurrency}
+              initialData={initialAlerts}
+            />
           </div>
         </div>
       </div>

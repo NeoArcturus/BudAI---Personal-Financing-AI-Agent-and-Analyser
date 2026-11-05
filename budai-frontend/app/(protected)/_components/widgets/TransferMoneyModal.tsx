@@ -14,6 +14,7 @@ interface TransferMoneyModalProps {
   defaultSourceId?: string;
   defaultTargetId?: string;
   currency?: string;
+  unassignedBalance?: number;
 }
 
 export const TransferMoneyModal = ({
@@ -23,6 +24,7 @@ export const TransferMoneyModal = ({
   defaultSourceId,
   defaultTargetId,
   currency = "GBP",
+  unassignedBalance,
 }: TransferMoneyModalProps) => {
   const queryClient = useQueryClient();
   const [sourceId, setSourceId] = useState<string>("");
@@ -36,6 +38,28 @@ export const TransferMoneyModal = ({
     []
   );
 
+  // Compute effective balance for any bucket representation (respecting unallocated funds)
+  const getBucketBalance = React.useCallback(
+    (b: any): number => {
+      if (!b) return 0;
+      const isDefault =
+        b.type === "DEFAULT" ||
+        b.bucket_type === "DEFAULT" ||
+        (typeof b.name === "string" &&
+          b.name.toLowerCase().includes("unallocated"));
+      if (isDefault) {
+        if (typeof b.cached_balance === "number" && b.cached_balance > 0) {
+          return b.cached_balance;
+        }
+        return typeof unassignedBalance === "number"
+          ? Math.max(0, unassignedBalance)
+          : (b.cached_balance || 0);
+      }
+      return b.cached_balance || 0;
+    },
+    [unassignedBalance]
+  );
+
   React.useEffect(() => {
     if (!isOpen) {
       setAmount("");
@@ -44,7 +68,14 @@ export const TransferMoneyModal = ({
 
     if (!buckets || buckets.length === 0) return;
 
-    const defaultBkt = buckets.find((b) => b.type === "DEFAULT") || buckets[0];
+    const defaultBkt =
+      buckets.find(
+        (b) =>
+          b.type === "DEFAULT" ||
+          b.bucket_type === "DEFAULT" ||
+          (typeof b.name === "string" &&
+            b.name.toLowerCase().includes("unallocated"))
+      ) || buckets[0];
     const defaultBktId = getBid(defaultBkt);
 
     // 1. Resolve Target
@@ -86,12 +117,11 @@ export const TransferMoneyModal = ({
     setTargetId(nextTargetId || "");
   }, [isOpen, defaultSourceId, defaultTargetId, buckets, getBid]);
 
-  const sourceBucket = buckets.find(
-    (b) => getBid(b) === sourceId,
-  );
-  const targetBucket = buckets.find(
-    (b) => getBid(b) === targetId,
-  );
+  const sourceBucket = buckets.find((b) => getBid(b) === sourceId);
+  const targetBucket = buckets.find((b) => getBid(b) === targetId);
+
+  const sourceBal = getBucketBalance(sourceBucket);
+  const targetBal = getBucketBalance(targetBucket);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,9 +138,9 @@ export const TransferMoneyModal = ({
       return;
     }
 
-    if (sourceBucket && (sourceBucket.cached_balance || 0) < num) {
+    if (sourceBucket && sourceBal < num) {
       toast(
-        `Insufficient funds in ${sourceBucket.name || "source bucket"}. Available: ${formatCurrency(sourceBucket.cached_balance || 0, currency)}`,
+        `Insufficient funds in ${sourceBucket.name || "source bucket"}. Available: ${formatCurrency(sourceBal, currency)}`,
         { variant: "danger" } as any,
       );
       return;
@@ -183,7 +213,7 @@ export const TransferMoneyModal = ({
                         {sourceBucket?.name || "Select Bucket"}
                       </span>
                       <span className="text-[10px] text-muted-foreground font-mono">
-                        {formatCurrency(sourceBucket?.cached_balance || 0, currency)}
+                        {formatCurrency(sourceBal, currency)}
                       </span>
                     </div>
                     <ChevronDown size={14} className="text-muted-foreground shrink-0" />
@@ -192,6 +222,7 @@ export const TransferMoneyModal = ({
                     <Dropdown.Menu onAction={(key) => setSourceId(String(key))}>
                       {buckets.map((b) => {
                         const bid = b.id || b.bucket_id || b.bucket_uuid;
+                        const bBal = getBucketBalance(b);
                         return (
                           <Dropdown.Item
                             key={bid}
@@ -202,7 +233,7 @@ export const TransferMoneyModal = ({
                             <div className="flex justify-between items-center w-full">
                               <span className="font-medium truncate">{b.name}</span>
                               <span className="text-[10px] text-muted-foreground font-mono ml-2 shrink-0">
-                                {formatCurrency(b.cached_balance || 0, currency)}
+                                {formatCurrency(bBal, currency)}
                               </span>
                             </div>
                           </Dropdown.Item>
@@ -227,7 +258,7 @@ export const TransferMoneyModal = ({
                         {targetBucket?.name || "Select Bucket"}
                       </span>
                       <span className="text-[10px] text-muted-foreground font-mono">
-                        {formatCurrency(targetBucket?.cached_balance || 0, currency)}
+                        {formatCurrency(targetBal, currency)}
                       </span>
                     </div>
                     <ChevronDown size={14} className="text-muted-foreground shrink-0" />
@@ -236,6 +267,7 @@ export const TransferMoneyModal = ({
                     <Dropdown.Menu onAction={(key) => setTargetId(String(key))}>
                       {buckets.map((b) => {
                         const bid = b.id || b.bucket_id || b.bucket_uuid;
+                        const bBal = getBucketBalance(b);
                         return (
                           <Dropdown.Item
                             key={bid}
@@ -246,7 +278,7 @@ export const TransferMoneyModal = ({
                             <div className="flex justify-between items-center w-full">
                               <span className="font-medium truncate">{b.name}</span>
                               <span className="text-[10px] text-muted-foreground font-mono ml-2 shrink-0">
-                                {formatCurrency(b.cached_balance || 0, currency)}
+                                {formatCurrency(bBal, currency)}
                               </span>
                             </div>
                           </Dropdown.Item>
@@ -257,6 +289,12 @@ export const TransferMoneyModal = ({
                 </Dropdown>
               </div>
             </div>
+
+            {buckets.length <= 1 && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500 font-medium">
+                Create a category or goal first to allocate your unassigned funds.
+              </div>
+            )}
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -269,12 +307,12 @@ export const TransferMoneyModal = ({
                     variant="ghost"
                     size="sm"
                     onPress={() => {
-                      const bal = Math.max(0, sourceBucket.cached_balance || 0);
+                      const bal = Math.max(0, sourceBal);
                       setAmount(bal > 0 ? bal.toFixed(2) : "");
                     }}
                     className="h-auto p-0 text-[11px] font-mono text-primary hover:underline hover:bg-transparent"
                   >
-                    Available: {formatCurrency(sourceBucket.cached_balance || 0, currency)}
+                    Available: {formatCurrency(sourceBal, currency)}
                   </Button>
                 )}
               </div>
@@ -305,6 +343,7 @@ export const TransferMoneyModal = ({
               </Button>
               <Button
                 type="submit"
+                isDisabled={buckets.length <= 1 || isSubmitting}
                 isPending={isSubmitting}
                 className="bg-primary text-primary-foreground text-xs font-bold px-5 py-2 rounded-xl shadow-sm hover:opacity-90 transition-opacity"
               >

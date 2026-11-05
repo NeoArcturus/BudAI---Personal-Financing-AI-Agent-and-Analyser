@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, Mail, Loader2, Eye, EyeClosed } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, notifyAuthChange } from "@/lib/api";
 import {
   Button,
   Card,
@@ -41,6 +41,7 @@ export default function LoginPage() {
         }
         localStorage.setItem("budai_user_name", email.split("@")[0] || "User");
         document.cookie = `budai_token=${data.token}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
+        notifyAuthChange();
         router.push("/home");
       } else {
         toast.danger(data.detail || "Invalid credentials.");

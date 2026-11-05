@@ -14,9 +14,9 @@ interface NotificationsModalProps {
 
 export function NotificationsModal({ isOpen, onOpenChange, initialAlerts = [] }: NotificationsModalProps) {
   const { data: alerts } = useQuery({
-    queryKey: ["systemAlerts"],
+    queryKey: ["notifications"],
     queryFn: async () => {
-      const res = await apiFetch("/api/notifications", {}, true);
+      const res = await apiFetch("/api/notifications?limit=20", {}, true);
       if (!res.ok) return initialAlerts;
       const data = await res.json();
       return Array.isArray(data) ? data : initialAlerts;

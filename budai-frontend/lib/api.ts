@@ -31,9 +31,20 @@ export const getApiUrl = (path: string): string => {
   return `${getApiBaseUrl()}${normalized}`;
 };
 
+export const notifyAuthChange = (): void => {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("budai-auth-change"));
+  }
+};
+
 export const getAuthToken = (): string => {
   if (typeof window === "undefined") return "";
-  return localStorage.getItem("budai_token") || "";
+  const local = localStorage.getItem("budai_token");
+  if (local) return local;
+
+  // Secondary document.cookie fallback for synchronous initial loads
+  const match = document.cookie.match(/(?:^|;\s*)budai_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
 };
 
 export const getUserUuid = (): string | null => {
@@ -68,6 +79,7 @@ export const clearSession = (): void => {
     clearAdviceCache();
     document.cookie =
       "budai_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax";
+    notifyAuthChange();
   }
 };
 
@@ -132,6 +144,7 @@ apiClient.interceptors.response.use(
           }
           
           document.cookie = `budai_token=${newToken}; path=/; max-age=604800; samesite=lax`;
+          notifyAuthChange();
         }
         apiClient.defaults.headers.common['Authorization'] = 'Bearer ' + newToken;
         originalRequest.headers['Authorization'] = 'Bearer ' + newToken;
