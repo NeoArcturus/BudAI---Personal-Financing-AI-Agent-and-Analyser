@@ -1,3 +1,4 @@
+from services.workers.worker_utils import resolve_user_uuid
 import re
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolCallId
@@ -19,7 +20,7 @@ async def call_memory_agent(
     state: Annotated[BudAIState, InjectedState]
 ):
     """Refined subagent tool for financial knowledge and history."""
-    user_uuid = state.get("user_uuid", "ea0e5c07-ab5b-4c14-9ad9-95a036b24637")
+    user_uuid = resolve_user_uuid(state)
     agent = MemoryAgent()
     result = await agent.app.ainvoke({"messages": [{"role": "user", "content": query}], "user_uuid": user_uuid})
     raw_output = result["messages"][-1].content

@@ -7,6 +7,9 @@ from services.a2a.bus import get_a2a_bus
 from services.a2a.protocol import A2AMessage, A2AResponse
 from services.a2a.registry import get_agent_registry
 from services.logger_setup import get_core_logger
+from middleware.auth_middleware import get_optional_current_user
+from models.database_models import User
+from services.workers.worker_utils import resolve_user_uuid
 
 logger = get_core_logger(__name__)
 
@@ -17,7 +20,7 @@ class DispatchRequest(BaseModel):
     intent: str = Field(description="Action intent, e.g. 'CLASSIFY_TRANSACTION', 'GET_SUBSISTENCE_BASELINE'")
     message_type: str = Field(default="QUERY", description="QUERY, COMMAND, PROPOSAL")
     payload: Dict[str, Any] = Field(default_factory=dict)
-    user_uuid: str
+    user_uuid: Optional[str] = None
     sender: str = Field(default="APIClient")
 
 class ConsensusRebalanceRequest(BaseModel):
@@ -26,18 +29,18 @@ class ConsensusRebalanceRequest(BaseModel):
     amount: float
     category: str = "General & Discretionary"
     reason: str = "API automated consensus rebalance"
-    user_uuid: str
+    user_uuid: Optional[str] = None
 
 class CascadeRequest(BaseModel):
     deficit: float
-    user_uuid: str
+    user_uuid: Optional[str] = None
     target_default_bucket_id: Optional[str] = None
 
 class RemediateAnomalyRequest(BaseModel):
     amount: float
     category: str = "General & Discretionary"
     merchant: str = "Unknown"
-    user_uuid: str
+    user_uuid: Optional[str] = None
 
 @router.get("/agents")
 async def list_a2a_agents():
@@ -61,17 +64,21 @@ async def list_a2a_agents():
     }
 
 @router.post("/dispatch")
-async def dispatch_a2a_message(req: DispatchRequest):
+async def dispatch_a2a_message(req: DispatchRequest, current_user: Optional[User] = Depends(get_optional_current_user)):
     """
     Dispatches a typed message across the in-process A2A event bus to any specialist agent.
     """
+    target_user_uuid = getattr(current_user, "user_uuid", None) or req.user_uuid
+    if not target_user_uuid:
+        target_user_uuid = resolve_user_uuid({})
+
     bus = get_a2a_bus()
     msg = A2AMessage(
         sender=req.sender,
         recipient=req.recipient,
         message_type=req.message_type, # type: ignore
         intent=req.intent,
-        user_uuid=req.user_uuid,
+        user_uuid=target_user_uuid,
         payload=req.payload
     )
     resp: A2AResponse = await bus.request_reply(msg)
@@ -87,17 +94,21 @@ async def dispatch_a2a_message(req: DispatchRequest):
     }
 
 @router.post("/consensus-rebalance")
-async def execute_consensus_rebalance(req: ConsensusRebalanceRequest):
+async def execute_consensus_rebalance(req: ConsensusRebalanceRequest, current_user: Optional[User] = Depends(get_optional_current_user)):
     """
     Initiates multi-agent quorum consensus rebalance across Health, Forecaster, Market, and Ledger.
     """
+    target_user_uuid = getattr(current_user, "user_uuid", None) or req.user_uuid
+    if not target_user_uuid:
+        target_user_uuid = resolve_user_uuid({})
+
     bus = get_a2a_bus()
     msg = A2AMessage(
         sender="APIClient",
         recipient="BucketTransferAgent",
         message_type="COMMAND",
         intent="CONSENSUS_REBALANCE",
-        user_uuid=req.user_uuid,
+        user_uuid=target_user_uuid,
         payload={
             "source_bucket_id": req.source_bucket_id,
             "target_bucket_id": req.target_bucket_id,
@@ -115,17 +126,21 @@ async def execute_consensus_rebalance(req: ConsensusRebalanceRequest):
     }
 
 @router.post("/cascade")
-async def execute_priority_cascade(req: CascadeRequest):
+async def execute_priority_cascade(req: CascadeRequest, current_user: Optional[User] = Depends(get_optional_current_user)):
     """
     Initiates autonomous priority cascade to safely replenish the DEFAULT bucket.
     """
+    target_user_uuid = getattr(current_user, "user_uuid", None) or req.user_uuid
+    if not target_user_uuid:
+        target_user_uuid = resolve_user_uuid({})
+
     bus = get_a2a_bus()
     msg = A2AMessage(
         sender="APIClient",
         recipient="CascadeWorker",
         message_type="COMMAND",
         intent="EXECUTE_PRIORITY_CASCADE",
-        user_uuid=req.user_uuid,
+        user_uuid=target_user_uuid,
         payload={
             "deficit": req.deficit,
             "target_default_bucket_id": req.target_default_bucket_id
@@ -140,17 +155,21 @@ async def execute_priority_cascade(req: CascadeRequest):
     }
 
 @router.post("/remediate-anomaly")
-async def remediate_spending_anomaly(req: RemediateAnomalyRequest):
+async def remediate_spending_anomaly(req: RemediateAnomalyRequest, current_user: Optional[User] = Depends(get_optional_current_user)):
     """
     Evaluates spending anomaly with peers and triggers autonomous remediation.
     """
+    target_user_uuid = getattr(current_user, "user_uuid", None) or req.user_uuid
+    if not target_user_uuid:
+        target_user_uuid = resolve_user_uuid({})
+
     bus = get_a2a_bus()
     msg = A2AMessage(
         sender="APIClient",
         recipient="AnomalyWorker",
         message_type="COMMAND",
         intent="REMEDIATE_ANOMALY",
-        user_uuid=req.user_uuid,
+        user_uuid=target_user_uuid,
         payload={
             "amount": req.amount,
             "category": req.category,

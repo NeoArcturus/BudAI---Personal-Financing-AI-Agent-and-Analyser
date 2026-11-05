@@ -16,7 +16,8 @@ SIMILARITY_THRESHOLD = 0.88
 def clean_merchant_string(raw_desc: str) -> str:
     """
     Normalizes bank transaction descriptions into clean canonical merchant labels.
-    Removes common transaction prefixes, fee notices, card numbers, and web domains.
+    Removes common transaction prefixes, fee notices, card numbers, currency codes,
+    leading prices, and web domains.
     """
     if not raw_desc or not raw_desc.strip():
         return "Unknown Merchant"
@@ -35,8 +36,15 @@ def clean_merchant_string(raw_desc: str) -> str:
     text_clean = re.sub(r"(?i)^Wise Charges for:?\s*", "Wise Charges ", text_clean)
     # Strip trailing fee notices: "(fee: 0.01 GBP)"
     text_clean = re.sub(r"(?i)\(fee:.*?\)", "", text_clean)
-    # Strip references like "with reference from Papa"
+    # Strip references like "with reference from Papa", "with reference Splitwise 144"
     text_clean = re.sub(r"(?i)with reference.*", "", text_clean)
+    # Strip leading amount + currency patterns (e.g. "14.90 EUR ", "293.43 ", "2,070.00 ", "439.22 INR ")
+    text_clean = re.sub(r"(?i)^(?:\d{1,3}(?:,\d{3})*|\d+)[\.,]\d{2}\s*(?:GBP|EUR|USD|INR)?\s*", "", text_clean)
+    text_clean = re.sub(r"(?i)^(?:\d{1,3}(?:,\d{3})*|\d+)\s*(?:GBP|EUR|USD|INR)\s*", "", text_clean)
+    # Strip leading currencies if left over
+    text_clean = re.sub(r"(?i)^(?:EUR|GBP|USD|INR)\s+", "", text_clean)
+    # Strip phone numbers (e.g. "0161 244 1000")
+    text_clean = re.sub(r"\b0\d{2,4}\s?\d{3,4}\s?\d{3,4}\b", "", text_clean)
     # Strip web URLs like g.co/helppay#, aws.amazon.co
     text_clean = re.sub(r"(?i)[a-z0-9\.\-]+\.(co|com|org|net|io|me)(/[^\s]*)?", "", text_clean)
     # Strip card identifiers: "CARD-4274153354", "*G1ai101m"
@@ -83,9 +91,9 @@ class AnchorService:
         if not transactions:
             return transactions
 
-        # Step 1: Prepare text to embed
+        # Step 1: Prepare text to embed (prioritizing full raw description)
         descriptions = [
-            tx.get("semi_cleaned_description") or tx.get("description") or "Unknown"
+            tx.get("description") or tx.get("semi_cleaned_description") or "Unknown"
             for tx in transactions
         ]
 
@@ -142,12 +150,30 @@ class AnchorService:
             else:
                 # No existing anchor in Qdrant; create new anchor for this entire cluster
                 new_uuid = str(uuid.uuid4())
+                rep_tx = transactions[cl["rep_idx"]]
+                rep_raw = descriptions[cl["rep_idx"]]
+                rep_amt = float(rep_tx.get("amount") or 0.0)
+
+                init_cat = "Uncategorized"
+                init_sub = None
+                init_tags = []
+
+                if re.search(r"(?i)^(Sent money to|Received money from|Transfer to|Transfer from|Splitwise)", rep_raw):
+                    if rep_amt >= 0:
+                        init_cat = "Income"
+                        init_sub = "Transfers & Gifts"
+                        init_tags = ["#income", "#transfers"]
+                    else:
+                        init_cat = "Transfers & Payments"
+                        init_sub = "Peer-to-Peer"
+                        init_tags = ["#transfers", "#p2p"]
+
                 new_anchor = {
                     "knowledge_uuid": new_uuid,
                     "clean_merchant_name": clean_name,
-                    "category": "Uncategorized",
-                    "sub_category": None,
-                    "tags": [],
+                    "category": init_cat,
+                    "sub_category": init_sub,
+                    "tags": init_tags,
                     "vector": rep_vec,
                     "is_human_verified": False
                 }

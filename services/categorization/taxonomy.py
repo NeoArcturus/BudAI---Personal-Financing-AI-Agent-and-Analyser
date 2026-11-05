@@ -262,7 +262,7 @@ def enrich_transaction_taxonomy(
     sub_category: Optional[str] = None,
     description: str = "",
     existing_tags: Optional[List[str]] = None
-) -> Tuple[str, str, List[str], Optional[str]]:
+) -> Tuple[str, Optional[str], List[str], Optional[str]]:
     """
     Enriches a transaction with canonical classification, sub-category, 
     and ONS macro tags.
@@ -270,29 +270,33 @@ def enrich_transaction_taxonomy(
     Returns:
         (canonical_category, canonical_sub_category, enriched_tags_list, ons_code)
     """
-    # 1. Normalize Category
-    cat_match = category if category in STANDARD_CATEGORIES else "Shopping & Retail"
-
-    # 2. Match or default sub-category
-    sub_map = TAXONOMY_MAP.get(cat_match, {})
-    sub_cat_match = sub_category if sub_category in sub_map else (list(sub_map.keys())[0] if sub_map else "General")
-
-    # 3. Build Tag Set
     tags_set: Set[str] = set(existing_tags or [])
 
-    spec = sub_map.get(sub_cat_match, {})
-    default_tags = spec.get("tags", [])
-    ons_code = spec.get("ons_code")
+    # If category is empty or not in standard canonical categories, do NOT force Shopping & Retail
+    if not category or category not in STANDARD_CATEGORIES:
+        return "Uncategorized", None, sorted(list(tags_set)), None
 
-    for t in default_tags:
-        tags_set.add(t)
+    cat_match = category
 
-    # 4. Check for granular staple keyword matches in description
-    staple_keywords = spec.get("staple_keywords", {})
-    desc_lower = (description or "").lower()
-    for kw, series_id in staple_keywords.items():
-        if kw in desc_lower:
-            tags_set.add(f"#staple:{kw}")
-            tags_set.add(f"#ons:{series_id.lower()}")
+    # Match or default sub-category within the valid category map
+    sub_map = TAXONOMY_MAP.get(cat_match, {})
+    sub_cat_match = sub_category if (sub_category and sub_category in sub_map) else (list(sub_map.keys())[0] if sub_map else None)
+
+    ons_code = None
+    if sub_cat_match and sub_cat_match in sub_map:
+        spec = sub_map[sub_cat_match]
+        default_tags = spec.get("tags", [])
+        ons_code = spec.get("ons_code")
+
+        for t in default_tags:
+            tags_set.add(t)
+
+        # Check for granular staple keyword matches in description
+        staple_keywords = spec.get("staple_keywords", {})
+        desc_lower = (description or "").lower()
+        for kw, series_id in staple_keywords.items():
+            if kw in desc_lower:
+                tags_set.add(f"#staple:{kw}")
+                tags_set.add(f"#ons:{series_id.lower()}")
 
     return cat_match, sub_cat_match, sorted(list(tags_set)), ons_code

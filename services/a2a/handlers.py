@@ -158,6 +158,7 @@ async def handle_health_agent(msg: A2AMessage) -> A2AResponse:
                 "runway_months": runway_months,
                 "liquidity_status": liquidity_status,
                 "total_liquid_cash": total_liquid,
+                "monthly_burn": monthly_burn,
                 "monthly_burn_rate": monthly_burn,
                 "subsistence_floor_used": subsistence_floor_used,
                 "default_balance": default_balance,
@@ -295,8 +296,9 @@ async def handle_forecaster_agent(msg: A2AMessage) -> A2AResponse:
         post_balance = current_balance - deduction
         projected_after = post_balance + (daily_velocity * horizon)
         
-        # Safe if post balance >= 0 and projected doesn't collapse
-        is_safe = (post_balance >= 0.0) and (projected_after >= -50.0)
+        # Safe if post balance >= buffer floor (£800) and projection remains solvent
+        safety_floor = 800.0
+        is_safe = (post_balance >= safety_floor) and (projected_after >= safety_floor)
         shortfall_prob = 0.85 if not is_safe else 0.05
 
         return A2AResponse(
@@ -447,14 +449,21 @@ async def handle_categorizer_agent(msg: A2AMessage) -> A2AResponse:
             )
 
         # Step 2: Classify and persist the batch
+        from services.categorization.classifier import classify_merchant
         classified_records = []
         with SessionLocal() as session:
             for m in merchants:
                 c_name = m.get("clean_merchant_name") or "Unknown"
                 mk_uuid = m.get("merchant_knowledge_uuid")
+                tot_amt = float(m.get("total_amount", 0.0))
+
+                # Step 2a: Run genuine classifier (no blind clothing default)
+                raw_cat, raw_sub = classify_merchant(merchant_name=c_name, amount=tot_amt)
+
+                # Step 2b: Enrich with canonical ONS macros and tags
                 cat, sub_cat, tags, ons = enrich_transaction_taxonomy(
-                    category="",
-                    sub_category="",
+                    category=raw_cat,
+                    sub_category=raw_sub,
                     description=c_name
                 )
 
@@ -470,6 +479,17 @@ async def handle_categorizer_agent(msg: A2AMessage) -> A2AResponse:
                         SET sub_category = :sub, tags = :tags
                         WHERE merchant_knowledge_uuid = :uuid
                     """), {"sub": sub_cat, "tags": json.dumps(tags), "uuid": mk_uuid})
+
+                    try:
+                        from services.qdrant_service import get_qdrant_service
+                        get_qdrant_service().update_merchant_payload(
+                            knowledge_uuid=mk_uuid,
+                            category=cat,
+                            sub_category=sub_cat,
+                            tags=tags
+                        )
+                    except Exception:
+                        pass
 
                 classified_records.append({
                     "merchant": c_name,
@@ -855,7 +875,7 @@ async def handle_scenario_agent(msg: A2AMessage) -> A2AResponse:
         )
         health_resp = await bus.request_reply(health_msg)
         total_liquid = float(health_resp.payload.get("total_liquid_cash", 0.0))
-        monthly_burn = float(health_resp.payload.get("monthly_burn_rate", 1200.0))
+        monthly_burn = float(health_resp.payload.get("monthly_burn") or health_resp.payload.get("monthly_burn_rate") or 0.0)
 
         # Step 2: Query AnalyserAgent for net cashflow surplus
         surplus_msg = A2AMessage(

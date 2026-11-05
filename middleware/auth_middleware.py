@@ -1,4 +1,5 @@
 import uuid
+from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -13,6 +14,15 @@ from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
+
+async def get_optional_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security), db: Session = Depends(get_db)) -> Optional[User]:
+    if not credentials:
+        return None
+    try:
+        return await get_current_user(credentials, db)
+    except Exception:
+        return None
 
 jwk_client = PyJWKClient(NEON_AUTH_JWKS_URL) if NEON_AUTH_JWKS_URL else None
 

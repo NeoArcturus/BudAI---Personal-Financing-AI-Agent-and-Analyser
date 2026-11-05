@@ -1,3 +1,4 @@
+from services.workers.worker_utils import resolve_user_uuid
 import os
 import re
 from typing import Annotated
@@ -20,7 +21,7 @@ async def call_scenario_agent(
     state: Annotated[BudAIState, InjectedState]
 ):
     """Refined subagent tool for Life Event Scenario Planning."""
-    user_uuid = state.get("user_uuid", "ea0e5c07-ab5b-4c14-9ad9-95a036b24637")
+    user_uuid = resolve_user_uuid(state)
     from services.profile_builder import ProfileBuilder
     profile_builder = ProfileBuilder(user_uuid)
     mrfp = await profile_builder.build_profile()

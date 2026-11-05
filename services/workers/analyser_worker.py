@@ -1,3 +1,4 @@
+from services.workers.worker_utils import resolve_user_uuid
 import re
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolCallId
@@ -19,7 +20,7 @@ async def call_analyser_agent(
 ):
     """Delegate to the Analyser Agent."""
     try:
-        user_uuid = state.get("user_uuid", "ea0e5c07-ab5b-4c14-9ad9-95a036b24637")
+        user_uuid = resolve_user_uuid(state)
         
         from agents.core_financial.Analyser_Agent.AnalyserAgent import AnalyserAgent
         agent = AnalyserAgent()

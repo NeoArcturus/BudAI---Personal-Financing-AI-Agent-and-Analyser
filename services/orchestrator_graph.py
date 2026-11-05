@@ -44,14 +44,16 @@ from typing import Annotated
 def get_connected_accounts_orchestrator(state: Annotated[BudAIState, InjectedState]) -> str:
     """Use this tool to fetch the user's connected account details (like account IDs) from the database."""
     from services.mcp_tools.account_tools import get_connected_accounts
-    user_uuid = state.get("user_uuid", "ea0e5c07-ab5b-4c14-9ad9-95a036b24637")
+    from services.workers.worker_utils import resolve_user_uuid
+    user_uuid = resolve_user_uuid(state)
     return get_connected_accounts.invoke({"user_uuid": user_uuid})
 
 @tool
 def get_liability_horizon_orchestrator(state: Annotated[BudAIState, InjectedState]) -> str:
     """Use this tool to fetch the user's Liability Horizon (Upcoming Direct Debits, Standing Orders, and Pending Transactions) to execute Priority Waterfall Sweeps."""
     from services.mcp_tools.core_query_tools import get_liability_horizon
-    user_uuid = state.get("user_uuid", "ea0e5c07-ab5b-4c14-9ad9-95a036b24637")
+    from services.workers.worker_utils import resolve_user_uuid
+    user_uuid = resolve_user_uuid(state)
     return get_liability_horizon.invoke({"user_uuid": user_uuid})
 
 @tool
