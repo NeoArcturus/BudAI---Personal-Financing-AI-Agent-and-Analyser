@@ -99,6 +99,7 @@ from routes.bucket_routes import router as bucket_router
 from routes.websocket_routes import router as websocket_router
 from routes.neon_routes import router as neon_router
 from routes.notification_routes import router as notification_router
+from routes.a2a_routes import router as a2a_router
 
 app.include_router(auth_router)
 app.include_router(callback_router)
@@ -119,6 +120,7 @@ app.include_router(bucket_router)
 app.include_router(websocket_router)
 app.include_router(neon_router)
 app.include_router(notification_router)
+app.include_router(a2a_router)
 
 
 @app.get("/")

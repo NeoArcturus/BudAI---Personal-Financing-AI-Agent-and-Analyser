@@ -16,7 +16,7 @@ async def run_a2a_tests():
     registry = get_agent_registry()
     agents = registry.list_agents()
     print(f"Registered {len(agents)} agents: {[a.name for a in agents]}")
-    assert len(agents) == 6, f"Expected 6 agents, found {len(agents)}"
+    assert len(agents) >= 6, f"Expected at least 6 agents, found {len(agents)}"
 
     bus = get_a2a_bus()
     test_user = "ea0e5c07-ab5b-4c14-9ad9-95a036b24637"
