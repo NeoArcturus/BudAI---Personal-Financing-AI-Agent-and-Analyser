@@ -4,7 +4,7 @@ import time
 import hashlib
 import pandas as pd
 from typing import Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from cryptography.fernet import Fernet
 from services.api_integrator.access_token_generator import AccessTokenGenerator
 from config import SessionLocal, TRUELAYER_BASE_URL, ENCRYPTION_KEY
@@ -246,8 +246,11 @@ class TrueLayerSync:
                 except:
                     pass
             
-            if not is_deep_sync and last_synced and (datetime.utcnow() - last_synced).total_seconds() < 3600:
-                return
+            if not is_deep_sync and last_synced:
+                now_utc = datetime.now(timezone.utc)
+                last_synced_utc = last_synced if last_synced.tzinfo is not None else last_synced.replace(tzinfo=timezone.utc)
+                if (now_utc - last_synced_utc).total_seconds() < 3600:
+                    return
                 
             try:
                 access_token = self.cipher_suite.decrypt(bytes(enc_token)).decode()

@@ -25,7 +25,6 @@ async def search_transactions_route(q: str = Query(...), current_user: User = De
 @cache(expire=300, namespace="transactions", key_builder=user_cache_key_builder)
 async def get_transactions_route(
     account_id: str,
-    background_tasks: BackgroundTasks,
     from_date: str = Query(None, alias="from"),
     to_date: str = Query(None, alias="to"),
     current_user: User = Depends(get_current_user)
@@ -42,16 +41,6 @@ async def get_transactions_route(
             }
         )
 
-    from services.api_integrator.truelayer_sync import TrueLayerSync
-    sync_service = TrueLayerSync(user_id=current_user.user_uuid)
-    # Background task to sync with TrueLayer
-    background_tasks.add_task(
-        sync_service.trigger_sync,
-        account_id=account_id,
-        user_uuid=current_user.user_uuid,
-        from_date=from_date,
-        to_date=to_date
-    )
     return await fetch_transactions(current_user.user_uuid, account_id, from_date, to_date)
 
 @router.post("/sync")

@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy import text
 from config import SessionLocal
-from services.embedding_service import EmbeddingService
+from services.embedding_service import get_embedding_service
 from services.qdrant_service import get_qdrant_service
 from services.logger_setup import get_core_logger
 
@@ -74,7 +74,7 @@ def cosine_similarity(v1: List[float], v2: List[float]) -> float:
 
 class AnchorService:
     def __init__(self):
-        self.embedding_service = EmbeddingService()
+        self.embedding_service = get_embedding_service()
         self.qdrant_service = get_qdrant_service()
 
     def process_and_anchor_batch(
