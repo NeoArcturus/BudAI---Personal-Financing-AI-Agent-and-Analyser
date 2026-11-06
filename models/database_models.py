@@ -59,6 +59,7 @@ class Account(SQLModel, table=True):
     account_type: Optional[str] = None
     display_name: Optional[str] = None
     last_synced_at: Optional[datetime] = None
+    sync_status: Optional[str] = Field(default="READY")
     
     user: Optional["User"] = Relationship(back_populates="accounts")
     bank: Optional["Bank"] = Relationship(back_populates="accounts")

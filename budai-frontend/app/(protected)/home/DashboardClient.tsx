@@ -25,6 +25,7 @@ interface DashboardClientProps {
   widgetsMap?: Record<string, React.ReactNode>;
   initialBuckets?: any[];
   initialAlerts?: any[];
+  initialAccounts?: any[];
 }
 
 export default function DashboardClient({
@@ -32,6 +33,7 @@ export default function DashboardClient({
   widgetsMap = {},
   initialBuckets = [],
   initialAlerts = [],
+  initialAccounts = [],
 }: DashboardClientProps) {
   const { userName, accounts, activeAccountId } = useBudAI();
   const router = useRouter();

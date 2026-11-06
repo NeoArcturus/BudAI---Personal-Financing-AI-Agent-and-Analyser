@@ -38,19 +38,37 @@ export const RecentTransactionsCard = ({
   const targetAccountId = activeAccount?.account_id || "";
   const activeCurrency = activeAccount?.currency || currency;
 
-  const { data: transactions = [], isLoading, refetch } = useTransactions(
+  const { sixMonthsAgoStr, todayStr } = useMemo(() => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 180);
+    return {
+      sixMonthsAgoStr: start.toISOString().split("T")[0],
+      todayStr: end.toISOString().split("T")[0],
+    };
+  }, []);
+
+  const { data: allTransactions = [], isLoading, refetch } = useTransactions(
     targetAccountId,
-    undefined,
-    undefined,
-    undefined,
+    sixMonthsAgoStr,
+    todayStr,
   );
 
+  const isSyncingActive = useMemo(() => {
+    if (!activeAccount) return false;
+    if (activeAccount.sync_status === "SYNCING") return true;
+    if (!activeAccount.last_synced_at) return true;
+
+    const syncAgeMs = Date.now() - new Date(activeAccount.last_synced_at).getTime();
+    return syncAgeMs < 90_000 && activeAccount.sync_status !== "READY";
+  }, [activeAccount]);
+
   const filteredTransactions = useMemo(() => {
-    if (!transactions) return [];
-    if (!searchQuery.trim()) return transactions.slice(0, 8);
+    if (!allTransactions) return [];
+    if (!searchQuery.trim()) return allTransactions.slice(0, 8);
 
     const q = searchQuery.toLowerCase();
-    return transactions
+    return allTransactions
       .filter((t) => {
         const desc = (t.description || t.merchant_name || "").toLowerCase();
         const cat = (t.category || "").toLowerCase();
@@ -58,7 +76,7 @@ export const RecentTransactionsCard = ({
         return desc.includes(q) || cat.includes(q) || amt.includes(q);
       })
       .slice(0, 8);
-  }, [transactions, searchQuery]);
+  }, [allTransactions, searchQuery]);
 
   const handleSyncAccount = async () => {
     setIsSyncing(true);
@@ -142,30 +160,42 @@ export const RecentTransactionsCard = ({
             ))}
           </div>
         ) : filteredTransactions.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center rounded-xl border border-dashed border-white/15 bg-white/30 dark:bg-neutral-800/30 gap-2.5 my-auto">
-            <Receipt size={28} className="text-muted-foreground/60" />
-            <p className="text-sm font-semibold text-foreground">
-              {searchQuery
-                ? "No transactions match your search"
-                : "No transactions recorded yet"}
-            </p>
-            <p className="text-xs text-muted-foreground max-w-sm">
-              {searchQuery
-                ? "Try searching for a different merchant or category name."
-                : "Connect your bank account or trigger a sync to pull verified transactions."}
-            </p>
-            {!searchQuery && (
-              <Button
-                size="sm"
-                onPress={handleSyncAccount}
-                isPending={isSyncing}
-                className="mt-2 text-xs font-bold bg-primary text-primary-foreground rounded-xl px-4 py-2 flex items-center gap-1.5 shadow-sm"
-              >
-                <RefreshCw size={13} className={isSyncing ? "animate-spin" : ""} />
-                <span>Sync Bank Account</span>
-              </Button>
-            )}
-          </div>
+          !searchQuery && isSyncingActive ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center rounded-xl border border-dashed border-primary/20 bg-primary/5 gap-3 my-auto">
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
+              <p className="text-sm font-semibold text-foreground">
+                Synchronizing Historical Transactions
+              </p>
+              <p className="text-xs text-muted-foreground max-w-sm">
+                Connecting to your financial institution. Verified ledger records will appear automatically upon ingestion.
+              </p>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center rounded-xl border border-dashed border-white/15 bg-white/30 dark:bg-neutral-800/30 gap-2.5 my-auto">
+              <Receipt size={28} className="text-muted-foreground/60" />
+              <p className="text-sm font-semibold text-foreground">
+                {searchQuery
+                  ? "No transactions match your search"
+                  : "No transactions recorded yet"}
+              </p>
+              <p className="text-xs text-muted-foreground max-w-sm">
+                {searchQuery
+                  ? "Try searching for a different merchant or category name."
+                  : "Connect your bank account or trigger a sync to pull verified transactions."}
+              </p>
+              {!searchQuery && (
+                <Button
+                  size="sm"
+                  onPress={handleSyncAccount}
+                  isPending={isSyncing}
+                  className="mt-2 text-xs font-bold bg-primary text-primary-foreground rounded-xl px-4 py-2 flex items-center gap-1.5 shadow-sm"
+                >
+                  <RefreshCw size={13} className={isSyncing ? "animate-spin" : ""} />
+                  <span>Sync Bank Account</span>
+                </Button>
+              )}
+            </div>
+          )
         ) : (
           filteredTransactions.map((tx) => {
             const txId =

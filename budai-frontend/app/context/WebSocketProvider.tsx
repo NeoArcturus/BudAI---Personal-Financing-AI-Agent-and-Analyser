@@ -118,8 +118,23 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
                   : undefined,
               });
 
-              // Dual invalidation ensuring Navbar, Modal, and Activity Panel synchronize instantly
-              queueInvalidation(["notifications", "systemAlerts"]);
+              // Instantly prepend alert into the TanStack Query cache (Zero HTTP roundtrips)
+              queryClient.setQueryData<any[]>(["notifications"], (old = []) => {
+                if (!Array.isArray(old)) return [alertData];
+                if (
+                  old.some(
+                    (item) =>
+                      (item.id && item.id === alertData.id) ||
+                      (item.alert_uuid && item.alert_uuid === alertData.alert_uuid),
+                  )
+                ) {
+                  return old;
+                }
+                return [alertData, ...old];
+              });
+
+              // Invalidate auxiliary alert keys without forcing redundant GET /api/notifications
+              queueInvalidation(["systemAlerts"]);
             } else if (BUCKET_EVENTS.has(event_type)) {
               queueInvalidation(["buckets", "accounts", "notifications"]);
             } else if (event_type === "TRANSACTIONS_UPDATED") {

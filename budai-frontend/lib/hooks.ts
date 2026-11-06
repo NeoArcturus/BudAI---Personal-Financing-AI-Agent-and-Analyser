@@ -2,6 +2,7 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Account, Transaction, BankChartData } from "@/types";
+import { useBudAIWebSocket } from "@/app/context/WebSocketProvider";
 
 import { useState, useEffect } from "react";
 
@@ -43,17 +44,19 @@ export function usePersistedState<T>(key: string, defaultValue: T): [T, (val: T)
 }
 
 export function useAccounts(initialData?: Account[]) {
+  const { isConnected } = useBudAIWebSocket();
+
   return useQuery({
     queryKey: ["accounts"],
     queryFn: async () => {
       const res = await apiFetch("/api/accounts", {}, true);
-      const data = await res.json() as { accounts?: Account[] };
+      const data = (await res.json()) as { accounts?: Account[] };
       return data.accounts || [];
     },
     initialData: initialData && initialData.length > 0 ? initialData : undefined,
-    staleTime: 1000 * 30, 
-    refetchInterval: 5000,
-    refetchOnWindowFocus: true,
+    staleTime: 1000 * 60,
+    refetchInterval: isConnected ? 60000 : 10000,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -63,6 +66,8 @@ export function useTransactions(
   to?: string,
   initialData?: Transaction[],
 ) {
+  const { isConnected } = useBudAIWebSocket();
+
   return useQuery({
     queryKey: ["transactions", accountId, from, to],
     queryFn: async (): Promise<Transaction[]> => {
@@ -83,20 +88,24 @@ export function useTransactions(
         return [];
       }
 
-      const data = await res.json() as { transactions?: Transaction[] };
+      const data = (await res.json()) as { transactions?: Transaction[] };
       return data.transactions || [];
     },
     initialData,
     enabled: !!accountId && !accountId.startsWith("react-aria-"),
-    staleTime: 1000 * 30,
+    staleTime: 1000 * 60,
     refetchInterval: (query: { state: { data?: Transaction[] } }) => {
       const data = query.state.data;
       if (!data || data.length === 0) return 3000;
-      
-      const hasUncategorized = data.some((tx) => !tx.category || tx.category === "Uncategorized" || tx.category === "Pending");
-      return hasUncategorized ? 3000 : 1000 * 30;
+
+      const hasUncategorized = data.some(
+        (tx) => !tx.category || tx.category === "Uncategorized" || tx.category === "Pending"
+      );
+      if (hasUncategorized) return 3000;
+
+      return isConnected ? 60000 : 30000;
     },
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 }
 

@@ -13,8 +13,10 @@ export interface Account {
   logo_url?: string;
   consent_status?: "active" | "expired" | "200-200" | "200-401" | "200-403";
   bank_uuid?: string;
-  
   truelayer_account_id?: string;
+  last_synced_at?: string;
+  sync_status?: string;
+  created_at?: string;
 }
 
 export interface Transaction {

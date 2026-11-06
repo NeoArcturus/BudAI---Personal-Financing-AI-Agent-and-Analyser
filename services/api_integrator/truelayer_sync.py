@@ -111,7 +111,8 @@ class TrueLayerSync:
                             account_balance=float(acc_balance),
                             currency=acc_det.get("currency", "GBP"),
                             account_type=acc_det.get("account_type", "TRANSACTION"),
-                            display_name=display_name
+                            display_name=display_name,
+                            sync_status="SYNCING"
                         )
 
                         update_dict = {
@@ -152,21 +153,36 @@ class TrueLayerSync:
                                     self.process_and_store_transactions(session, tx_data, user_uuid, bank_uuid, acc_id)
                                     ingested_count = len(tx_data)
                                     logger.info(f"Successfully stored {ingested_count} transactions for account {acc_id}")
-                                    try:
-                                        from config import redis_client
-                                        redis_client.publish(f"budai_events_{user_uuid}", json.dumps({
-                                            "event_type": "TRANSACTIONS_UPDATED",
-                                            "account_id": acc_id,
-                                            "count": ingested_count
-                                        }))
-                                    except Exception as re:
-                                        logger.warning(f"Redis publish notice failed: {re}")
+                                else:
+                                    logger.info(f"TrueLayer returned 0 transactions for account {acc_id}")
                             elif tx_res is not None:
                                 logger.warning(f"TrueLayer 1-year pull returned status {tx_res.status_code} for account {acc_id}: {tx_res.text}")
                             else:
                                 logger.warning(f"No response from TrueLayer for account {acc_id} 1-year pull")
+
+                            session.execute(
+                                text("UPDATE accounts SET sync_status = 'READY', last_synced_at = :now WHERE account_id = :acc_id"),
+                                {"now": datetime.utcnow(), "acc_id": acc_id}
+                            )
+                            session.commit()
+
+                            try:
+                                from config import redis_client
+                                redis_client.publish(f"budai_events_{user_uuid}", json.dumps({
+                                    "event_type": "TRANSACTIONS_UPDATED",
+                                    "account_id": acc_id,
+                                    "count": ingested_count,
+                                    "sync_status": "READY"
+                                }))
+                            except Exception as re:
+                                logger.warning(f"Redis publish notice failed: {re}")
                         except Exception as pull_err:
                             logger.error(f"Failed waterfall 1-year transaction pull for account {acc_id}: {pull_err}")
+                            session.execute(
+                                text("UPDATE accounts SET sync_status = 'ERROR' WHERE account_id = :acc_id"),
+                                {"acc_id": acc_id}
+                            )
+                            session.commit()
                     
                     log_pipeline_data(
                         logger=logger,

@@ -14,7 +14,11 @@ export default async function ProtectedLayout({
   children: React.ReactNode;
 }) {
   const cookieStore = await cookies();
-  const token = cookieStore.get("budai_token")?.value;
+  const token =
+    cookieStore.get("budai_token")?.value ||
+    cookieStore.get("budai_access_token")?.value ||
+    cookieStore.get("better-auth.session_token")?.value ||
+    cookieStore.get("access_token")?.value;
 
   const baseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL || "https://delicate-limit-4d2a.neo-arcturus07.workers.dev";
