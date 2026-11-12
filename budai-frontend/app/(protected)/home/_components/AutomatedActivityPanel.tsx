@@ -102,8 +102,8 @@ export const AutomatedActivityPanel = ({
       return initialData;
     },
     initialData: initialData.length > 0 ? initialData : undefined,
-    refetchInterval: 30000,
-    staleTime: 10000,
+    staleTime: 1000 * 60 * 5,
+    refetchInterval: false,
   });
 
   const handleDismiss = async (id: string) => {

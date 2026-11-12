@@ -136,40 +136,12 @@ export default function LedgerTableWidgetClient({
       );
 
       if (res.ok) {
-        const data = await res.json() as any;
-        const taskId = data.task_id;
-
-        if (taskId) {
-          const pollInterval = setInterval(async () => {
-            try {
-              const statusRes = await apiFetch(
-                `/api/categorizer/task-status/${taskId}`,
-                {},
-                true,
-              );
-              if (statusRes.ok) {
-                const statusData = await statusRes.json() as any;
-                if (
-                  statusData.status === "completed" ||
-                  statusData.status === "failed"
-                ) {
-                  clearInterval(pollInterval);
-                  queryClient.invalidateQueries({ queryKey: ["transactions"] });
-                  setIsUpdating(false);
-                }
-              }
-            } catch (e) {
-              console.log(e);
-              clearInterval(pollInterval);
-              setIsUpdating(false);
-            }
-          }, 2000);
-        } else {
-          queryClient.invalidateQueries({ queryKey: ["transactions"] });
-          setIsUpdating(false);
-        }
-
+        queryClient.invalidateQueries({ queryKey: ["transactions"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-snapshot"] });
+        setIsUpdating(false);
         setSelectedTx(null);
+      } else {
+        setIsUpdating(false);
       }
     } catch (e) {
       console.error(e);

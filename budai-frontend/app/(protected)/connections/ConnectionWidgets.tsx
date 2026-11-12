@@ -142,10 +142,24 @@ export function ConnectionHabitsWidget({ accountId }: { accountId: string }) {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const uuid = getUserUuid();
-        const res = await apiFetch(`/api/analytics/clusters?user_uuid=${uuid}&account_id=${accountId}`, {}, true);
-        const json = await res.json();
-        setData(json);
+        const res = await apiFetch(`/api/accounts/${accountId}/transactions`, {}, true);
+        if (res.ok) {
+          const json = await res.json() as any;
+          const txs = json.transactions || [];
+          const catMap: Record<string, number> = {};
+          txs.forEach((tx: any) => {
+            const amt = Number(tx.amount) || 0;
+            if (amt < 0) {
+              const cat = tx.category || "General";
+              catMap[cat] = (catMap[cat] || 0) + Math.abs(amt);
+            }
+          });
+          const clusters = Object.entries(catMap)
+            .map(([name, total_spend]) => ({ name, total_spend }))
+            .sort((a, b) => b.total_spend - a.total_spend)
+            .slice(0, 5);
+          setData({ clusters });
+        }
       } catch (e) {
         console.error(e);
       } finally {

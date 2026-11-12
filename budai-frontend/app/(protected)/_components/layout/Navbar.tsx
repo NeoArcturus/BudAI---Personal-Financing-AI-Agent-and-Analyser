@@ -59,7 +59,8 @@ export const TopNavbar = () => {
       }
       return [];
     },
-    refetchInterval: 15000,
+    staleTime: 1000 * 60 * 5,
+    refetchInterval: false,
   });
 
   const currencySummaries = useMemo(() => {

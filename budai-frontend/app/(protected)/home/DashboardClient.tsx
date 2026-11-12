@@ -39,7 +39,7 @@ export default function DashboardClient({
   initialTransactions = [],
   initialIntelligence = null,
 }: DashboardClientProps) {
-  const { userName, accounts, activeAccountId } = useBudAI();
+  const { userName, accounts, activeAccountId, snapshot } = useBudAI();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
@@ -56,6 +56,31 @@ export default function DashboardClient({
       return () => clearTimeout(timer);
     }
   }, [mounted, accounts, router]);
+
+  const resolvedBuckets = useMemo(() => {
+    if (initialBuckets && initialBuckets.length > 0) return initialBuckets;
+    if (!snapshot?.buckets) return [];
+    if (Array.isArray(snapshot.buckets)) return snapshot.buckets;
+    return [
+      snapshot.buckets.unallocated,
+      ...(snapshot.buckets.bills || []),
+      ...(snapshot.buckets.goals || []),
+    ].filter(Boolean);
+  }, [initialBuckets, snapshot]);
+
+  const resolvedAlerts = useMemo(() => {
+    if (initialAlerts && initialAlerts.length > 0) return initialAlerts;
+    return snapshot?.alerts || snapshot?.notifications || [];
+  }, [initialAlerts, snapshot]);
+
+  const resolvedTransactions = useMemo(() => {
+    if (initialTransactions && initialTransactions.length > 0) return initialTransactions;
+    return snapshot?.recent_transactions || [];
+  }, [initialTransactions, snapshot]);
+
+  const resolvedIntelligence = useMemo(() => {
+    return initialIntelligence || snapshot?.intelligence || null;
+  }, [initialIntelligence, snapshot]);
 
   const activeCurrency = useMemo(() => {
     if (activeAccountId && activeAccountId !== "ALL") {
@@ -83,7 +108,7 @@ export default function DashboardClient({
           <div className="w-full lg:w-[320px] xl:w-[360px] 2xl:w-[400px] shrink-0">
             <VirtualBucketsPanel
               currency={activeCurrency}
-              initialData={initialBuckets}
+              initialData={resolvedBuckets}
             />
           </div>
 
@@ -91,11 +116,11 @@ export default function DashboardClient({
           <div className="w-full lg:flex-1 min-w-0 flex flex-col gap-6">
             <FinancialAnalysisCard
               currency={activeCurrency}
-              intelligence={initialIntelligence}
+              intelligence={resolvedIntelligence}
             />
             <RecentTransactionsCard
               currency={activeCurrency}
-              initialTransactions={initialTransactions}
+              initialTransactions={resolvedTransactions}
             />
           </div>
 
@@ -103,7 +128,7 @@ export default function DashboardClient({
           <div className="w-full lg:w-[320px] xl:w-[360px] 2xl:w-[400px] shrink-0">
             <AutomatedActivityPanel
               currency={activeCurrency}
-              initialData={initialAlerts}
+              initialData={resolvedAlerts}
             />
           </div>
         </div>

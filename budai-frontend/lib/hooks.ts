@@ -44,8 +44,6 @@ export function usePersistedState<T>(key: string, defaultValue: T): [T, (val: T)
 }
 
 export function useAccounts(initialData?: Account[]) {
-  const { isConnected } = useBudAIWebSocket();
-
   return useQuery({
     queryKey: ["accounts"],
     queryFn: async () => {
@@ -54,9 +52,9 @@ export function useAccounts(initialData?: Account[]) {
       return data.accounts || [];
     },
     initialData: initialData && initialData.length > 0 ? initialData : undefined,
-    staleTime: 1000 * 60,
-    refetchInterval: isConnected ? false : 30000,
-    refetchOnWindowFocus: true,
+    staleTime: 1000 * 60 * 5,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -66,8 +64,6 @@ export function useTransactions(
   to?: string,
   initialData?: Transaction[],
 ) {
-  const { isConnected } = useBudAIWebSocket();
-
   return useQuery({
     queryKey: ["transactions", accountId, from, to],
     queryFn: async (): Promise<Transaction[]> => {
@@ -93,25 +89,13 @@ export function useTransactions(
     },
     initialData,
     enabled: !!accountId && !accountId.startsWith("react-aria-"),
-    staleTime: 1000 * 60,
-    refetchInterval: (query: { state: { data?: Transaction[] } }) => {
-      const data = query.state.data;
-      if (!data || data.length === 0) return 3000;
-
-      const hasUncategorized = data.some(
-        (tx) => !tx.category || tx.category === "Uncategorized" || tx.category === "Pending"
-      );
-      if (hasUncategorized) return 3000;
-
-      return isConnected ? false : 30000;
-    },
-    refetchOnWindowFocus: true,
+    staleTime: 1000 * 60 * 5,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
   });
 }
 
 export function useDashboardSnapshot(initialData?: any) {
-  const { isConnected } = useBudAIWebSocket();
-
   return useQuery({
     queryKey: ["dashboard-snapshot"],
     queryFn: async () => {
@@ -120,9 +104,9 @@ export function useDashboardSnapshot(initialData?: any) {
       return res.json();
     },
     initialData,
-    staleTime: 1000 * 60,
-    refetchInterval: isConnected ? false : 30000,
-    refetchOnWindowFocus: true,
+    staleTime: 1000 * 60 * 5,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -154,20 +138,44 @@ export function useSpendingTrends(
 ) {
   return useQuery({
     queryKey: ["spending-trends", accountId, from, to, timeType],
-    queryFn: async () => {
+    queryFn: async (): Promise<BankChartData[]> => {
+      if (!accountId || accountId.startsWith("react-aria-")) return [];
+      const queryParams = new URLSearchParams();
+      if (from) queryParams.append("from", from);
+      if (to) queryParams.append("to", to);
       const res = await apiFetch(
-        `/api/widgets/spending-trends?account_id=${accountId}&from_date=${from}&to_date=${to}&time_type=${timeType}`,
-        { method: "GET" },
+        `/api/accounts/${accountId}/transactions?${queryParams.toString()}`,
+        {},
         true,
       );
-      if (!res.ok) throw new Error("Failed to fetch spending trends");
-      const json = await res.json() as { data?: BankChartData[] };
-      return json.data || [];
+      if (!res.ok) return [];
+      const data = (await res.json()) as { transactions?: Transaction[] };
+      const txs = data.transactions || [];
+      const map: Record<string, number> = {};
+      txs.forEach((tx) => {
+        const amt = Number(tx.amount) || 0;
+        if (amt < 0) {
+          const dateStr = tx.timestamp ? tx.timestamp.split("T")[0] : "";
+          if (dateStr) {
+            map[dateStr] = (map[dateStr] || 0) + Math.abs(amt);
+          }
+        }
+      });
+      const dataPoints = Object.entries(map).map(([Date, Amount]) => ({
+        Date,
+        Amount: Math.round(Amount * 100) / 100,
+      }));
+      return [
+        {
+          bank_name: "Aggregate",
+          data: dataPoints,
+        },
+      ];
     },
     initialData,
     enabled: !!accountId && !accountId.startsWith("react-aria-") && !!from && !!to && isReady,
     staleTime: 1000 * 60 * 5,
-    refetchInterval: 1000 * 60 * 5,
+    refetchInterval: false,
     refetchOnWindowFocus: false,
   });
 }
@@ -180,19 +188,44 @@ export function useExpenseCategories(
 ) {
   return useQuery({
     queryKey: ["expense-categories", accountId, from, to],
-    queryFn: async () => {
+    queryFn: async (): Promise<BankChartData[]> => {
+      if (!accountId || accountId.startsWith("react-aria-")) return [];
+      const queryParams = new URLSearchParams();
+      if (from) queryParams.append("from", from);
+      if (to) queryParams.append("to", to);
       const res = await apiFetch(
-        `/api/widgets/expense-distribution?account_id=${accountId}&from_date=${from}&to_date=${to}`,
-        { method: "GET" },
+        `/api/accounts/${accountId}/transactions?${queryParams.toString()}`,
+        {},
         true,
       );
-      if (!res.ok) throw new Error("Failed to fetch expense categories");
-      const json = await res.json() as { data?: BankChartData[] };
-      return json.data || [];
+      if (!res.ok) return [];
+      const data = (await res.json()) as { transactions?: Transaction[] };
+      const txs = data.transactions || [];
+      const catMap: Record<string, number> = {};
+      txs.forEach((tx) => {
+        const amt = Number(tx.amount) || 0;
+        if (amt < 0) {
+          const cat = tx.category || "General Spending";
+          catMap[cat] = (catMap[cat] || 0) + Math.abs(amt);
+        }
+      });
+      const dataPoints = Object.entries(catMap)
+        .map(([Category, Total_Amount]) => ({
+          Category,
+          Total_Amount: Math.round(Total_Amount * 100) / 100,
+        }))
+        .sort((a, b) => (b.Total_Amount || 0) - (a.Total_Amount || 0));
+
+      return [
+        {
+          bank_name: "Categories",
+          data: dataPoints,
+        },
+      ];
     },
     enabled: !!accountId && !accountId.startsWith("react-aria-") && !!from && !!to && isReady,
     staleTime: 1000 * 60 * 5,
-    refetchInterval: 1000 * 60 * 5,
+    refetchInterval: false,
     refetchOnWindowFocus: false,
   });
 }
@@ -206,56 +239,18 @@ export function useChatSessions() {
       return Array.isArray(data) ? data : [];
     },
     staleTime: 1000 * 60 * 5,
-    refetchInterval: 1000 * 60 * 5,
+    refetchInterval: false,
     refetchOnWindowFocus: false,
   });
 }
 
-export function useAdvisorInsight(widgetId: string, contextData: unknown) {
-  const initJob = useQuery({
-    queryKey: ["init-advisor", widgetId, JSON.stringify(contextData || [])],
-    queryFn: async () => {
-      const res = await apiFetch("/api/advisor/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          widget_id: widgetId,
-          context_data: {
-            data: Array.isArray(contextData) ? contextData.slice(0, 20) : contextData,
-            timestamp: new Date().toISOString()
-          },
-        }),
-      }, true);
-      const data = await res.json() as { job_id: string };
-      return data.job_id;
-    },
-    staleTime: Infinity,
-    enabled: !!widgetId,
-  });
-
+export function useAdvisorInsight(widgetId: string, _contextData?: unknown) {
   return useQuery({
-    queryKey: ["advisor-insight-poll", initJob.data],
+    queryKey: ["advisor-insight", widgetId],
     queryFn: async () => {
-      const res = await apiFetch(`/api/advisor/status/${initJob.data}`, {
-        method: "GET",
-      }, true);
-      const data = await res.json() as { status: string; insight?: string };
-      if (data.status === "pending") {
-        throw new Error("STILL_PENDING");
-      }
-      if (data.status === "failed") {
-        return "Unable to generate insight at this moment.";
-      }
-      return data.insight || "";
+      return "";
     },
-    enabled: !!initJob.data,
-    refetchInterval: (query) => {
-        return query.state.data ? false : 2000;
-    },
-    retry: (failureCount, error: Error) => {
-        if (error.message === "STILL_PENDING") return true;
-        return failureCount < 2;
-    },
+    enabled: false,
   });
 }
 
@@ -268,9 +263,10 @@ export function useUserProfile() {
       return data;
     },
     refetchInterval: (query) => {
-      return query.state.data?.is_onboarded ? false : 2000;
+      return query.state.data?.is_onboarded ? false : 5000;
     },
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 10,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -283,8 +279,9 @@ export function useBuckets() {
       const data = (await res.json()) as { status?: string; buckets?: any[] };
       return data.buckets || [];
     },
-    staleTime: 1000 * 60 * 2,
-    refetchInterval: 1000 * 30,
+    staleTime: 1000 * 60 * 5,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -292,14 +289,12 @@ export function useSubscriptions(userUuid?: string) {
   return useQuery({
     queryKey: ["subscriptions", userUuid],
     queryFn: async () => {
-      if (!userUuid) return [];
-      const res = await apiFetch(`/api/analytics/subscriptions?user_uuid=${userUuid}`, {}, true);
-      if (!res.ok) return [];
-      const data = (await res.json()) as { subscriptions?: any[] };
-      return data.subscriptions || [];
+      return [];
     },
     enabled: !!userUuid,
     staleTime: 1000 * 60 * 5,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
   });
 }
 

@@ -80,7 +80,8 @@ export const VirtualBucketsPanel = ({
       return { buckets: initialData };
     },
     initialData: initialData.length > 0 ? { buckets: initialData } : undefined,
-    refetchInterval: 15000,
+    staleTime: 1000 * 60 * 5,
+    refetchInterval: false,
   });
 
   const buckets = useMemo(() => bucketData?.buckets || [], [bucketData]);

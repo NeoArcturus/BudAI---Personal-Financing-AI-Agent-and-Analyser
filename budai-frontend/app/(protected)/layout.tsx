@@ -21,18 +21,19 @@ export default async function ProtectedLayout({
     cookieStore.get("access_token")?.value;
 
   const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "https://delicate-limit-4d2a.neo-arcturus07.workers.dev";
+    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
+  let initialSnapshot: any = null;
   let initialAccounts: Account[] = [];
   let initialSessions: ChatSession[] = [];
 
   try {
-    const [accountsRes, sessionsRes] = await Promise.all([
-      fetch(`${baseUrl}/api/accounts`, {
+    const [snapshotRes, sessionsRes] = await Promise.all([
+      fetch(`${baseUrl}/api/dashboard/snapshot`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       }).catch((e) => {
-        console.warn("Failed to fetch accounts:", e.message);
+        console.warn("Failed to fetch dashboard snapshot:", e.message);
         return null;
       }),
       fetch(`${baseUrl}/api/chat/sessions`, {
@@ -44,31 +45,32 @@ export default async function ProtectedLayout({
       }),
     ]);
 
-    if (accountsRes?.status !== 401 && sessionsRes?.status !== 401) {
-      if (accountsRes && accountsRes.ok) {
-        try {
-          const accountsData = (await accountsRes.json()) as any;
-          initialAccounts = accountsData.accounts || [];
-        } catch (e) {
-          console.warn("Failed to parse accounts JSON:", e);
-        }
+    if (snapshotRes?.ok) {
+      try {
+        initialSnapshot = await snapshotRes.json();
+        initialAccounts =
+          initialSnapshot.financial_anchor?.connected_accounts ||
+          initialSnapshot.accounts ||
+          [];
+      } catch (e) {
+        console.warn("Failed to parse snapshot JSON:", e);
       }
+    }
 
-      if (sessionsRes && sessionsRes.ok) {
-        try {
-          const sessionsData = (await sessionsRes.json()) as any;
-          if (Array.isArray(sessionsData)) {
-            initialSessions = sessionsData.map((s: any) => ({
-              id: s.session_id,
-              title: s.title,
-              messages: [],
-              lastUpdated: new Date(s.last_updated),
-              contextData: s.context_data,
-            }));
-          }
-        } catch (e) {
-          console.warn("Failed to parse sessions JSON:", e);
+    if (sessionsRes?.ok) {
+      try {
+        const sessionsData = (await sessionsRes.json()) as any;
+        if (Array.isArray(sessionsData)) {
+          initialSessions = sessionsData.map((s: any) => ({
+            id: s.session_id,
+            title: s.title,
+            messages: [],
+            lastUpdated: new Date(s.last_updated),
+            contextData: s.context_data,
+          }));
         }
+      } catch (e) {
+        console.warn("Failed to parse sessions JSON:", e);
       }
     }
   } catch (e) {
@@ -77,6 +79,7 @@ export default async function ProtectedLayout({
 
   return (
     <BudAIProvider
+      initialSnapshot={initialSnapshot}
       initialAccounts={initialAccounts}
       initialSessions={initialSessions}
     >

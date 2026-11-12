@@ -36,7 +36,7 @@ import {
 } from "@/types";
 import { buildChartConfig } from "@/app/(protected)/_utils/ChartBuilder";
 import { apiFetch, getAuthToken, getApiUrl } from "@/lib/api";
-import { useAccounts, useChatSessions } from "@/lib/hooks";
+import { useAccounts, useChatSessions, useDashboardSnapshot } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { Wallet } from "lucide-react";
 
@@ -117,6 +117,7 @@ interface BudAIContextType {
   setIsAccountSelectorOpen: (val: boolean) => void;
   selectedAccountIds: Key[];
   setSelectedAccountIds: (ids: Key[]) => void;
+  snapshot: any | null;
 }
 
 const BudAIContext = createContext<BudAIContextType | undefined>(undefined);
@@ -125,10 +126,12 @@ export const BudAIProvider = ({
   children,
   initialAccounts = [],
   initialSessions = [],
+  initialSnapshot = null,
 }: {
   children: React.ReactNode;
   initialAccounts?: Account[];
   initialSessions?: ChatSession[];
+  initialSnapshot?: any;
 }) => {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -162,7 +165,12 @@ export const BudAIProvider = ({
     return () => window.removeEventListener("budai-unauthorized", handleUnauthorized);
   }, [router]);
 
-  const { data: fetchedAccounts = initialAccounts } = useAccounts(initialAccounts);
+  const { data: snapshot = initialSnapshot } = useDashboardSnapshot(initialSnapshot);
+  const accountsFromSnapshot: Account[] =
+    snapshot?.financial_anchor?.connected_accounts ||
+    initialSnapshot?.financial_anchor?.connected_accounts ||
+    initialAccounts;
+  const { data: fetchedAccounts = accountsFromSnapshot } = useAccounts(accountsFromSnapshot);
   const { data: serverSessions = [] } = useChatSessions();
 
   useEffect(() => {
@@ -180,7 +188,7 @@ export const BudAIProvider = ({
   }, [serverSessions, localSessions.length]);
 
   const totalBalance = useMemo(() => {
-    return fetchedAccounts.reduce((sum, acc) => sum + (acc.balance ?? 0), 0);
+    return fetchedAccounts.reduce((sum: number, acc: Account) => sum + (acc.balance ?? 0), 0);
   }, [fetchedAccounts]);
 
   const activeAccount = fetchedAccounts.find(
@@ -520,6 +528,7 @@ export const BudAIProvider = ({
         setIsAccountSelectorOpen,
         selectedAccountIds,
         setSelectedAccountIds,
+        snapshot,
       }}
     >
       {children}

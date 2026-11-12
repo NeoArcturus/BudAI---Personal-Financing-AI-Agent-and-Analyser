@@ -6,11 +6,10 @@ export const getApiBaseUrl = (): string => {
   if (typeof window !== "undefined") {
     const override = localStorage.getItem("budai_api_target");
     if (override === "local") return "http://localhost:8080";
-    if (override === "prod") return "https://delicate-limit-4d2a.neo-arcturus07.workers.dev";
   }
   return (
     process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
-    "https://delicate-limit-4d2a.neo-arcturus07.workers.dev"
+    "http://localhost:8080"
   );
 };
 

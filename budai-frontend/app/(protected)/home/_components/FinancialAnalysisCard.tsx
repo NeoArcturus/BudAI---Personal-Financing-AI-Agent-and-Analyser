@@ -28,15 +28,12 @@ import { ChartConfiguration } from "chart.js";
 import CoreChartEngine from "@/app/(protected)/_components/internal/ChartEngine";
 import { useBudAI } from "@/app/context/AppContext";
 import {
-  useSpendingTrends,
   useTransactions,
-  useExpenseCategories,
   useBuckets,
   useSubscriptions,
   useUserProfile,
 } from "@/lib/hooks";
 import { formatCurrency, getCurrencySymbol } from "@/lib/currency";
-import { apiFetch } from "@/lib/api";
 import { today, getLocalTimeZone, CalendarDate } from "@internationalized/date";
 
 export type CardViewMode =
@@ -65,11 +62,10 @@ export const FinancialAnalysisCard = ({
   // Active View State
   const [activeView, setActiveView] = useState<CardViewMode>("forecast");
 
-  // Trend & Forecast Horizons (Symmetrical Past & Future: 30d, 60d, 90d)
+  // Trend & Forecast Horizons
   const [pastLookbackDays, setPastLookbackDays] = useState<30 | 60 | 90>(30);
-  const [horizonDays, setHorizonDays] = useState<30 | 60 | 90>(30);
+  const horizonDays = 30;
   const [isForecastExtended, setIsForecastExtended] = useState<boolean>(false);
-  const [isFetchingBackendForecast, setIsFetchingBackendForecast] = useState<boolean>(false);
   const [backendForecastSeries, setBackendForecastSeries] = useState<any[] | null>(null);
   const [safetyCushion, setSafetyCushion] = useState<number>(500);
 
@@ -147,75 +143,36 @@ export const FinancialAnalysisCard = ({
     };
   }, []);
 
-  const { data: trendData = [], isLoading: isTrendLoading } = useSpendingTrends(
-    targetAccountId,
-    fromDate,
-    toDate,
-    "daily",
-    undefined,
-    !!targetAccountId,
-  );
-
   const { data: transactions = [], isLoading: isTxLoading } = useTransactions(
     targetAccountId,
     sixMonthsAgoStr,
     todayStr,
   );
 
-  const { data: expenseCatData = [], isLoading: isCatLoading } = useExpenseCategories(
-    targetAccountId,
-    fromDate,
-    toDate,
-    !!targetAccountId,
-  );
-
   const { data: userProfile } = useUserProfile();
   const { data: buckets = [] } = useBuckets();
   const { data: detectedSubs = [] } = useSubscriptions(userProfile?.user_uuid);
 
-  // Backend forecast trigger
-  const triggerBackendForecast = useCallback(
-    async (days: number) => {
-      if (!targetAccountId) return;
-      setIsFetchingBackendForecast(true);
-      try {
-        // Direct deterministic balance forecast endpoint
-        const directRes = await apiFetch(
-          `/api/widgets/forecast/balance?account_id=${encodeURIComponent(targetAccountId)}&days=${days}`,
-          { method: "GET" },
-          true,
-        );
+  const handleToggleForecast = () => {
+    setIsForecastExtended(!isForecastExtended);
+  };
 
-        if (directRes.ok) {
-          const directJson = (await directRes.json()) as any;
-          if (directJson?.data?.series?.[0]?.data) {
-            setBackendForecastSeries(directJson.data.series[0].data);
-            return;
+  // In-memory daily spend calculation from transactions (Option A)
+  const dailyPoints = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (Array.isArray(transactions)) {
+      transactions.forEach((tx) => {
+        const amt = Number(tx.amount) || 0;
+        if (amt < 0) {
+          const dateStr = tx.timestamp ? tx.timestamp.split("T")[0] : "";
+          if (dateStr) {
+            map[dateStr] = (map[dateStr] || 0) + Math.abs(amt);
           }
         }
-      } catch (err) {
-        console.error("Balance forecast calculation error:", err);
-      } finally {
-        setIsFetchingBackendForecast(false);
-      }
-    },
-    [targetAccountId],
-  );
-
-  const handleToggleForecast = () => {
-    const nextState = !isForecastExtended;
-    setIsForecastExtended(nextState);
-    if (nextState && !backendForecastSeries) {
-      triggerBackendForecast(horizonDays);
+      });
     }
-  };
-
-  const handleHorizonChange = (days: 30 | 60 | 90) => {
-    setHorizonDays(days);
-    if (isForecastExtended) {
-      triggerBackendForecast(days);
-    }
-  };
+    return Object.entries(map).map(([Date, Amount]) => ({ Date, Amount }));
+  }, [transactions]);
 
   // ---------------------------------------------------------------------------
   // 1. DATA COMPUTATION FOR ALL VIEWS
@@ -223,20 +180,14 @@ export const FinancialAnalysisCard = ({
 
   // A. Forecast & Past Daily Balances
   const { labels, pastBalances, avgDailySpend, projectedBalance } = useMemo(() => {
-    const dailyPoints =
-      trendData && trendData.length > 0 && trendData[0]?.data
-        ? trendData[0].data
-        : [];
-
     const totalDays = pastLookbackDays;
     const computedLabels: string[] = [];
     const balances: number[] = [];
     let runningBalance = currentBalance;
 
     let totalRecentSpend = 0;
-    dailyPoints.forEach((p: any) => {
-      const val = parseFloat(p.Amount || p.amount || 0);
-      if (val > 0) totalRecentSpend += val;
+    dailyPoints.forEach((p) => {
+      if (p.Amount > 0) totalRecentSpend += p.Amount;
     });
 
     const calculatedDailyBurn =
@@ -253,9 +204,8 @@ export const FinancialAnalysisCard = ({
         d.toLocaleDateString("en-GB", { month: "short", day: "numeric" }),
       );
 
-      const matchingPoint = dailyPoints.find((p: any) => {
-        const ptDate = p.Date || p.date || "";
-        return ptDate.endsWith(
+      const matchingPoint = dailyPoints.find((p) => {
+        return p.Date.endsWith(
           `-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
             d.getDate(),
           ).padStart(2, "0")}`,
@@ -263,7 +213,7 @@ export const FinancialAnalysisCard = ({
       });
 
       const daySpend = matchingPoint
-        ? parseFloat(matchingPoint.Amount || matchingPoint.amount || 0)
+        ? matchingPoint.Amount
         : calculatedDailyBurn;
 
       balances.push(Math.round(runningBalance));
@@ -281,7 +231,7 @@ export const FinancialAnalysisCard = ({
       avgDailySpend: Math.round(calculatedDailyBurn),
       projectedBalance: Math.round(projected),
     };
-  }, [trendData, pastLookbackDays, currentBalance, horizonDays]);
+  }, [dailyPoints, pastLookbackDays, currentBalance, horizonDays]);
 
   const forecastBalances = useMemo(() => {
     if (backendForecastSeries && backendForecastSeries.length > 0) {
@@ -474,17 +424,7 @@ export const FinancialAnalysisCard = ({
 
   // C. Expense Breakdown Data (Categories Donut / Pie)
   const categoryData = useMemo(() => {
-    if (expenseCatData && expenseCatData.length > 0 && expenseCatData[0]?.data && expenseCatData[0].data.length > 0) {
-      return expenseCatData[0].data
-        .map((item: any) => ({
-          name: item.Category || item.category || "General Spending",
-          value: parseFloat(item.Total_Amount || item.total_amount || item.Amount || item.amount || 0),
-        }))
-        .filter((i: any) => i.value > 0)
-        .sort((a: any, b: any) => b.value - a.value);
-    }
-
-    // Dynamic aggregation from transactions
+    // Dynamic in-memory aggregation from transactions (Option A)
     const catMap: Record<string, number> = {};
     if (Array.isArray(transactions)) {
       transactions.forEach((tx) => {
@@ -502,7 +442,7 @@ export const FinancialAnalysisCard = ({
         value: Math.round(value * 100) / 100,
       }))
       .sort((a, b) => b.value - a.value);
-  }, [expenseCatData, transactions]);
+  }, [transactions]);
 
   const totalExpenseAmount = useMemo(() => {
     return categoryData.reduce((acc, curr) => acc + curr.value, 0);
@@ -1279,44 +1219,35 @@ export const FinancialAnalysisCard = ({
               ))}
             </div>
 
-            {/* Forward Forecast Horizon Pills */}
+            {/* Forward Forecast Horizon Pill (Option B: strictly locked to 30d) */}
             {isForecastExtended && (
               <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
                 <span className="text-[10px] text-muted-foreground font-semibold px-1.5">
                   Ahead:
                 </span>
-                {([30, 60, 90] as const).map((days) => (
-                  <Button
-                    key={days}
-                    size="sm"
-                    variant="tertiary"
-                    onPress={() => handleHorizonChange(days)}
-                    className={`px-2 py-0.5 h-6 min-w-0 rounded-lg text-[10px] font-bold transition-all cursor-pointer shadow-none ${
-                      horizonDays === days
-                        ? "bg-purple-600 text-white"
-                        : "bg-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {days}d
-                  </Button>
-                ))}
+                <Button
+                  size="sm"
+                  variant="tertiary"
+                  className="px-2 py-0.5 h-6 min-w-0 rounded-lg text-[10px] font-bold bg-purple-600 text-white cursor-default shadow-none"
+                >
+                  30d
+                </Button>
               </div>
             )}
 
-            {/* Extend Forecast Button */}
+            {/* Forecast Toggle Button */}
             <Button
               size="sm"
               onPress={handleToggleForecast}
-              isPending={isFetchingBackendForecast}
               className={`text-xs font-bold rounded-xl px-3 h-8 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
                 isForecastExtended
                   ? "bg-purple-600 text-white hover:bg-purple-700"
                   : "bg-white/10 hover:bg-white/15 text-foreground border border-white/10"
               }`}
             >
-              <Sparkles size={13} />
+              <TrendingUp size={13} />
               <span>
-                {isForecastExtended ? "Hide Forecast" : "Extend Forecast"}
+                {isForecastExtended ? "Hide Forecast" : "Show Forecast"}
               </span>
             </Button>
           </div>
@@ -1496,7 +1427,7 @@ export const FinancialAnalysisCard = ({
         {/* VIEW 1: BALANCE TREND & FORECAST */}
         {activeView === "forecast" && (
           <>
-            {isTrendLoading ? (
+            {isTxLoading ? (
               <div className="w-full h-full flex flex-col justify-end gap-2 p-2">
                 <Skeleton className="h-4/5 w-full rounded-xl" />
               </div>
