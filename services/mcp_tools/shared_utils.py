@@ -33,35 +33,9 @@ def _reconcile_account_payload(data: Any) -> Any:
             data.setdefault("account_ids", [])
     return data
 
-class GenerateFinancialForecastInput(BaseModel):
-    user_uuid: str = Field(default="", description="The user UUID.")
-    account_id: Optional[str] = Field(default="", description="Target account ID.")
-    account_ids: Optional[List[str]] = Field(default_factory=list, description="List of target account IDs.")
-    days: int = Field(default=30)
-    discipline_multiplier: float = Field(default=1.0)
-    drift_adjustment: float = Field(default=0.0)
-    stress_test_active: bool = Field(default=False)
-    macro_environment: str = Field(default="Stable")
-
-    @model_validator(mode="before")
-    @classmethod
-    def reconcile_accounts(cls, data: Any) -> Any:
-        return _reconcile_account_payload(data)
-
 class GetBudgetVarianceInput(BaseModel):
     user_uuid: str = Field(default="", description="The user UUID.")
     category: str | None = Field(default=None, description="Optional category to filter budget variance for.")
-
-class ForecastBudgetImpactInput(BaseModel):
-    user_uuid: str = Field(default="", description="The user UUID.")
-    account_id: Optional[str] = Field(default="", description="Target account ID.")
-    account_ids: Optional[List[str]] = Field(default_factory=list, description="List of target account IDs.")
-    days: int = Field(default=30)
-
-    @model_validator(mode="before")
-    @classmethod
-    def reconcile_accounts(cls, data: Any) -> Any:
-        return _reconcile_account_payload(data)
 
 class GenerateExpenseForecastInput(BaseModel):
     user_uuid: str = Field(default="", description="The user UUID.")
@@ -74,31 +48,11 @@ class GenerateExpenseForecastInput(BaseModel):
     def reconcile_accounts(cls, data: Any) -> Any:
         return _reconcile_account_payload(data)
 
-class ScenarioInjection(BaseModel):
-    day: int = Field(..., description="The day (from today) the event occurs.")
-    amount: float = Field(..., description="The financial impact (positive for income, negative for expense).")
-    type: str = Field(default="one-off", description="Type of injection: 'one-off' or 'recurring_monthly'.")
-    description: str = Field(default="Scenario Event", description="A short description of the event.")
-
-class GenerateHypotheticalScenarioInput(BaseModel):
-    user_uuid: str = Field(default="", description="The user UUID.")
-    account_id: Optional[str] = Field(default="", description="Target account ID.")
-    account_ids: Optional[List[str]] = Field(default_factory=list, description="List of target account IDs.")
-    days: int = Field(default=30, description="Forecast horizon in days.")
-    injections: List[ScenarioInjection] = Field(default_factory=list, description="List of hypothetical financial events to inject into the forecast.")
-
-    @model_validator(mode="before")
-    @classmethod
-    def reconcile_accounts(cls, data: Any) -> Any:
-        return _reconcile_account_payload(data)
-
 class AnalyzeCriticalSurvivalMetricsInput(BaseModel):
     user_uuid: str = Field(default="", description="The user UUID.")
 
 class AnalyzeWealthAccelerationMetricsInput(BaseModel):
     user_uuid: str = Field(default="", description="The user UUID.")
-
-
 
 class PlotHealthRadarInput(BaseModel):
     user_uuid: str = Field(default="", description="The user UUID.")
@@ -111,16 +65,22 @@ class UpdateTransactionCategoryInput(BaseModel):
 class RetrainCategorizerInput(BaseModel):
     user_uuid: str = Field(default="", description="The user UUID.")
 
-def _cache_chart_data(data: Any) -> str:
-    cache_id = f"CACHE_{uuid.uuid4().hex[:8].upper()}"
-    try:
-        with SessionLocal() as session:
-            session.execute(text("INSERT INTO chart_cache (cache_id, chart_data) VALUES (:id, :data)"), {"id": cache_id, "data": json.dumps(data)})
-            session.commit()
-    except Exception as e:
-        logger.error(json.dumps({"message": f"Cache failed: {e}", "status_code": 500}))
-        raise
-    return cache_id
+class ExportAdvisoryStateInput(BaseModel):
+    user_uuid: str = Field(..., description="The user UUID.")
+    chart_type: str = Field(..., description="Chart type.")
+    raw_data: dict = Field(..., description="Raw data payload.")
+    ai_analysis: str = Field(..., description="Analytical text.")
+
+class ExportAnalyzedStatementInput(BaseModel):
+    user_uuid: str = Field(..., description="The alphanumeric user UUID string.")
+    ai_summary: str = Field(..., description="A short summary.")
+
+class MemorySearchInput(BaseModel):
+    query: str = Field(..., description="Search concept.")
+    user_uuid: Optional[str] = Field(default="", description="The user UUID.")
+
+class MemoryExtractionInput(BaseModel):
+    entities: list = Field(..., description="Entity list.")
 
 def _parse_accounts(account_id, user_uuid):
     if not account_id:

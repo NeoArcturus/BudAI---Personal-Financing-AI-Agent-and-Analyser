@@ -33,11 +33,31 @@ export interface Transaction {
   account_id?: string;
   bank_uuid?: string;
   user_uuid?: string;
+  is_pending?: boolean;
 
   transaction_uuid?: string;
   timestamp?: string;
   Category?: string;
   Amount?: number;
+}
+
+export interface Bucket {
+  id: string;
+  name: string;
+  type: string;
+  cached_balance: number;
+  cached_balances?: Record<string, number>;
+  currency?: string;
+  priority?: number;
+  target_amount?: number | null;
+  target_date?: string | null;
+  associated_account_id?: string | null;
+  associated_account_name?: string | null;
+  allocated_amount?: number;
+  status_text?: string | null;
+  has_shortfall_warning?: boolean;
+  shortfall_amount?: number;
+  is_active?: boolean;
 }
 
 export interface ChatMessage {

@@ -7,19 +7,27 @@ from utils.cache_utils import user_cache_key_builder
 from utils.state_manager import get_account_state
 from models.status_codes import AIMLStatus, PipelineStatus
 
-from controllers.accounts.get import fetch_user_accounts, fetch_transactions, search_user_transactions
-from controllers.accounts.post import sync_accounts, extend_bank_connection
-from controllers.accounts.delete import revoke_connection
+from controllers.account_controller import (
+    fetch_user_accounts,
+    fetch_transactions,
+    search_user_transactions,
+    sync_accounts,
+    extend_bank_connection,
+    revoke_connection
+)
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
+
 
 @router.get("")
 async def get_accounts_route(current_user: User = Depends(get_current_user)):
     return await fetch_user_accounts(current_user.user_uuid)
 
+
 @router.get("/transactions/search")
 async def search_transactions_route(q: str = Query(...), current_user: User = Depends(get_current_user)):
     return await search_user_transactions(current_user.user_uuid, q)
+
 
 @router.get("/{account_id}/transactions")
 @cache(expire=300, namespace="transactions", key_builder=user_cache_key_builder)
@@ -30,7 +38,7 @@ async def get_transactions_route(
     current_user: User = Depends(get_current_user)
 ):
     current_state = get_account_state(account_id)
-    
+
     if current_state in [AIMLStatus.CATEGORIZATION_PROCESSING.value, PipelineStatus.LAZY_ML_PROCESSING.value]:
         return JSONResponse(
             status_code=202,
@@ -43,13 +51,16 @@ async def get_transactions_route(
 
     return await fetch_transactions(current_user.user_uuid, account_id, from_date, to_date)
 
+
 @router.post("/sync")
 async def sync_accounts_route(background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user)):
     return await sync_accounts(current_user.user_uuid, background_tasks)
 
+
 @router.post("/banks/{bank_uuid}/extend")
 async def extend_bank_connection_route(bank_uuid: str, current_user: User = Depends(get_current_user)):
     return await extend_bank_connection(bank_uuid, current_user.user_uuid)
+
 
 @router.delete("/{provider_id}")
 async def revoke_connection_route(provider_id: str, current_user: User = Depends(get_current_user)):

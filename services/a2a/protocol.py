@@ -16,7 +16,7 @@ class A2AMessage(BaseModel):
 
     # Routing
     sender: str = Field(description="Originating agent name, e.g. 'HealthAgent'")
-    recipient: str = Field(description="Target specialist agent, e.g. 'BucketTransferAgent'")
+    recipient: str = Field(description="Target specialist agent, e.g. 'BucketAgent'")
 
     # Protocol State & Action
     message_type: Literal["QUERY", "PROPOSAL", "COMMAND", "RESPONSE", "ERROR", "ACK"]

@@ -49,6 +49,41 @@ def fire_audit_alert(user_uuid: str, delta: float) -> str:
         session.commit()
     return "Audit failure alert fired successfully."
 
+@tool
+def purge_circular_buffer(state: Annotated[ReconState, InjectedState]) -> str:
+    """Executes rolling 365-day FIFO purge, deleting historical transactions older than 1 year."""
+    user_uuid = state.get("user_uuid")
+    if not user_uuid:
+        return "Error: Missing user_uuid in state."
+    with SessionLocal() as session:
+        res = session.execute(
+            text("DELETE FROM transactions WHERE user_uuid = :u AND date < (CURRENT_DATE - INTERVAL '365 days')"),
+            {"u": user_uuid}
+        )
+        session.commit()
+        return json.dumps({"status": "success", "purged_rows": res.rowcount})
+
+@tool
+def anchor_physical_balance(account_id: str, live_balance: float, state: Annotated[ReconState, InjectedState]) -> str:
+    """Anchors live physical balance into accounts table and checks for unexplained physical deltas."""
+    user_uuid = state.get("user_uuid")
+    with SessionLocal() as session:
+        prev_row = session.execute(
+            text("SELECT account_balance FROM accounts WHERE account_id = :acc"),
+            {"acc": account_id}
+        ).fetchone()
+        prev_bal = float(prev_row[0] or 0.0) if prev_row else live_balance
+        
+        session.execute(
+            text("UPDATE accounts SET account_balance = :bal, last_synced_at = NOW() WHERE account_id = :acc"),
+            {"bal": live_balance, "acc": account_id}
+        )
+        session.commit()
+        delta = live_balance - prev_bal
+        return json.dumps({"account_id": account_id, "live_balance": live_balance, "previous_balance": prev_bal, "physical_delta": delta})
+
+tools = [fetch_balances, fire_audit_alert, purge_circular_buffer, anchor_physical_balance]
+
 class DatabaseReconciliationAgent:
     """
     Refactored to be a standalone LangGraph Agent with ChatOpenAI capabilities.
@@ -57,7 +92,6 @@ class DatabaseReconciliationAgent:
         self.app = self._build_graph()
         
     def _build_graph(self):
-        tools = [fetch_balances, fire_audit_alert]
         tool_node = ToolNode(tools)
         
         from services.llm_factory import get_chat_llm

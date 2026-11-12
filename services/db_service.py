@@ -56,32 +56,50 @@ def init_db(db_path=None):
         ensure_db_exists()
         
         from sqlalchemy import text
-        with direct_engine.begin() as conn:
+        with direct_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-            
+            for val in ["UNALLOCATED", "BILLS", "GOALS"]:
+                try:
+                    conn.execute(text(f"ALTER TYPE buckettype ADD VALUE IF NOT EXISTS '{val}';"))
+                except Exception:
+                    pass
+
         # This registers the models
         from models.database_models import User, Bank, Account, Transaction, ChatSession, ChatHistory, UserLifestyleProfile, LifestyleCluster, Subscription, ProactiveInsight, MerchantKnowledge, Bucket, VirtualTransfer, SystemAlert
         SQLModel.metadata.create_all(bind=direct_engine)
         
         from sqlalchemy import text
         with direct_engine.begin() as conn:
-            # Legacy migrations
+            # Column migrations
             conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_category VARCHAR;"))
             conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_semantic_anomaly BOOLEAN DEFAULT FALSE;"))
             conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cluster_signature_hash VARCHAR UNIQUE;"))
 
-            # PHASE 1: Agentic Database Architecture
+            # Buckets table migrations
+            conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 10;"))
+            conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS cached_balances JSONB DEFAULT '{}'::jsonb;"))
+            conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS currency VARCHAR DEFAULT 'GBP';"))
+            conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS allocated_amount NUMERIC(15, 2) DEFAULT 0.00;"))
+            conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS status_text VARCHAR;"))
+            conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS has_shortfall_warning BOOLEAN DEFAULT FALSE;"))
+            conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS shortfall_amount NUMERIC(15, 2) DEFAULT 0.00;"))
+            conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS associated_account_id VARCHAR;"))
+            conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS associated_account_name VARCHAR;"))
+            conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;"))
+            conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();"))
+
+            # Update legacy DEFAULT enum/string rows to UNALLOCATED
+            conn.execute(text("UPDATE buckets SET type = 'UNALLOCATED' WHERE type = 'DEFAULT';"))
+
             # 1. Trigger for cached_balance updates
             conn.execute(text("""
                 CREATE OR REPLACE FUNCTION update_bucket_balances()
                 RETURNS TRIGGER AS $$
                 BEGIN
-                    -- Deduct from source bucket
                     UPDATE buckets
                     SET cached_balance = cached_balance - NEW.amount
                     WHERE id = NEW.source_bucket_id;
 
-                    -- Add to target bucket
                     UPDATE buckets
                     SET cached_balance = cached_balance + NEW.amount
                     WHERE id = NEW.target_bucket_id;
@@ -91,7 +109,6 @@ def init_db(db_path=None):
                 $$ LANGUAGE plpgsql;
             """))
 
-            # Create or replace the trigger
             conn.execute(text("""
                 DROP TRIGGER IF EXISTS trigger_update_bucket_balances ON virtual_transfers;
                 CREATE TRIGGER trigger_update_bucket_balances
@@ -100,7 +117,7 @@ def init_db(db_path=None):
                 EXECUTE FUNCTION update_bucket_balances();
             """))
 
-            # 2. CHECK constraint: non-DEFAULT buckets cannot drop below 0
+            # 2. CHECK constraint: non-UNALLOCATED buckets cannot drop below 0
             conn.execute(text("""
                 ALTER TABLE buckets 
                 DROP CONSTRAINT IF EXISTS check_non_default_balance_positive;
@@ -109,13 +126,13 @@ def init_db(db_path=None):
                 ALTER TABLE buckets 
                 ADD CONSTRAINT check_non_default_balance_positive 
                 CHECK (
-                    type = 'DEFAULT' OR cached_balance >= 0
+                    type = 'UNALLOCATED' OR cached_balance >= 0
                 );
             """))
 
         logger.debug(json.dumps({"message": f"Database initialized successfully", "status_code": 100}))
         
-        # Phase 2 prep: Ensure all users have a DEFAULT bucket
+        # Ensure all users have an UNALLOCATED bucket
         seed_default_buckets()
         
     except Exception as e:
@@ -125,28 +142,31 @@ def init_db(db_path=None):
 def seed_default_buckets():
     import uuid
     from config import SessionLocal
-    from sqlalchemy import select
-    from models.database_models import User, Bucket
+    from sqlmodel import select
+    from models.database_models import User, Bucket, BucketType
     
     try:
         with SessionLocal() as session:
             users = session.execute(select(User)).scalars().all()
             for user in users:
-                default_bucket = session.execute(
+                unallocated_bucket = session.execute(
                     select(Bucket)
                     .where(Bucket.user_id == user.user_uuid)
-                    .where(Bucket.type == "DEFAULT")
+                    .where(Bucket.type == BucketType.UNALLOCATED)
                 ).scalars().first()
                 
-                if not default_bucket:
-                    logger.info(json.dumps({"message": f"Seeding missing DEFAULT bucket for user {user.user_uuid}", "status_code": 200}))
+                if not unallocated_bucket:
+                    logger.info(json.dumps({"message": f"Seeding missing UNALLOCATED bucket for user {user.user_uuid}", "status_code": 200}))
                     new_bucket = Bucket(
                         id=str(uuid.uuid4()),
                         user_id=user.user_uuid,
-                        type="DEFAULT",
-                        name="Unallocated Funds",
-                        priority_index=100.0,
-                        cached_balance=0.0
+                        type=BucketType.UNALLOCATED,
+                        name="Unallocated",
+                        priority=100,
+                        cached_balance=0.0,
+                        cached_balances={},
+                        currency="GBP",
+                        is_active=True
                     )
                     session.add(new_bucket)
             session.commit()

@@ -32,7 +32,7 @@ class A2ANegotiator:
             return A2AResponse(
                 reply_to_id=msg.message_id,
                 correlation_id=msg.correlation_id,
-                sender="BucketTransferAgent",
+                sender="BucketAgent",
                 recipient=msg.sender,
                 status="REJECTED",
                 status_code=AgentStatus.AGENT_PROPOSAL_REJECTED.value,
@@ -50,7 +50,7 @@ class A2ANegotiator:
                 return A2AResponse(
                     reply_to_id=msg.message_id,
                     correlation_id=msg.correlation_id,
-                    sender="BucketTransferAgent",
+                    sender="BucketAgent",
                     recipient=msg.sender,
                     status="REJECTED",
                     status_code=AgentStatus.AGENT_PROPOSAL_REJECTED.value,
@@ -64,7 +64,7 @@ class A2ANegotiator:
                 return A2AResponse(
                     reply_to_id=msg.message_id,
                     correlation_id=msg.correlation_id,
-                    sender="BucketTransferAgent",
+                    sender="BucketAgent",
                     recipient=msg.sender,
                     status="REJECTED",
                     status_code=AgentStatus.AGENT_SOLVENCY_VIOLATION.value,
@@ -86,7 +86,7 @@ class A2ANegotiator:
                 return A2AResponse(
                     reply_to_id=msg.message_id,
                     correlation_id=msg.correlation_id,
-                    sender="BucketTransferAgent",
+                    sender="BucketAgent",
                     recipient=msg.sender,
                     status="REJECTED",
                     status_code=AgentStatus.AGENT_PROPOSAL_REJECTED.value,
@@ -97,7 +97,7 @@ class A2ANegotiator:
             return A2AResponse(
                 reply_to_id=msg.message_id,
                 correlation_id=msg.correlation_id,
-                sender="BucketTransferAgent",
+                sender="BucketAgent",
                 recipient=msg.sender,
                 status="SUCCESS",
                 status_code=AgentStatus.AGENT_PROPOSAL_ACCEPTED.value,
@@ -155,7 +155,7 @@ class A2ANegotiator:
             return A2AResponse(
                 reply_to_id=msg.message_id,
                 correlation_id=msg.correlation_id,
-                sender="BucketTransferAgent",
+                sender="BucketAgent",
                 recipient=msg.sender,
                 status="SUCCESS",
                 status_code=AgentStatus.AGENT_PROPOSAL_ACCEPTED.value,
@@ -172,7 +172,7 @@ class A2ANegotiator:
             return A2AResponse(
                 reply_to_id=msg.message_id,
                 correlation_id=msg.correlation_id,
-                sender="BucketTransferAgent",
+                sender="BucketAgent",
                 recipient=msg.sender,
                 status="ERROR",
                 status_code="500-500",
@@ -201,7 +201,7 @@ class A2ANegotiator:
         eval_resp = await A2ANegotiator.evaluate_transfer_proposal(msg)
         if eval_resp.status != "SUCCESS":
             dossier = {
-                "BucketTransferAgent": {
+                "BucketAgent": {
                     "vote": "REJECT",
                     "reason": eval_resp.error_message or "Insufficient funds or invalid bucket"
                 }
@@ -209,7 +209,7 @@ class A2ANegotiator:
             return A2AResponse(
                 reply_to_id=msg.message_id,
                 correlation_id=msg.correlation_id,
-                sender="BucketTransferAgent",
+                sender="BucketAgent",
                 recipient=msg.sender,
                 status="REJECTED",
                 status_code=eval_resp.status_code,
@@ -229,7 +229,7 @@ class A2ANegotiator:
 
         # Health vote
         health_msg = A2AMessage(
-            sender="BucketTransferAgent",
+            sender="BucketAgent",
             recipient="HealthWorker",
             message_type="QUERY",
             intent="AUDIT_HEALTH_SCORE",
@@ -240,7 +240,7 @@ class A2ANegotiator:
 
         # Forecaster vote
         forecaster_msg = A2AMessage(
-            sender="BucketTransferAgent",
+            sender="BucketAgent",
             recipient="ForecasterWorker",
             message_type="QUERY",
             intent="EVALUATE_SOLVENCY_IMPACT",
@@ -252,7 +252,7 @@ class A2ANegotiator:
 
         # Market context
         market_msg = A2AMessage(
-            sender="BucketTransferAgent",
+            sender="BucketAgent",
             recipient="MarketWorker",
             message_type="QUERY",
             intent="FETCH_MACRO_INFLATION",
@@ -267,7 +267,7 @@ class A2ANegotiator:
         )
 
         dossier = {
-            "BucketTransferAgent": {"vote": "ACCEPT", "reason": "Solvency and math lock verified"},
+            "BucketAgent": {"vote": "ACCEPT", "reason": "Solvency and math lock verified"},
             "HealthWorker": {
                 "vote": "ACCEPT" if health_resp.status == "SUCCESS" else "REJECT",
                 "health_score": health_resp.payload.get("health_score"),
@@ -291,7 +291,7 @@ class A2ANegotiator:
             return A2AResponse(
                 reply_to_id=msg.message_id,
                 correlation_id=msg.correlation_id,
-                sender="BucketTransferAgent",
+                sender="BucketAgent",
                 recipient=msg.sender,
                 status="COUNTER_PROPOSED",
                 status_code=AgentStatus.AGENT_PROPOSAL_ACCEPTED.value,
@@ -312,7 +312,7 @@ class A2ANegotiator:
         return A2AResponse(
             reply_to_id=msg.message_id,
             correlation_id=msg.correlation_id,
-            sender="BucketTransferAgent",
+            sender="BucketAgent",
             recipient=msg.sender,
             status="SUCCESS",
             status_code=AgentStatus.AGENT_PROPOSAL_ACCEPTED.value,

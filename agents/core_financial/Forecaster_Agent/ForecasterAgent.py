@@ -22,44 +22,15 @@ current_year_str = str(datetime.now().year)
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     user_uuid: str
-    cache_id: str
-    chart_type: str
 
 @tool
 async def generate_expense_forecast_wrapper(state: Annotated[AgentState, InjectedState], account_id: Optional[str] = None, days: int = 30) -> str:
-    """Forecast future expenses for selected accounts."""
+    """Forecast future cumulative expenses, evaluate monthly run-rate, and compare spend pacing against active bucket goals."""
     user_uuid = state.get("user_uuid")
     payload = {"days": days, "user_uuid": user_uuid}
     if account_id:
         payload["account_id"] = account_id
     return await bridge.call_tool("forecaster", "generate_expense_forecast", payload)
-
-@tool
-async def generate_financial_forecast_wrapper(state: Annotated[AgentState, InjectedState], account_id: Optional[str] = None, days: int = 30, discipline_multiplier: float = 1.0) -> str:
-    """Forecast overall financial balance for selected accounts."""
-    user_uuid = state.get("user_uuid")
-    payload = {"days": days, "discipline_multiplier": discipline_multiplier, "user_uuid": user_uuid}
-    if account_id:
-        payload["account_id"] = account_id
-    return await bridge.call_tool("forecaster", "generate_financial_forecast", payload)
-
-@tool
-async def generate_hypothetical_scenario_wrapper(state: Annotated[AgentState, InjectedState], account_id: Optional[str] = None, days: int = 30, injections: Optional[list[dict]] = None) -> str:
-    """Generates a financial forecast based on a hypothetical scenario."""
-    user_uuid = state.get("user_uuid")
-    payload = {"user_uuid": user_uuid, "days": days, "injections": injections or []}
-    if account_id:
-        payload["account_id"] = account_id
-    return await bridge.call_tool("forecaster", "generate_hypothetical_scenario", payload)
-
-@tool
-async def forecast_budget_impact_wrapper(state: Annotated[AgentState, InjectedState], account_id: Optional[str] = None, days: int = 30) -> str:
-    """Run a detailed financial forecast incorporating the user's live budget pacing (Spend Velocity & Variance)."""
-    user_uuid = state.get("user_uuid")
-    payload = {"days": days, "user_uuid": user_uuid}
-    if account_id:
-        payload["account_id"] = account_id
-    return await bridge.call_tool("forecaster", "forecast_budget_impact", payload)
 
 @tool
 async def get_connected_accounts_wrapper(state: Annotated[AgentState, InjectedState]) -> str:
@@ -70,15 +41,12 @@ async def get_connected_accounts_wrapper(state: Annotated[AgentState, InjectedSt
 
 tools = [
     generate_expense_forecast_wrapper,
-    generate_financial_forecast_wrapper,
-    generate_hypothetical_scenario_wrapper,
-    forecast_budget_impact_wrapper,
     get_connected_accounts_wrapper
 ]
 
 class ForecasterAgent:
     """
-    Standalone LangGraph Agent with ChatOpenAI capabilities for ForecasterAgent.
+    Standalone LangGraph Agent for expenditure trajectory forecasting and goal-aligned pace evaluation.
     """
     def __init__(self):
         self.app = self._build_graph()
@@ -97,20 +65,18 @@ class ForecasterAgent:
                 sys_msg = SystemMessage(
                     content=(
                         f"### ROLE: Specialist Financial Forecaster\n"
-                        f"You project future liquidity and scenarios based on mathematical trends.\n"
-                        f"- Date: {current_date_str}\n\n"
-                        f"\n\n### STRICT ROLE BOUNDARIES & EXPERTISE ###\nYou are a highly specialized autonomous agent within the BudAI multi-agent network. Your role is strictly isolated to your specific domain of expertise. Do not attempt to execute actions outside your purview. You possess hyper-focused tools designed exclusively for your analytical tasks. Communicate professionally, mathematically, and directly. Avoid conversational filler.\n\n### CRITICAL STRICT ANTI-HALLUCINATION PROTOCOL ###\n"
-                        f"1. NO FABRICATION: You are strictly forbidden from fabricating data. Use ONLY data from tool DATA SUMMARY blocks.\n"
-                        f"2. TOOL EXECUTION: You have access to specialized tools. You must use them to fetch data when required.\n"
-                        f"3. ADMIT IGNORANCE: If a tool returns no data, state 'I do not have the data.' Do not guess.\n"
-                        f"4. MULTI-CURRENCY: Respect the native currency returned by the tools (e.g., £, $, €). Do not force GBP. No emojis.\n"
-                        f"5. FRESH DATA: Always execute tools for fresh data. Never copy-paste numbers from chat history.\n\n"
-                        f"- YOUR SCOPE: Only projections where Year > {current_year_str}.\n\n"
-                        f"ROUTING (Use these tools):\n"
-                        f"- generate_expense_forecast_wrapper: Forecast future expenses.\n"
-                        f"- generate_financial_forecast_wrapper: Forecast overall financial balance.\n"
-                        f"- generate_hypothetical_scenario_wrapper: Forecast based on hypothetical events.\n"
-                        f"- get_connected_accounts_wrapper: Get account IDs.\n"
+                        f"You project future expenditure trends, compare spend velocity against prior monthly run-rates, and evaluate pacing against active bucket goals.\n"
+                        f"- Current Date: {current_date_str}\n\n"
+                        f"### STRICT ROLE BOUNDARIES & EXPERTISE ###\n"
+                        f"You are a specialized autonomous agent within the BudAI network. Your role is strictly focused on expense projections and goal pacing.\n"
+                        f"Communicate professionally, mathematically, and directly. Avoid conversational filler and never use emojis.\n\n"
+                        f"### CRITICAL ANTI-HALLUCINATION PROTOCOL ###\n"
+                        f"1. NO FABRICATION: Use strictly verified figures returned by the tool.\n"
+                        f"2. TOOL EXECUTION: Always call generate_expense_forecast_wrapper for projections.\n"
+                        f"3. MULTI-CURRENCY: Respect the native currency returned by the tools.\n\n"
+                        f"ROUTING TOOLS:\n"
+                        f"- generate_expense_forecast_wrapper: Forecast future expenses and evaluate goal pacing.\n"
+                        f"- get_connected_accounts_wrapper: Fetch user connected account IDs.\n"
                     )
                 )
                 messages = [sys_msg] + messages

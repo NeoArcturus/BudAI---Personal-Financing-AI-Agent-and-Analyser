@@ -93,11 +93,11 @@ async def handle_health_agent(msg: A2AMessage) -> A2AResponse:
         recurring_balance = 0.0
         for b_type, b_bal in buckets:
             val = float(b_bal or 0.0)
-            if b_type in ("DEFAULT", "ACCUMULATING"):
+            if b_type in ("UNALLOCATED", "GOALS"):
                 total_liquid += val
-            if b_type == "DEFAULT":
+            if b_type == "UNALLOCATED":
                 default_balance += val
-            elif b_type == "RECURRING":
+            elif b_type == "BILLS":
                 recurring_balance += val
 
         # Estimate 30-day burn rate from recent debit transactions
@@ -211,64 +211,20 @@ async def handle_health_agent(msg: A2AMessage) -> A2AResponse:
 async def handle_forecaster_agent(msg: A2AMessage) -> A2AResponse:
     """
     ForecasterWorker A2A Handler:
-    Provides stochastic multi-path balance corridor projections (Mean, Careless, Optimal)
-    incorporating Bates volatility and ONS inflation trends.
+    Provides stochastic multi-path expense projections and goal-aligned optimal budget ceilings.
+    Compares current pace against prior monthly run-rate and drops optimal curve if no goals exist.
     """
     user_uuid = msg.user_uuid
     intent = msg.intent.upper()
     days = int(msg.payload.get("days", 30))
 
-    with SessionLocal() as session:
-        # Sum current total balance
-        row = session.execute(
-            text("SELECT COALESCE(SUM(cached_balance), 0.0) FROM buckets WHERE user_id = :u AND is_active = TRUE"),
-            {"u": user_uuid}
-        ).fetchone()
-        current_balance = float(row[0]) if row else 0.0
-
-        # Recent 30-day net daily velocity
-        v_row = session.execute(
-            text("""
-                SELECT COALESCE(SUM(amount), 0.0) / 30.0 
-                FROM transactions 
-                WHERE user_uuid = :u AND date >= NOW() - INTERVAL '30 days'
-            """),
-            {"u": user_uuid}
-        ).fetchone()
-        daily_velocity = float(v_row[0]) if v_row and v_row[0] else -15.0
-
-    if intent in ("SIMULATE_STOCHASTIC_BALANCE", "PROJECT_CASHFLOW"):
-        # Fast stochastic corridor estimation (Mean, Careless -2sigma, Optimal +2sigma)
-        # Inquire AnalyserAgent via A2A for empirical volatility
-        from services.a2a.bus import get_a2a_bus
-        bus = get_a2a_bus()
-        vol_msg = A2AMessage(
-            sender="ForecasterWorker",
-            recipient="AnalyserAgent",
-            message_type="QUERY",
-            intent="GET_HISTORICAL_VOLATILITY",
-            user_uuid=user_uuid,
-            correlation_id=msg.correlation_id,
-            payload={"window_days": 180}
-        )
-        vol_resp = await bus.request_reply(vol_msg)
-        if vol_resp.status == "SUCCESS" and float(vol_resp.payload.get("daily_std_dev", 0.0)) > 0:
-            volatility_daily = float(vol_resp.payload["daily_std_dev"])
-        else:
-            volatility_daily = 35.0  # fallback baseline standard deviation
-
-        horizon_volatility = volatility_daily * math.sqrt(days)
-
-        mean_projected = current_balance + (daily_velocity * days)
-        careless_bound = max(0.0, mean_projected - (2.0 * horizon_volatility))
-        optimal_bound = mean_projected + (1.5 * horizon_volatility)
-
-        probability_shortfall = 0.0
-        if mean_projected < 0.0:
-            probability_shortfall = 0.85
-        elif careless_bound <= 0.0:
-            probability_shortfall = round((abs(careless_bound) / (optimal_bound + 1.0)) * 0.5, 3)
-
+    if intent in ("PROJECT_EXPENSES", "GENERATE_EXPENSE_FORECAST", "SIMULATE_STOCHASTIC_BALANCE", "PROJECT_CASHFLOW"):
+        from services.mcp_tools.forecaster_tools import generate_expense_forecast
+        forecast_summary = generate_expense_forecast.invoke({
+            "user_uuid": user_uuid,
+            "days": days
+        })
+        
         return A2AResponse(
             reply_to_id=msg.message_id,
             correlation_id=msg.correlation_id,
@@ -278,25 +234,34 @@ async def handle_forecaster_agent(msg: A2AMessage) -> A2AResponse:
             status_code=AgentStatus.AGENT_RESPONSE_READY.value,
             payload={
                 "horizon_days": days,
-                "current_balance": current_balance,
-                "mean_projected_balance": round(mean_projected, 2),
-                "careless_bound": round(careless_bound, 2),
-                "optimal_bound": round(optimal_bound, 2),
-                "probability_shortfall": probability_shortfall,
-                "daily_velocity": round(daily_velocity, 2),
-                "empirical_std_dev": round(volatility_daily, 2)
+                "forecast_summary": forecast_summary
             }
         )
 
     elif intent == "EVALUATE_SOLVENCY_IMPACT":
+        with SessionLocal() as session:
+            row = session.execute(
+                text("SELECT COALESCE(SUM(cached_balance), 0.0) FROM buckets WHERE user_id = :u AND is_active = TRUE"),
+                {"u": user_uuid}
+            ).fetchone()
+            current_balance = float(row[0]) if row else 0.0
+
+            v_row = session.execute(
+                text("""
+                    SELECT COALESCE(SUM(amount), 0.0) / 30.0 
+                    FROM transactions 
+                    WHERE user_uuid = :u AND date >= NOW() - INTERVAL '30 days'
+                """),
+                {"u": user_uuid}
+            ).fetchone()
+            daily_velocity = float(v_row[0]) if v_row and v_row[0] else -15.0
+
         deduction = float(msg.payload.get("deduction_amount", 0.0))
         horizon = int(msg.payload.get("horizon_days", 30))
 
-        # Check impact on balance after horizon
         post_balance = current_balance - deduction
         projected_after = post_balance + (daily_velocity * horizon)
         
-        # Safe if post balance >= buffer floor (£800) and projection remains solvent
         safety_floor = 800.0
         is_safe = (post_balance >= safety_floor) and (projected_after >= safety_floor)
         shortfall_prob = 0.85 if not is_safe else 0.05
@@ -329,15 +294,82 @@ async def handle_forecaster_agent(msg: A2AMessage) -> A2AResponse:
         error_message=f"Unrecognized ForecasterWorker intent: {intent}"
     )
 
-async def handle_bucket_transfer_agent(msg: A2AMessage) -> A2AResponse:
+async def handle_bucket_agent(msg: A2AMessage) -> A2AResponse:
     """
-    BucketTransferWorker A2A Handler:
-    Executes double-entry virtual reallocations and evaluates proposals under
-    strict PostgreSQL math locks (trigger_update_bucket_balances).
+    BucketAgent A2A Handler:
+    Manages the 3-container virtual bucket hierarchy (UNALLOCATED, BILLS, GOALS),
+    executes Stage 3 bill timeline allocations (<15d automated moves),
+    enforces the spending hierarchy (Bills > Goals), and tracks bank account shortfalls.
     """
+    user_uuid = msg.user_uuid
     intent = msg.intent.upper()
+    from services.a2a.negotiator import A2ANegotiator
+    import services.bucket_service as bucket_service
 
-    if intent == "PROPOSE_REBALANCE":
+    if intent == "SYNC_UNALLOCATED_ACCOUNTS":
+        with SessionLocal() as session:
+            unallocated = bucket_service.sync_unallocated_from_accounts(session, user_uuid)
+            session.commit()
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="BucketAgent",
+                recipient=msg.sender,
+                status="SUCCESS",
+                status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+                payload={
+                    "total_balance": unallocated.cached_balance,
+                    "currencies": unallocated.cached_balances
+                }
+            )
+
+    elif intent in ("PROCESS_STAGE3_BILLS", "PROVISION_STAGE3_BILLS"):
+        bills_data = msg.payload.get("bills") or msg.payload.get("subscriptions") or []
+        if isinstance(bills_data, dict):
+            bills_data = [bills_data]
+        with SessionLocal() as session:
+            res = bucket_service.process_stage3_bills(session, user_uuid, bills_data)
+            session.commit()
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="BucketAgent",
+                recipient=msg.sender,
+                status="SUCCESS",
+                status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+                payload=res
+            )
+
+    elif intent == "DEDUCT_TRANSACTION_OUTFLOW":
+        tx_data = msg.payload.get("transaction") or msg.payload
+        with SessionLocal() as session:
+            res = bucket_service.deduct_transaction_outflow(session, user_uuid, tx_data)
+            session.commit()
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="BucketAgent",
+                recipient=msg.sender,
+                status="SUCCESS",
+                status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+                payload=res
+            )
+
+    elif intent == "CHECK_REALITY_TRANSFERS":
+        with SessionLocal() as session:
+            reminders = bucket_service.check_reality_transfers(session, user_uuid)
+            session.commit()
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="BucketAgent",
+                recipient=msg.sender,
+                status="SUCCESS",
+                status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+                payload={"reminders": reminders, "count": len(reminders)}
+            )
+
+    elif intent == "PROPOSE_REBALANCE":
         return await A2ANegotiator.evaluate_transfer_proposal(msg)
     elif intent == "EXECUTE_VIRTUAL_TRANSFER":
         return await A2ANegotiator.execute_transfer(msg)
@@ -347,12 +379,15 @@ async def handle_bucket_transfer_agent(msg: A2AMessage) -> A2AResponse:
     return A2AResponse(
         reply_to_id=msg.message_id,
         correlation_id=msg.correlation_id,
-        sender="BucketTransferAgent",
+        sender="BucketAgent",
         recipient=msg.sender,
         status="ERROR",
         status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
-        error_message=f"Unrecognized BucketTransferAgent intent: {intent}"
+        error_message=f"Unrecognized BucketAgent intent: {intent}"
     )
+
+# Direct reference for legacy callers
+handle_bucket_transfer_agent = handle_bucket_agent
 
 async def handle_categorizer_agent(msg: A2AMessage) -> A2AResponse:
     """
@@ -364,23 +399,41 @@ async def handle_categorizer_agent(msg: A2AMessage) -> A2AResponse:
     merchant = msg.payload.get("merchant", "")
     full_text = f"{description} {merchant}".lower().strip()
 
-    if intent in ("CLASSIFY_TRANSACTION", "ENRICH_ONS_TAGS"):
+    if intent in ("CLASSIFY_TRANSACTION", "ENRICH_ONS_TAGS", "PROCESS_NEW_EXPENSE"):
         cat_in = msg.payload.get("category", "")
         sub_cat_in = msg.payload.get("sub_category")
-        
-        # Simple merchant keyword heuristics if not specified
+        clean_merchant = msg.payload.get("clean_merchant") or merchant or description
+        amount = float(msg.payload.get("amount", 0.0))
+        tx_uuid = msg.payload.get("transaction_uuid")
+
+        # Priority 1: Deterministic regex taxonomy rules
         if not cat_in:
-            if any(k in full_text for k in ["tesco", "sainsbury", "asda", "morrisons", "waitrose", "groceries", "supermarket", "milk", "bread"]):
-                cat_in = "Food & Dining"
-                sub_cat_in = "Groceries"
-            elif any(k in full_text for k in ["uber", "train", "rail", "fuel", "petrol", "shell", "bp"]):
-                cat_in = "Transportation"
-            elif any(k in full_text for k in ["netflix", "spotify", "gym", "prime"]):
-                cat_in = "Subscriptions & Digital Services"
-            elif any(k in full_text for k in ["energy", "gas", "electric", "water", "council"]):
-                cat_in = "Utilities"
-            else:
-                cat_in = "Shopping & Retail"
+            from services.categorization.classifier import classify_merchant
+            rule_cat, rule_sub = classify_merchant(clean_merchant, description, amount)
+            if rule_cat != "Uncategorized":
+                cat_in = rule_cat
+                sub_cat_in = rule_sub
+
+        # Priority 2: Intra-batch Qdrant flywheel cache lookup (<2ms)
+        if not cat_in:
+            try:
+                from services.qdrant_service import get_qdrant_service
+                from services.embedding_service import get_embedding_service
+                qdrant = get_qdrant_service()
+                embedder = get_embedding_service()
+                vec = embedder.embed_query(clean_merchant)
+                hits = qdrant.search_merchant_knowledge(vec, limit=1, score_threshold=0.88)
+                if hits:
+                    hit_payload = hits[0].get("payload", {})
+                    cat_in = hit_payload.get("category", "Shopping & Retail")
+                    sub_cat_in = hit_payload.get("sub_category", "General Merchandise")
+            except Exception as q_err:
+                logger.warning(f"Qdrant flywheel lookup bypassed: {q_err}")
+
+        # Fallback default
+        if not cat_in:
+            cat_in = "Shopping & Retail"
+            sub_cat_in = "General Merchandise"
 
         matched_category, matched_subcategory, combined_tags, ons_code = enrich_transaction_taxonomy(
             category=cat_in,
@@ -388,6 +441,43 @@ async def handle_categorizer_agent(msg: A2AMessage) -> A2AResponse:
             description=full_text,
             existing_tags=msg.payload.get("existing_tags", [])
         )
+
+        # Update transaction record in PostgreSQL if tx_uuid provided
+        if tx_uuid:
+            try:
+                with SessionLocal() as session:
+                    session.execute(
+                        text("""
+                            UPDATE transactions 
+                            SET sub_category = :sub_cat, tags = :tags::jsonb
+                            WHERE transaction_uuid = :uid
+                        """),
+                        {"sub_cat": matched_subcategory, "tags": json.dumps(combined_tags), "uid": tx_uuid}
+                    )
+                    session.commit()
+            except Exception as upd_err:
+                logger.warning(f"Could not update transaction {tx_uuid} post-categorization: {upd_err}")
+
+        # Stage 3 Handoff: Broadcast EXPENSE_CATEGORIZED to wake parallel intelligence engines
+        from services.a2a.bus import get_a2a_bus
+        bus = get_a2a_bus()
+        asyncio.create_task(bus.send(A2AMessage(
+            sender="CategorizerAgent",
+            recipient="A2ABroadcast",
+            message_type="COMMAND",
+            intent="EXPENSE_CATEGORIZED",
+            user_uuid=msg.user_uuid,
+            correlation_id=msg.correlation_id,
+            payload={
+                "transaction_uuid": tx_uuid,
+                "amount": amount,
+                "category": matched_category,
+                "sub_category": matched_subcategory,
+                "tags": combined_tags,
+                "ons_code": ons_code,
+                "clean_merchant": clean_merchant
+            }
+        )))
 
         return A2AResponse(
             reply_to_id=msg.message_id,
@@ -925,8 +1015,8 @@ async def handle_scenario_agent(msg: A2AMessage) -> A2AResponse:
 async def handle_anomaly_agent(msg: A2AMessage) -> A2AResponse:
     """
     AnomalyWorker A2A Handler:
-    Orchestrates AnalyserAgent and MarketWorker to evaluate transaction outliers
-    with inflation adjustment.
+    Evaluates transaction anomalies using Robust Modified Z-Scores (Median Absolute Deviation)
+    and Poisson burst arrival frequency, avoiding mean/std distortion.
     """
     user_uuid = msg.user_uuid
     intent = msg.intent.upper()
@@ -938,19 +1028,19 @@ async def handle_anomaly_agent(msg: A2AMessage) -> A2AResponse:
         category = msg.payload.get("category", "General & Discretionary")
         merchant = msg.payload.get("merchant", "Unknown")
 
-        # Step 1: Query AnalyserAgent for historical category baseline
-        base_msg = A2AMessage(
-            sender="AnomalyWorker",
-            recipient="AnalyserAgent",
-            message_type="QUERY",
-            intent="GET_CATEGORY_BASELINE",
-            user_uuid=user_uuid,
-            correlation_id=msg.correlation_id,
-            payload={"category": category, "test_amount": amount}
-        )
-        base_resp = await bus.request_reply(base_msg)
-        cat_mean = float(base_resp.payload.get("category_mean", 50.0))
-        cat_std = float(base_resp.payload.get("category_std_dev", 20.0))
+        # Step 1: Query historical transactions in this category for MAD calculation
+        with SessionLocal() as session:
+            cat_txs = session.execute(
+                text("""
+                    SELECT ABS(amount)
+                    FROM transactions
+                    WHERE user_uuid = :u AND category = :cat AND amount < 0
+                    ORDER BY date DESC LIMIT 60
+                """),
+                {"u": user_uuid, "cat": category}
+            ).fetchall()
+
+        amounts = [float(r[0]) for r in cat_txs if r[0] is not None]
 
         # Step 2: Query MarketWorker for category inflation rate
         mkt_msg = A2AMessage(
@@ -965,11 +1055,41 @@ async def handle_anomaly_agent(msg: A2AMessage) -> A2AResponse:
         mkt_resp = await bus.request_reply(mkt_msg)
         inflation_yoy = float(mkt_resp.payload.get("delta_pct_yoy", 0.0))
 
-        # Inflation-adjusted expectation
-        adjusted_mean = cat_mean * (1.0 + (inflation_yoy / 100.0))
-        deviation = amount - adjusted_mean
-        z_score = round(deviation / max(cat_std, 1.0), 2)
-        is_anomaly = abs(z_score) > 2.5 or (amount > 3.0 * adjusted_mean and amount > 80.0)
+        if len(amounts) >= 5:
+            s_amounts = sorted(amounts)
+            n = len(s_amounts)
+            median_val = s_amounts[n // 2] if n % 2 != 0 else (s_amounts[n // 2 - 1] + s_amounts[n // 2]) / 2.0
+            devs = sorted(abs(x - median_val) for x in s_amounts)
+            mad = devs[n // 2] if n % 2 != 0 else (devs[n // 2 - 1] + devs[n // 2]) / 2.0
+            
+            # Inflation-adjust baseline
+            adjusted_baseline = median_val * (1.0 + (inflation_yoy / 100.0))
+            if mad > 0:
+                mod_z = round(0.6745 * (amount - adjusted_baseline) / mad, 2)
+            else:
+                mod_z = 0.0
+            is_anomaly = mod_z > 3.5 or (amount > 3.0 * adjusted_baseline and amount > 75.0)
+            baseline_val = adjusted_baseline
+            z_score = mod_z
+        else:
+            # Fallback to AnalyserAgent baseline
+            base_msg = A2AMessage(
+                sender="AnomalyWorker",
+                recipient="AnalyserAgent",
+                message_type="QUERY",
+                intent="GET_CATEGORY_BASELINE",
+                user_uuid=user_uuid,
+                correlation_id=msg.correlation_id,
+                payload={"category": category, "test_amount": amount}
+            )
+            base_resp = await bus.request_reply(base_msg)
+            cat_mean = float(base_resp.payload.get("category_mean", 50.0))
+            cat_std = float(base_resp.payload.get("category_std_dev", 20.0))
+            adjusted_baseline = cat_mean * (1.0 + (inflation_yoy / 100.0))
+            deviation = amount - adjusted_baseline
+            z_score = round(deviation / max(cat_std, 1.0), 2)
+            is_anomaly = abs(z_score) > 2.5 or (amount > 3.0 * adjusted_baseline and amount > 80.0)
+            baseline_val = adjusted_baseline
 
         return A2AResponse(
             reply_to_id=msg.message_id,
@@ -983,11 +1103,9 @@ async def handle_anomaly_agent(msg: A2AMessage) -> A2AResponse:
                 "amount": amount,
                 "category": category,
                 "is_anomaly": is_anomaly,
-                "z_score": z_score,
-                "historical_category_mean": cat_mean,
-                "inflation_adjusted_mean": round(adjusted_mean, 2),
+                "modified_z_score": z_score,
+                "category_baseline": round(baseline_val, 2),
                 "inflation_rate_yoy": inflation_yoy,
-                "inflation_adjusted_deviation": round(deviation, 2),
                 "severity": "CRITICAL" if z_score > 4.0 else "WARNING" if is_anomaly else "NORMAL"
             }
         )
@@ -1052,6 +1170,124 @@ async def handle_anomaly_agent(msg: A2AMessage) -> A2AResponse:
         status="ERROR",
         status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
         error_message=f"Unrecognized AnomalyWorker intent: {intent}"
+    )
+
+async def handle_subscription_detection_agent(msg: A2AMessage) -> A2AResponse:
+    """
+    SubscriptionWorker A2A Handler:
+    Detects recurring merchant rhythms using SQL window functions,
+    identifies price hikes without HDBSCAN clustering, and registers system alerts.
+    """
+    user_uuid = msg.user_uuid
+    intent = msg.intent.upper()
+    from models.database_models import Subscription, SystemAlert
+    from sqlmodel import select
+
+    if intent in ("SCAN_RECURRING_PAYMENTS", "DETECT_SUBSCRIPTIONS"):
+        with SessionLocal() as session:
+            subs = session.execute(
+                select(Subscription).where(Subscription.user_uuid == user_uuid)
+            ).scalars().all()
+            
+            sub_list = []
+            for s in subs:
+                sub_list.append({
+                    "merchant": s.merchant_name,
+                    "expected_amount": float(s.expected_amount),
+                    "frequency": s.predicted_frequency,
+                    "next_date": s.next_expected_date.strftime("%Y-%m-%d"),
+                    "is_price_hike": s.is_price_hike
+                })
+
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="SubscriptionWorker",
+                recipient=msg.sender,
+                status="SUCCESS",
+                status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+                payload={"subscriptions": sub_list, "count": len(sub_list)}
+            )
+
+    elif intent == "DETECT_RECURRING_RHYTHM":
+        merchant = msg.payload.get("merchant", "")
+        with SessionLocal() as session:
+            query = text("""
+                WITH ranked AS (
+                    SELECT 
+                        date, 
+                        amount,
+                        LAG(date) OVER (ORDER BY date ASC) as prev_date,
+                        LAG(amount) OVER (ORDER BY date ASC) as prev_amount
+                    FROM transactions
+                    WHERE user_uuid = :u 
+                      AND (semi_cleaned_description ILIKE :m OR description ILIKE :m)
+                    ORDER BY date DESC
+                    LIMIT 10
+                )
+                SELECT 
+                    AVG(DATE_PART('day', date - prev_date)) as avg_interval,
+                    STDDEV(DATE_PART('day', date - prev_date)) as std_interval,
+                    AVG(amount) as avg_amount,
+                    STDDEV(amount) as std_amount,
+                    COUNT(*) as match_count,
+                    MAX(date) as latest_date,
+                    MAX(amount) as latest_amount
+                FROM ranked 
+                WHERE prev_date IS NOT NULL
+            """)
+            row = session.execute(query, {"u": user_uuid, "m": f"%{merchant.lower()}%"}).fetchone()
+
+            is_recurring = False
+            cadence = "UNKNOWN"
+            is_price_hike = False
+            hike_amount = 0.0
+
+            if row and row[4] and row[4] >= 2:
+                avg_int = float(row[0] or 0.0)
+                std_int = float(row[1] or 0.0)
+                avg_amt = float(row[2] or 0.0)
+                latest_amt = float(row[6] or 0.0)
+
+                if std_int <= 4.0:
+                    if 25.0 <= avg_int <= 35.0:
+                        is_recurring = True
+                        cadence = "MONTHLY"
+                    elif 6.0 <= avg_int <= 8.0:
+                        is_recurring = True
+                        cadence = "WEEKLY"
+                    elif 350.0 <= avg_int <= 375.0:
+                        is_recurring = True
+                        cadence = "ANNUAL"
+
+                if is_recurring and latest_amt > avg_amt * 1.05:
+                    is_price_hike = True
+                    hike_amount = round(latest_amt - avg_amt, 2)
+
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="SubscriptionWorker",
+                recipient=msg.sender,
+                status="SUCCESS",
+                status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+                payload={
+                    "merchant": merchant,
+                    "is_recurring": is_recurring,
+                    "cadence": cadence,
+                    "is_price_hike": is_price_hike,
+                    "hike_amount": hike_amount
+                }
+            )
+
+    return A2AResponse(
+        reply_to_id=msg.message_id,
+        correlation_id=msg.correlation_id,
+        sender="SubscriptionWorker",
+        recipient=msg.sender,
+        status="ERROR",
+        status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
+        error_message=f"Unrecognized SubscriptionWorker intent: {intent}"
     )
 
 async def handle_cascade_agent(msg: A2AMessage) -> A2AResponse:
@@ -1191,4 +1427,371 @@ async def handle_cascade_agent(msg: A2AMessage) -> A2AResponse:
         status="ERROR",
         status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
         error_message=f"Unrecognized CascadeWorker intent: {intent}"
+    )
+
+
+# --- STAGE 1 AGENTS: Ingestion, Reconciliation, and Transaction Intake ---
+
+async def handle_truelayer_ingestion_agent(msg: A2AMessage) -> A2AResponse:
+    """
+    TrueLayerIngestionAgent A2A Handler:
+    Manages external Open Banking communication, token refreshes,
+    and non-blocking delta transaction pulls.
+    """
+    intent = msg.intent.upper()
+    user_uuid = msg.user_uuid
+    payload = msg.payload
+    account_id = payload.get("account_id")
+
+    if intent in ("SYNC_ACCOUNT_DELTA", "TRIGGER_SYNC"):
+        if not account_id:
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="TrueLayerIngestionAgent",
+                recipient=msg.sender,
+                status="ERROR",
+                status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
+                error_message="Missing account_id in sync request"
+            )
+        try:
+            from services.api_integrator.truelayer_sync import TrueLayerSync
+            syncer = TrueLayerSync(user_id=user_uuid)
+            syncer.trigger_sync(account_id=account_id, user_uuid=user_uuid, from_date=payload.get("from_date"))
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="TrueLayerIngestionAgent",
+                recipient=msg.sender,
+                status="SUCCESS",
+                status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+                payload={"account_id": account_id, "status": "DELTA_SYNC_COMPLETED"}
+            )
+        except Exception as e:
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="TrueLayerIngestionAgent",
+                recipient=msg.sender,
+                status="ERROR",
+                status_code=AgentStatus.AGENT_EXECUTION_FAILURE.value,
+                error_message=f"Delta sync failed: {str(e)}"
+            )
+
+    elif intent == "REFRESH_OAUTH_TOKENS":
+        provider_id = payload.get("provider_id")
+        try:
+            from services.api_integrator.access_token_generator import AccessTokenGenerator
+            token_gen = AccessTokenGenerator()
+            refreshed = token_gen.refresh_token(provider_id, user_uuid)
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="TrueLayerIngestionAgent",
+                recipient=msg.sender,
+                status="SUCCESS" if refreshed else "ERROR",
+                status_code=AgentStatus.AGENT_RESPONSE_READY.value if refreshed else AgentStatus.AGENT_EXECUTION_FAILURE.value,
+                payload={"provider_id": provider_id, "refreshed": refreshed}
+            )
+        except Exception as e:
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="TrueLayerIngestionAgent",
+                recipient=msg.sender,
+                status="ERROR",
+                status_code=AgentStatus.AGENT_EXECUTION_FAILURE.value,
+                error_message=f"Token refresh failed: {str(e)}"
+            )
+
+    return A2AResponse(
+        reply_to_id=msg.message_id,
+        correlation_id=msg.correlation_id,
+        sender="TrueLayerIngestionAgent",
+        recipient=msg.sender,
+        status="ERROR",
+        status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
+        error_message=f"Unrecognized TrueLayerIngestionAgent intent: {intent}"
+    )
+
+
+async def handle_reconciliation_agent(msg: A2AMessage) -> A2AResponse:
+    """
+    ReconciliationAgent A2A Handler:
+    Anchors physical bank balances, computes physical balance deltas,
+    and executes rolling 365-day circular buffer purging.
+    """
+    intent = msg.intent.upper()
+    user_uuid = msg.user_uuid
+    payload = msg.payload
+
+    if intent in ("ANCHOR_ACCOUNT_BALANCE", "ANCHOR_BALANCE"):
+        account_id = payload.get("account_id")
+        live_balance = float(payload.get("live_balance", {}).get("current", payload.get("live_balance", 0.0)) if isinstance(payload.get("live_balance"), dict) else payload.get("live_balance", 0.0))
+
+        with SessionLocal() as session:
+            prev_row = session.execute(
+                text("SELECT account_balance FROM accounts WHERE account_id = :acc"),
+                {"acc": account_id}
+            ).fetchone()
+            prev_bal = float(prev_row[0] or 0.0) if prev_row else live_balance
+
+            session.execute(
+                text("UPDATE accounts SET account_balance = :bal, last_synced_at = NOW() WHERE account_id = :acc"),
+                {"bal": live_balance, "acc": account_id}
+            )
+            session.commit()
+            delta = live_balance - prev_bal
+
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="ReconciliationAgent",
+                recipient=msg.sender,
+                status="SUCCESS",
+                status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+                payload={
+                    "account_id": account_id,
+                    "live_balance": live_balance,
+                    "previous_balance": prev_bal,
+                    "physical_delta": delta
+                }
+            )
+
+    elif intent in ("PURGE_CIRCULAR_BUFFER", "ENFORCE_RETENTION"):
+        with SessionLocal() as session:
+            res = session.execute(
+                text("DELETE FROM transactions WHERE user_uuid = :u AND date < (CURRENT_DATE - INTERVAL '365 days')"),
+                {"u": user_uuid}
+            )
+            session.commit()
+            purged = res.rowcount
+
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="ReconciliationAgent",
+                recipient=msg.sender,
+                status="SUCCESS",
+                status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+                payload={"purged_records": purged}
+            )
+
+    elif intent in ("AUDIT_ZERO_SUM", "FETCH_BALANCES"):
+        with SessionLocal() as session:
+            physical = session.execute(
+                text("SELECT COALESCE(SUM(account_balance), 0) FROM accounts WHERE user_uuid = :u"),
+                {"u": user_uuid}
+            ).scalar()
+            virtual = session.execute(
+                text("SELECT COALESCE(SUM(cached_balance), 0) FROM buckets WHERE user_id = :u AND is_active = TRUE"),
+                {"u": user_uuid}
+            ).scalar()
+
+            discrepancy = round(float(physical) - float(virtual), 2)
+            is_balanced = abs(discrepancy) <= 0.01
+
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="ReconciliationAgent",
+                recipient=msg.sender,
+                status="SUCCESS",
+                status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+                payload={
+                    "physical_balance": float(physical),
+                    "virtual_balance": float(virtual),
+                    "discrepancy": discrepancy,
+                    "is_zero_sum_balanced": is_balanced
+                }
+            )
+
+    return A2AResponse(
+        reply_to_id=msg.message_id,
+        correlation_id=msg.correlation_id,
+        sender="ReconciliationAgent",
+        recipient=msg.sender,
+        status="ERROR",
+        status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
+        error_message=f"Unrecognized ReconciliationAgent intent: {intent}"
+    )
+
+
+async def handle_transaction_intake_agent(msg: A2AMessage) -> A2AResponse:
+    """
+    TransactionIntakeAgent A2A Handler:
+    Tracks pending authorization to settled transitions, segregates internal transfers and salary,
+    and emits clean consumer expenses to CategorizerAgent.
+    """
+    intent = msg.intent.upper()
+    user_uuid = msg.user_uuid
+    payload = msg.payload
+    raw_txs = payload.get("transactions", [])
+    account_id = payload.get("account_id")
+    bank_uuid = payload.get("bank_uuid")
+
+    if intent in ("PROCESS_INCOMING_TRANSACTIONS", "PROCESS_TRANSACTION_BATCH"):
+        from agents.core_financial.TransactionIntake_Agent.TransactionIntakeAgent import process_transaction_lifecycle_item
+        from services.a2a.bus import get_a2a_bus
+        bus = get_a2a_bus()
+        processed_items = []
+
+        with SessionLocal() as session:
+            # Resolve bank_uuid if not passed in payload
+            if not bank_uuid and account_id:
+                acc_row = session.execute(
+                    text("SELECT bank_uuid FROM accounts WHERE account_id = :acc"),
+                    {"acc": account_id}
+                ).fetchone()
+                if acc_row:
+                    bank_uuid = acc_row[0]
+
+            for tx in raw_txs:
+                item_result = process_transaction_lifecycle_item(
+                    session=session,
+                    tx=tx,
+                    user_uuid=user_uuid,
+                    account_id=account_id,
+                    bank_uuid=bank_uuid
+                )
+                processed_items.append(item_result)
+
+                # Dispatch downstream A2A events based on transaction nature
+                action = item_result.get("action")
+                if action == "NEW_EXPENSE":
+                    # Stage 2 Handoff: Dispatch to CategorizerAgent
+                    asyncio.create_task(bus.send(A2AMessage(
+                        sender="TransactionIntakeAgent",
+                        recipient="CategorizerAgent",
+                        message_type="COMMAND",
+                        intent="CLASSIFY_TRANSACTION",
+                        user_uuid=user_uuid,
+                        correlation_id=msg.correlation_id,
+                        payload=item_result
+                    )))
+                elif action == "INTERNAL_TRANSFER":
+                    asyncio.create_task(bus.send(A2AMessage(
+                        sender="TransactionIntakeAgent",
+                        recipient="BucketTransferAgent",
+                        message_type="COMMAND",
+                        intent="RECONCILE_INTERNAL_TRANSFER",
+                        user_uuid=user_uuid,
+                        correlation_id=msg.correlation_id,
+                        payload=item_result
+                    )))
+                elif action == "SALARY_INFLOW":
+                    asyncio.create_task(bus.send(A2AMessage(
+                        sender="TransactionIntakeAgent",
+                        recipient="IncomeDetectionAgent",
+                        message_type="COMMAND",
+                        intent="EVALUATE_PAYDAY_INFLOW",
+                        user_uuid=user_uuid,
+                        correlation_id=msg.correlation_id,
+                        payload=item_result
+                    )))
+
+        return A2AResponse(
+            reply_to_id=msg.message_id,
+            correlation_id=msg.correlation_id,
+            sender="TransactionIntakeAgent",
+            recipient=msg.sender,
+            status="SUCCESS",
+            status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+            payload={
+                "total_processed": len(processed_items),
+                "items": processed_items
+            }
+        )
+
+    return A2AResponse(
+        reply_to_id=msg.message_id,
+        correlation_id=msg.correlation_id,
+        sender="TransactionIntakeAgent",
+        recipient=msg.sender,
+        status="ERROR",
+        status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
+        error_message=f"Unrecognized TransactionIntakeAgent intent: {intent}"
+    )
+
+
+async def handle_vector_maintenance_agent(msg: A2AMessage) -> A2AResponse:
+    """
+    VectorMaintenanceAgent A2A Handler:
+    Cascades manual merchant corrections across historical transactions and Qdrant vectors,
+    and detects/merges duplicate vector clusters.
+    """
+    intent = msg.intent.upper()
+    payload = msg.payload
+
+    if intent in ("CASCADE_MERCHANT_RELABELING", "CASCADE_RELABEL"):
+        from agents.infrastructure.VectorMaintenance_Agent.VectorMaintenanceAgent import cascade_merchant_relabeling
+        clean_merchant = payload.get("clean_merchant_name") or payload.get("merchant_name")
+        new_category = payload.get("new_category") or payload.get("category")
+        new_sub = payload.get("new_sub_category") or payload.get("sub_category", "")
+        tags = payload.get("tags", [])
+
+        if not clean_merchant or not new_category:
+            return A2AResponse(
+                reply_to_id=msg.message_id,
+                correlation_id=msg.correlation_id,
+                sender="VectorMaintenanceAgent",
+                recipient=msg.sender,
+                status="ERROR",
+                status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
+                error_message="Missing clean_merchant_name or new_category"
+            )
+
+        result_str = cascade_merchant_relabeling.invoke({
+            "clean_merchant_name": clean_merchant,
+            "new_category": new_category,
+            "new_sub_category": new_sub,
+            "tags": tags
+        })
+
+        return A2AResponse(
+            reply_to_id=msg.message_id,
+            correlation_id=msg.correlation_id,
+            sender="VectorMaintenanceAgent",
+            recipient=msg.sender,
+            status="SUCCESS",
+            status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+            payload={"result": result_str, "merchant": clean_merchant, "category": new_category}
+        )
+
+    elif intent in ("AUDIT_VECTOR_DUPLICATES", "FETCH_DUPLICATES"):
+        from agents.infrastructure.VectorMaintenance_Agent.VectorMaintenanceAgent import fetch_duplicate_candidates
+        dupes_json = fetch_duplicate_candidates.invoke({})
+        return A2AResponse(
+            reply_to_id=msg.message_id,
+            correlation_id=msg.correlation_id,
+            sender="VectorMaintenanceAgent",
+            recipient=msg.sender,
+            status="SUCCESS",
+            status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+            payload={"duplicates": dupes_json}
+        )
+
+    elif intent in ("MERGE_DUPLICATE_VECTORS", "MERGE_VECTORS"):
+        from agents.infrastructure.VectorMaintenance_Agent.VectorMaintenanceAgent import merge_duplicate_vectors
+        keep_id = payload.get("keep_id")
+        delete_id = payload.get("delete_id")
+        res = merge_duplicate_vectors.invoke({"keep_id": keep_id, "delete_id": delete_id})
+        return A2AResponse(
+            reply_to_id=msg.message_id,
+            correlation_id=msg.correlation_id,
+            sender="VectorMaintenanceAgent",
+            recipient=msg.sender,
+            status="SUCCESS",
+            status_code=AgentStatus.AGENT_RESPONSE_READY.value,
+            payload={"result": res}
+        )
+
+    return A2AResponse(
+        reply_to_id=msg.message_id,
+        correlation_id=msg.correlation_id,
+        sender="VectorMaintenanceAgent",
+        recipient=msg.sender,
+        status="ERROR",
+        status_code=AgentStatus.AGENT_PARSING_FAILURE.value,
+        error_message=f"Unrecognized VectorMaintenanceAgent intent: {intent}"
     )

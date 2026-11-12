@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Modal, Input, ListBox } from "@heroui/react";
+import { Modal, Input, ListBox, Chip } from "@heroui/react";
 import { Search, MessageSquare, Compass, Building2, ReceiptText, Calendar, LucideIcon } from "lucide-react";
 import { useSearch } from "@/app/context/SearchContext";
 import { useBudAI } from "@/app/context/AppContext";
@@ -69,9 +69,9 @@ export default function GlobalSearchModal() {
     {
       id: "ai-prompt",
       type: "action",
-      label: query ? `Ask AI: "${query}"` : "Ask AI...",
+      label: query ? `Ask: "${query}"` : "Ask a question...",
       icon: MessageSquare,
-      section: "AI Advisor",
+      section: "Questions",
     },
     {
       id: "nav-home",
@@ -140,7 +140,8 @@ export default function GlobalSearchModal() {
     } else if ((item.type === "nav" || item.type === "account") && item.path) {
       router.push(item.path);
     } else if (item.type === "transaction") {
-      router.push("/home");
+      const txId = item.txData?.transaction_uuid || item.txData?.transaction_id || item.id.replace(/^tx-/, "");
+      router.push(`/transactions?highlight=${encodeURIComponent(txId)}`);
     }
   };
 
@@ -153,7 +154,7 @@ export default function GlobalSearchModal() {
             <Input
               autoFocus
               className="w-full text-foreground text-lg font-bold placeholder:text-foreground/30 bg-transparent border-none shadow-none focus:outline-none"
-              placeholder="Search accounts, navigation, or ask AI..."
+              placeholder="Search accounts, transactions, or ask a question..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -191,17 +192,22 @@ export default function GlobalSearchModal() {
                               {item.label}
                             </span>
                             {item.type === "transaction" && (
-                              <div className="flex items-center gap-4 shrink-0 ml-4">
+                              <div className="flex items-center gap-3 shrink-0 ml-4">
+                                {item.txData?.account_id && (
+                                  <Chip size="sm" variant="secondary" className="text-[10px] h-4 px-1.5 font-mono text-muted-foreground hidden sm:inline-flex">
+                                    {accounts.find(a => a.account_id === item.txData?.account_id)?.bank_name || accounts.find(a => a.account_id === item.txData?.account_id)?.provider_name || item.currency || "Account"}
+                                  </Chip>
+                                )}
                                 <div className="flex items-center gap-1.5 text-foreground/40 hidden sm:flex">
                                   <Calendar size={12} />
                                   <span className="text-[10px] font-medium tracking-wide">{item.date}</span>
                                 </div>
                                 {item.category && (
-                                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-white/5 border-[0.5px] border-white/10 text-foreground/60 font-black uppercase tracking-widest hidden md:inline-block">
+                                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-white/5 border-[0.5px] border-white/10 text-foreground/60 font-medium hidden md:inline-block">
                                     {item.category}
                                   </span>
                                 )}
-                                <span className={`text-[12px] font-black uppercase tracking-tight ${item.isPositive ? "text-green-500" : "text-foreground"}`}>
+                                <span className={`text-[12px] font-mono font-bold ${item.isPositive ? "text-emerald-500" : "text-foreground"}`}>
                                   {item.isPositive ? "+" : ""}{new Intl.NumberFormat("en-GB", { style: "currency", currency: item.currency || "GBP" }).format(Math.abs(item.amount || 0))}
                                 </span>
                               </div>
@@ -216,13 +222,13 @@ export default function GlobalSearchModal() {
             )}
           </div>
           <div className="p-3 border-t-[0.5px] border-white/5 bg-white/5 flex items-center justify-between">
-            <span className="text-foreground/30 text-[9px] font-black uppercase tracking-widest">
-              Pro-Tip
+            <span className="text-foreground/30 text-[9px] font-bold uppercase tracking-widest">
+              Shortcuts
             </span>
             <span className="text-foreground/40 text-[9px] font-bold uppercase tracking-widest flex items-center gap-2">
-              Use <kbd className="px-1.5 py-0.5 bg-black/50 border-[0.5px] border-white/10 rounded font-mono text-[9px]">↑</kbd> <kbd className="px-1.5 py-0.5 bg-black/50 border-[0.5px] border-white/10 rounded font-mono text-[9px]">↓</kbd> to navigate
+              Use <kbd className="px-1.5 py-0.5 bg-black/50 border-[0.5px] border-white/10 rounded font-mono text-[9px]">↑</kbd> <kbd className="px-1.5 py-0.5 bg-black/50 border-[0.5px] border-white/10 rounded font-mono text-[9px]">↓</kbd> to move
               <span className="mx-1">•</span>
-              <kbd className="px-1.5 py-0.5 bg-black/50 border-[0.5px] border-white/10 rounded font-mono text-[9px]">↵</kbd> to select
+              <kbd className="px-1.5 py-0.5 bg-black/50 border-[0.5px] border-white/10 rounded font-mono text-[9px]">↵</kbd> to open
             </span>
           </div>
         </Modal.Dialog>

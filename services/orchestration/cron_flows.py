@@ -111,12 +111,14 @@ def generate_proactive_insights_flow():
 
 @task(retries=1, retry_delay_seconds=30)
 def expire_stale_subscriptions_task():
-    from services.analytics.subscription_sweeper import expire_stale_subscriptions
+    from services.analytics.subscription_detector import expire_stale_subscriptions
     expire_stale_subscriptions()
 
 @flow(name="Subscription Sweeper")
 def expire_stale_subscriptions_flow():
     expire_stale_subscriptions_task()
+
+
 
 @task(retries=3, retry_delay_seconds=300, tags=["alienware-llm"])
 def train_global_model_task():
@@ -173,52 +175,6 @@ def cloud_failsafe_sync_flow():
                 logger.warning(f"Failsafe sync skipped for account {acc_id}: {se}")
     except Exception as e:
         logger.error(f"Failsafe sync failed: {e}")
-
-@flow(name="Timescale Aggregate Refresh")
-def oss_timescale_refresh_flow():
-    logger = get_run_logger()
-    logger.info("Refreshing continuous aggregates...")
-    try:
-        from config import engine
-        from sqlalchemy import text
-        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            pass
-            # conn.execute(text("CALL refresh_continuous_aggregate('rolling_user_stats', NULL, NULL);"))  # Temporarily disabled: view does not exist
-    except Exception as e:
-        logger.error(f"Failed to refresh aggregates: {e}")
-
-@flow(name="Vector Optimizer")
-def oss_vector_optimizer_flow():
-    logger = get_run_logger()
-    logger.info("Optimizing Qdrant vector indexes...")
-    from agents.infrastructure.VectorMaintenance_Agent.VectorMaintenanceAgent import VectorMaintenanceAgent
-    agent = VectorMaintenanceAgent()
-    agent.optimize_rag_memory()
-
-@flow(name="Database Reconciliation")
-def oss_database_reconciliation_flow():
-    logger = get_run_logger()
-    logger.info("Auditing zero-sum math...")
-    from agents.infrastructure.Reconciliation_Agent.ReconciliationAgent import DatabaseReconciliationAgent
-    agent = DatabaseReconciliationAgent()
-    agent.audit_zero_sum_math()
-
-@flow(name="Monte Carlo Simulator")
-def oss_monte_carlo_sim_flow():
-    logger = get_run_logger()
-    logger.info("Running Monte Carlo simulations...")
-    try:
-        from agents.intelligence.MonteCarloSimulation_Agent.MonteCarloSimulationAgent import MonteCarloSimulationAgent
-        from langchain_core.messages import HumanMessage
-        agent = MonteCarloSimulationAgent()
-        agent.app.invoke({"messages": [HumanMessage(content="Run 1000 Monte Carlo simulations to stress test runway.")], "user_uuid": "SYSTEM"}, config={"callbacks": [CallbackHandler()], "metadata": {"langfuse_session_id": "SYSTEM", "langfuse_tags": ["monte-carlo"]}})
-    except Exception as e:
-        logger.error(f"Monte Carlo sim failed: {e}")
-
-@flow(name="Local Inference Monitor")
-def oss_token_auditor_flow():
-    logger = get_run_logger()
-    logger.info("Local offline inference active: Zero cloud token expenses incurred.")
 
 @task(retries=2, retry_delay_seconds=60, tags=["macro-telemetry"])
 def fetch_ons_macro_telemetry_task():

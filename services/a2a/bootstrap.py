@@ -7,12 +7,16 @@ from services.a2a.handlers import (
     handle_market_agent,
     handle_health_agent,
     handle_forecaster_agent,
-    handle_bucket_transfer_agent,
+    handle_bucket_agent,
     handle_categorizer_agent,
     handle_analyser_agent,
     handle_scenario_agent,
     handle_anomaly_agent,
-    handle_cascade_agent
+    handle_truelayer_ingestion_agent,
+    handle_reconciliation_agent,
+    handle_transaction_intake_agent,
+    handle_vector_maintenance_agent,
+    handle_subscription_detection_agent
 )
 from models.status_codes import AgentStatus
 from services.logger_setup import get_core_logger
@@ -59,15 +63,24 @@ def register_all_a2a_workers() -> None:
         handle_forecaster_agent
     )
 
-    # 4. BucketTransferAgent Card
+    # 4. BucketAgent Card
     registry.register(
         AgentCard(
-            name="BucketTransferAgent",
-            description="Executes double-entry virtual transfers under strict PL/pgSQL math lock constraints.",
-            intents_handled=["PROPOSE_REBALANCE", "EXECUTE_VIRTUAL_TRANSFER", "CONSENSUS_REBALANCE"],
-            avg_latency_ms=20.0
+            name="BucketAgent",
+            description="Manages virtual buckets (UNALLOCATED, BILLS, GOALS), bill timeline allocations, and zero-sum operations.",
+            intents_handled=[
+                "SYNC_UNALLOCATED_ACCOUNTS",
+                "PROCESS_STAGE3_BILLS",
+                "PROVISION_STAGE3_BILLS",
+                "DEDUCT_TRANSACTION_OUTFLOW",
+                "EXECUTE_VIRTUAL_TRANSFER",
+                "CHECK_REALITY_TRANSFERS",
+                "PROPOSE_REBALANCE",
+                "CONSENSUS_REBALANCE"
+            ],
+            avg_latency_ms=15.0
         ),
-        handle_bucket_transfer_agent
+        handle_bucket_agent
     )
 
     # 5. CategorizerAgent Card
@@ -122,19 +135,64 @@ def register_all_a2a_workers() -> None:
         handle_anomaly_agent
     )
 
-    # 9. CascadeWorker Card
+
+    # 10. TrueLayerIngestionAgent Card
     registry.register(
         AgentCard(
-            name="CascadeWorker",
-            description="Executes autonomous priority cascade waterfall over virtual ledger under math locks.",
-            intents_handled=["EXECUTE_PRIORITY_CASCADE"],
+            name="TrueLayerIngestionAgent",
+            description="Perimeter gateway managing Open Banking delta syncs and token refreshes.",
+            intents_handled=["SYNC_ACCOUNT_DELTA", "TRIGGER_SYNC", "REFRESH_OAUTH_TOKENS"],
+            avg_latency_ms=25.0
+        ),
+        handle_truelayer_ingestion_agent
+    )
+
+    # 11. ReconciliationAgent Card
+    registry.register(
+        AgentCard(
+            name="ReconciliationAgent",
+            description="Anchors physical balances, audits zero-sum invariants, and enforces rolling 365-day retention.",
+            intents_handled=["ANCHOR_ACCOUNT_BALANCE", "ANCHOR_BALANCE", "PURGE_CIRCULAR_BUFFER", "ENFORCE_RETENTION", "AUDIT_ZERO_SUM"],
+            avg_latency_ms=10.0
+        ),
+        handle_reconciliation_agent
+    )
+
+    # 12. TransactionIntakeAgent Card
+    registry.register(
+        AgentCard(
+            name="TransactionIntakeAgent",
+            description="Tracks pending-to-settled transitions, segregates cash flows, and emits clean expenses.",
+            intents_handled=["PROCESS_INCOMING_TRANSACTIONS", "PROCESS_TRANSACTION_BATCH"],
+            avg_latency_ms=15.0
+        ),
+        handle_transaction_intake_agent
+    )
+
+    # 13. VectorMaintenanceAgent Card
+    registry.register(
+        AgentCard(
+            name="VectorMaintenanceAgent",
+            description="Cascades manual relabeling, maintains vector semantic clusters, and merges duplicate points.",
+            intents_handled=["CASCADE_MERCHANT_RELABELING", "CASCADE_RELABEL", "AUDIT_VECTOR_DUPLICATES", "MERGE_DUPLICATE_VECTORS"],
             avg_latency_ms=20.0
         ),
-        handle_cascade_agent
+        handle_vector_maintenance_agent
+    )
+
+    # 14. SubscriptionWorker Card
+    registry.register(
+        AgentCard(
+            name="SubscriptionWorker",
+            description="Detects recurring merchant rhythms using SQL window functions, identifies price hikes, and alerts.",
+            intents_handled=["SCAN_RECURRING_PAYMENTS", "DETECT_SUBSCRIPTIONS", "DETECT_RECURRING_RHYTHM"],
+            avg_latency_ms=15.0
+        ),
+        handle_subscription_detection_agent
     )
 
     logger.info(
-        f"A2A Bootstrap: 9 specialist workers successfully registered on in-process bus "
+        f"A2A Bootstrap: 14 specialist workers successfully registered on in-process bus "
         f"({', '.join([c.name for c in registry.list_agents()])})."
     )
 
@@ -178,10 +236,10 @@ async def execute_autonomous_rebalance_consensus(
     )
     market_resp: A2AResponse = await bus.request_reply(market_msg)
 
-    # Step 3: BucketTransferAgent Solvency Check & Execution
+    # Step 3: BucketAgent Solvency Check & Execution
     transfer_msg = A2AMessage(
         sender="HealthWorker",
-        recipient="BucketTransferAgent",
+        recipient="BucketAgent",
         message_type="COMMAND",
         intent="EXECUTE_VIRTUAL_TRANSFER",
         user_uuid=user_uuid,

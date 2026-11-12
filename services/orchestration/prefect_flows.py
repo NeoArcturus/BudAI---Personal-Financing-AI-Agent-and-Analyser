@@ -14,16 +14,58 @@ def task_physical_delta_sync(user_uuid: str):
 @flow(name="Agent_Evaluation_Loop")
 def flow_agent_evaluation_loop(sync_result: dict, user_uuid: str):
     with SessionLocal() as session:
-        # Phase 3: Gather and Mask
+        # Phase 3: Gather, Detect, and Profile (Stage 3 Intelligence)
         from services.orchestration.data_masker import DataMasker
         from services.analytics.detection_pipelines import run_detection_pipelines
+        from services.analytics.surge_detector import get_surge_detector
+        from services.analytics.lifestyle_clustering import LifestyleClusteringService
+        from services.analytics.forecast_service import ForecasterEngine
+        from services.bucket_service import process_stage3_bills
         from services.orchestration.context_builder import build_evaluation_context
         from services.orchestration.llm_executor import execute_llm_chain
-        
+
+        # 1. Run Stage 3 Recurrence and Utilities
+        discoveries = run_detection_pipelines(session, user_uuid)
+
+        # 2. Run Stage 3 Spend Surge & Z-score Anomalies
+        try:
+            surge_res = get_surge_detector().check_daily_surge(user_uuid)
+            discoveries["surge_status"] = surge_res
+        except Exception as se:
+            logger.warning(f"Surge check skipped in evaluation loop: {se}")
+
+        # 3. Run Stage 3 Deterministic Lifestyle Topology (Needs vs. Wants, Pareto 80/20)
+        try:
+            lifestyle_res = LifestyleClusteringService().analyze_user_lifestyle(user_uuid)
+            discoveries["lifestyle_profile"] = lifestyle_res
+        except Exception as le:
+            logger.warning(f"Lifestyle profiling skipped in evaluation loop: {le}")
+
+        # 4. Run Stage 3 Forecaster Upcoming Expense Calendar
+        upcoming_bills = []
+        try:
+            forecaster = ForecasterEngine()
+            _, upcoming_bills = forecaster.detect_upcoming_expenses(user_uuid)
+            discoveries["upcoming_bills"] = upcoming_bills
+        except Exception as fe:
+            logger.warning(f"Upcoming expense detection skipped in evaluation loop: {fe}")
+
+        # 5. Stage 4: Capital Allocation & Physical Bank Shortfall Engine
+        try:
+            all_detected_bills = (
+                list(discoveries.get("new_subscriptions", [])) +
+                list(discoveries.get("new_utilities", [])) +
+                list(upcoming_bills or [])
+            )
+            stage4_res = process_stage3_bills(session, user_uuid, all_detected_bills)
+            discoveries["stage4_allocation"] = stage4_res
+        except Exception as b_err:
+            logger.error(f"Stage 4 bucket processing error: {b_err}")
+
+        # 6. Mask State and Build Executive Context
         masker = DataMasker()
         masked_data = masker.mask_user_state(session, user_uuid)
-        discoveries = run_detection_pipelines(session, user_uuid)
-        
+
         log_pipeline_data(
             logger=logger,
             pipeline="agent_evaluation_loop",
@@ -39,7 +81,7 @@ def flow_agent_evaluation_loop(sync_result: dict, user_uuid: str):
             },
             message=f"Agent Evaluation Loop context prepared with {len(masked_data.get('masked_state', []))} buckets"
         )
-        
+
         brief = build_evaluation_context(
             session=session,
             user_uuid=user_uuid,
@@ -47,13 +89,14 @@ def flow_agent_evaluation_loop(sync_result: dict, user_uuid: str):
             discoveries=discoveries,
             trigger_event=sync_result
         )
-        
-        # Phase 4: Execute
+
+        # Phase 4: Execute LLM Decision Engine
         execute_llm_chain(
             user_uuid=user_uuid,
             compiled_brief=brief,
             reverse_map=masked_data["reverse_map"]
         )
+
 
 @flow(name="Phase2_Event_Bus_Flow")
 def flow_event_bus_sync(user_uuid: str):
@@ -192,6 +235,42 @@ def flow_ingest_account_transactions_1yr(account_id: str, user_uuid: str, bank_u
         message=f"Completed Prefect OSS 1-year transaction pull for account {account_id}. Ingested {total_ingested} transactions."
     )
     return {"status": "success", "account_id": account_id, "total_ingested": total_ingested}
+
+
+@task(retries=2, retry_delay_seconds=30)
+def task_scheduled_maintenance():
+    """
+    Executes background routine maintenance:
+    1. Sweeps stale subscriptions (>100 days overdue).
+    2. Refreshes TrueLayer bank tokens.
+    3. Runs reality check on user-approved bank transfers (24h/48h reminders).
+    """
+    from services.analytics.subscription_detector import expire_stale_subscriptions
+    from services.bucket_service import check_reality_transfers
+    from models.database_models import User
+
+    # 1. Stale subscriptions
+    try:
+        expire_stale_subscriptions()
+    except Exception as e:
+        logger.error(f"Error sweeping stale subscriptions: {e}")
+
+    # 2. Token refresh & reality check per user
+    with SessionLocal() as session:
+        users = session.query(User.user_uuid).all()
+        for u in users:
+            u_id = str(u[0])
+            try:
+                check_reality_transfers(session, u_id)
+            except Exception as re_err:
+                logger.warning(f"Reality check skipped for user {u_id}: {re_err}")
+
+
+@flow(name="Scheduled_Maintenance_Flow")
+def flow_scheduled_maintenance():
+    logger.info("Executing unified Prefect scheduled maintenance flow...")
+    task_scheduled_maintenance()
+
 
 
 

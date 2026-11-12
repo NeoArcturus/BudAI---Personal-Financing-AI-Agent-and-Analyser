@@ -20,10 +20,12 @@ import { toast } from "@heroui/react";
 
 interface RecentTransactionsCardProps {
   currency?: string;
+  initialTransactions?: any[];
 }
 
 export const RecentTransactionsCard = ({
   currency = "GBP",
+  initialTransactions = [],
 }: RecentTransactionsCardProps) => {
   const router = useRouter();
   const { accounts, activeAccountId } = useBudAI();
@@ -48,10 +50,11 @@ export const RecentTransactionsCard = ({
     };
   }, []);
 
-  const { data: allTransactions = [], isLoading, refetch } = useTransactions(
+  const { data: allTransactions = initialTransactions, isLoading, refetch } = useTransactions(
     targetAccountId,
     sixMonthsAgoStr,
     todayStr,
+    initialTransactions && initialTransactions.length > 0 ? initialTransactions : undefined,
   );
 
   const isSyncingActive = useMemo(() => {

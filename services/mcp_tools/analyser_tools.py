@@ -2,13 +2,8 @@ import json
 import logging
 from config import SessionLocal
 from sqlalchemy import text
-import pandas as pd
 from langchain_core.tools import tool
-from services.mcp_tools.shared_utils import (
-    GetBudgetVarianceInput,
-    _cache_chart_data, _parse_accounts, _get_combined_categorized_data
-)
-from agents.core_financial.Analyser_Agent.expense_analysis import ExpenseAnalysis
+from services.mcp_tools.shared_utils import GetBudgetVarianceInput
 from agents.core_financial.Analyser_Agent.budget_engine import BudgetEngine
 from services.logger_setup import get_core_logger
 

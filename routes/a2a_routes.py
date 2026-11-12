@@ -9,7 +9,7 @@ from services.a2a.registry import get_agent_registry
 from services.logger_setup import get_core_logger
 from middleware.auth_middleware import get_optional_current_user
 from models.database_models import User
-from services.workers.worker_utils import resolve_user_uuid
+from services.a2a.utils import resolve_user_uuid
 
 logger = get_core_logger(__name__)
 
@@ -105,7 +105,7 @@ async def execute_consensus_rebalance(req: ConsensusRebalanceRequest, current_us
     bus = get_a2a_bus()
     msg = A2AMessage(
         sender="APIClient",
-        recipient="BucketTransferAgent",
+        recipient="BucketAgent",
         message_type="COMMAND",
         intent="CONSENSUS_REBALANCE",
         user_uuid=target_user_uuid,

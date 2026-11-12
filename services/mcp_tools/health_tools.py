@@ -3,7 +3,7 @@ import json
 from langchain_core.tools import tool
 from services.mcp_tools.shared_utils import (
     AnalyzeCriticalSurvivalMetricsInput, AnalyzeWealthAccelerationMetricsInput,
-    PlotHealthRadarInput, _cache_chart_data
+    PlotHealthRadarInput
 )
 from agents.core_financial.Analyser_Agent.financial_health import FinancialHealthAnalyzer
 from services.logger_setup import get_core_logger
@@ -121,20 +121,18 @@ def plot_health_radar(user_uuid: str) -> str:
     logger.info(json.dumps({"message": f"Executing MCP Tool: plot_health_radar", "status_code": 200}))
     try:
         overall, metrics, recommendations = _calculate_health_data(user_uuid)
-        payload = [{"bank_name": "Overall Health", "data": metrics}]
-        cache_id = _cache_chart_data(payload)
         
         summary_lines = [f"Overall Health Score: {overall:.1f}/100"]
         for m in metrics:
             summary_lines.append(f"- {m['Metric']}: {m['Score']}")
         
         summary_text = "\n".join(summary_lines)
-        _res = f"Financial health radar generated. [TRIGGER_HEALTH_RADAR_CHART:{cache_id}]\n\nDATA SUMMARY:\n{summary_text}"
+        _res = f"Financial Health Assessment:\n{summary_text}"
         logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
     except Exception as e:
         logger.error(json.dumps({"message": f"Health Radar Error: {e}", "status_code": 500}))
-        _res = f"Health radar failed. [TRIGGER_HEALTH_RADAR_CHART:CACHE_HEALTH_1]"
+        _res = f"Error generating financial health metrics: {str(e)}"
         logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
         return _res
 

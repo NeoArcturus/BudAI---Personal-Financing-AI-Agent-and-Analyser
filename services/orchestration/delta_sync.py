@@ -40,13 +40,13 @@ def perform_physical_delta_sync(session: Session, user_uuid: str):
         if abs(delta) < 0.01:
             return {"status": "aligned", "delta": 0}
             
-        default_bucket = next((b for b in buckets if b.type == "DEFAULT"), None)
+        default_bucket = next((b for b in buckets if b.type == BucketType.UNALLOCATED), None)
         if not default_bucket:
             logger.error(
-                "Critical Error: No DEFAULT bucket found for user",
+                "Critical Error: No Unallocated bucket found for user",
                 extra={"user_uuid": user_uuid, "status_code": 500}
             )
-            return {"status": "error", "message": "No DEFAULT bucket"}
+            return {"status": "error", "message": "No Unallocated bucket"}
             
         cascaded_from = []
         if delta > 0:
@@ -103,9 +103,9 @@ def run_priority_cascade(session: Session, user_uuid: str, default_bucket: Bucke
         other_buckets = session.execute(
             select(Bucket)
             .where(Bucket.user_id == user_uuid)
-            .where(Bucket.type != "DEFAULT")
+            .where(Bucket.type == BucketType.GOALS)
             .where(Bucket.cached_balance > 0)
-            .order_by(Bucket.priority_index.desc())
+            .order_by(Bucket.priority.desc())
         ).scalars().all()
 
         log_pipeline_data(

@@ -22,6 +22,16 @@ else
     echo "No TS_AUTHKEY found. Starting backend in direct networking mode."
 fi
 
+# Enforce memory-bounding thread and caching limits for containerized execution
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export FASTEMBED_THREADS=1
+export FASTEMBED_CACHE_PATH="/app/model_cache"
+export EMBEDDING_BATCH_SIZE=32
+
 echo "Starting BudAI backend..."
 if [ $# -gt 0 ]; then
     exec "$@"

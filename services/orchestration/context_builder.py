@@ -69,9 +69,9 @@ def build_evaluation_context(session: Session, user_uuid: str, masked_state: lis
     instruction_block = """
 INSTRUCTIONS:
 You are the BudAI Autonomous Agent. Evaluate the state and discoveries above. You must act proactively by invoking your native tools:
-1. NEW DISCOVERIES: If you see a new subscription or utility, use the create_bucket tool to build a dedicated bucket for it. Then, use the execute_virtual_transfer tool to move enough funds from the DEFAULT bucket into this new bucket so the upcoming bill is covered.
-2. CAPITAL ALLOCATION: If you observe that the DEFAULT bucket has a large surplus, but a TARGET_DATE or ACCUMULATING bucket is falling behind its target, proactively use the execute_virtual_transfer tool to move excess capital into the savings buckets.
-3. ALERTS: If you create a new bucket or move a significant amount of money, use the alert tool to push a notification explaining what you did and why.
+1. NEW DISCOVERIES: If you see a new subscription or utility, register it under the Bills bucket. Then, use the execute_virtual_transfer tool to move enough funds from Unallocated into Bills so the upcoming bill is covered.
+2. CAPITAL ALLOCATION: If you observe that Unallocated has a surplus, proactively use the execute_virtual_transfer tool to move excess capital into Goals.
+3. ALERTS: If you move a significant amount of money or encounter an uncovered shortfall, use the alert tool to push a notification explaining what happened.
 4. If no proactive action is required, you must invoke the sleep tool.
 """
     

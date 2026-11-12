@@ -4,6 +4,18 @@ import asyncio
 import os
 import warnings
 
+# Clamp native and ML framework thread pools to bound memory consumption in containers
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("FASTEMBED_THREADS", "1")
+
+try:
+    import torch
+    torch.set_num_threads(1)
+except Exception:
+    pass
+
 
 import langchain_openai.chat_models.base as base
 
@@ -26,12 +38,8 @@ from middleware.cache_middleware import StripCacheControlMiddleware
 from routes.auth_routes import auth_router, callback_router
 from routes.account_routes import router as account_router
 from routes.chat_routes import router as chat_router
-from routes.media_routes import router as media_router
 from routes.categorizer_routes import router as categorizer_router
-from routes.advisor_routes import router as advisor_router
 from routes.market_routes import router as market_router
-from routes.memory_routes import router as memory_router
-from routes.analytics_routes import router as analytics_router
 from services.api_integrator.access_token_generator import AccessTokenGenerator
 from services.db_service import init_db
 from services.mcp_bridge import MCPBridge
@@ -91,36 +99,26 @@ app.add_middleware(
 )
 
 from routes.webhook_routes import router as webhook_router
-from routes.widget_routes import router as widget_router
-from routes.intent_routes import router as intent_router
 from routes.dashboard_routes import router as dashboard_router
 from routes.onboarding_routes import router as onboarding_router
 from routes.bucket_routes import router as bucket_router
 from routes.websocket_routes import router as websocket_router
 from routes.neon_routes import router as neon_router
 from routes.notification_routes import router as notification_router
-from routes.a2a_routes import router as a2a_router
 
 app.include_router(auth_router)
 app.include_router(callback_router)
 app.include_router(account_router)
+app.include_router(dashboard_router)
+app.include_router(bucket_router)
+app.include_router(notification_router)
 app.include_router(chat_router)
-app.include_router(media_router)
 app.include_router(categorizer_router)
-app.include_router(advisor_router)
 app.include_router(market_router)
 app.include_router(webhook_router)
-app.include_router(memory_router)
-app.include_router(analytics_router)
-app.include_router(widget_router)
-app.include_router(intent_router)
-app.include_router(dashboard_router)
 app.include_router(onboarding_router)
-app.include_router(bucket_router)
 app.include_router(websocket_router)
 app.include_router(neon_router)
-app.include_router(notification_router)
-app.include_router(a2a_router)
 
 
 @app.get("/")

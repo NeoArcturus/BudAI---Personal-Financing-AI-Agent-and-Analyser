@@ -180,11 +180,9 @@ class MerchantKnowledge(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now)
 
 class BucketType(str, Enum):
-    DEFAULT = "DEFAULT"
-    RECURRING = "RECURRING"
-    ACCUMULATING = "ACCUMULATING"
-    TARGET_DATE = "TARGET_DATE"
-    LIABILITY = "LIABILITY"
+    UNALLOCATED = "UNALLOCATED"
+    BILLS = "BILLS"
+    GOALS = "GOALS"
 
 class Bucket(SQLModel, table=True):
     __tablename__ = "buckets"
@@ -194,10 +192,36 @@ class Bucket(SQLModel, table=True):
     name: str
     target_amount: Optional[float] = None
     target_date: Optional[datetime] = None
-    priority_index: float = Field(default=100.0)
+    priority: int = Field(default=10) # 1=High, 10=Low (Lower-priority goals tapped first)
     cached_balance: float = Field(default=0.0)
+    cached_balances: dict = Field(default_factory=dict, sa_column=Column(JSON)) # Currency + per-bank account totals
+    currency: str = Field(default="GBP", index=True)
+    associated_account_id: Optional[str] = None
+    associated_account_name: Optional[str] = None
+    allocated_amount: float = Field(default=0.0)
+    status_text: Optional[str] = None
+    has_shortfall_warning: bool = Field(default=False)
+    shortfall_amount: float = Field(default=0.0)
     is_active: bool = Field(default=True)
     updated_at: datetime = Field(default_factory=utc_now)
+
+class TransferSuggestion(SQLModel, table=True):
+    __tablename__ = "transfer_suggestions"
+    id: str = Field(primary_key=True, index=True)
+    user_uuid: str = Field(foreign_key="users.user_uuid", index=True)
+    bill_id: Optional[str] = Field(default=None, foreign_key="buckets.id")
+    from_account_id: str
+    from_account_name: Optional[str] = None
+    to_account_id: str
+    to_account_name: Optional[str] = None
+    amount: float
+    currency: str = Field(default="GBP")
+    status: str = Field(default="PENDING") # PENDING, APPROVED, DECLINED
+    created_at: datetime = Field(default_factory=utc_now)
+    approved_at: Optional[datetime] = None
+    verification_deadline: Optional[datetime] = None
+    is_verified_in_bank: bool = Field(default=False)
+    severity: str = Field(default="NORMAL") # HIGH (24h) or NORMAL (48h)
 
     # Note: Ensuring the default bucket rule can be handled in service layer or DB constraint (partial index).
 

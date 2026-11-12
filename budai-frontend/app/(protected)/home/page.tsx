@@ -12,6 +12,8 @@ export default async function HomePage() {
   let initialBuckets = [];
   let initialAlerts = [];
   let initialAccounts = [];
+  let initialTransactions = [];
+  let initialIntelligence = null;
 
   if (token) {
     const API_BASE_URL =
@@ -21,24 +23,50 @@ export default async function HomePage() {
     const headers = { Authorization: `Bearer ${token}` };
 
     try {
-      const [bucketsRes, alertsRes, accountsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/buckets/`, { headers, cache: "no-store" }).catch(() => null),
-        fetch(`${API_BASE_URL}/api/notifications?limit=20`, { headers, cache: "no-store" }).catch(() => null),
-        fetch(`${API_BASE_URL}/api/accounts`, { headers, cache: "no-store" }).catch(() => null),
-      ]);
+      const snapshotRes = await fetch(`${API_BASE_URL}/api/dashboard/snapshot`, {
+        headers,
+        cache: "no-store",
+      }).catch(() => null);
 
-      if (bucketsRes?.ok) {
-        const data = await bucketsRes.json();
-        initialBuckets = data.buckets || [];
-      }
+      if (snapshotRes?.ok) {
+        const snapshot = (await snapshotRes.json()) as any;
+        initialBuckets = snapshot.buckets
+          ? Array.isArray(snapshot.buckets)
+            ? snapshot.buckets
+            : [
+                snapshot.buckets.unallocated,
+                ...(snapshot.buckets.bills || []),
+                ...(snapshot.buckets.goals || []),
+              ].filter(Boolean)
+          : [];
+        initialAccounts =
+          snapshot.financial_anchor?.connected_accounts ||
+          snapshot.accounts ||
+          [];
+        initialAlerts = snapshot.alerts || snapshot.notifications || [];
+        initialTransactions = snapshot.recent_transactions || [];
+        initialIntelligence = snapshot.intelligence || null;
+      } else {
+        // Fallback to parallel fetches if snapshot endpoint is unavailable
+        const [bucketsRes, alertsRes, accountsRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/buckets/`, { headers, cache: "no-store" }).catch(() => null),
+          fetch(`${API_BASE_URL}/api/notifications?limit=20`, { headers, cache: "no-store" }).catch(() => null),
+          fetch(`${API_BASE_URL}/api/accounts`, { headers, cache: "no-store" }).catch(() => null),
+        ]);
 
-      if (alertsRes?.ok) {
-        initialAlerts = await alertsRes.json();
-      }
+        if (bucketsRes?.ok) {
+          const data = (await bucketsRes.json()) as any;
+          initialBuckets = data.buckets || [];
+        }
 
-      if (accountsRes?.ok) {
-        const data = await accountsRes.json();
-        initialAccounts = data.accounts || [];
+        if (alertsRes?.ok) {
+          initialAlerts = (await alertsRes.json()) as any;
+        }
+
+        if (accountsRes?.ok) {
+          const data = (await accountsRes.json()) as any;
+          initialAccounts = data.accounts || [];
+        }
       }
     } catch (err) {
       console.error("SSR Hydration fetch error:", err);
@@ -50,6 +78,8 @@ export default async function HomePage() {
       initialBuckets={initialBuckets}
       initialAlerts={initialAlerts}
       initialAccounts={initialAccounts}
+      initialTransactions={initialTransactions}
+      initialIntelligence={initialIntelligence}
     />
   );
 }

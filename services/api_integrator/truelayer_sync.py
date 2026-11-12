@@ -147,18 +147,32 @@ class TrueLayerSync:
                             logger.info(f"Waterfall 1-year transactions pull for account {acc_id} ({from_1yr} to {to_today})")
                             tx_res = self._make_request(tx_url, access_token, provider_id, params=tx_params)
                             ingested_count = 0
+                            tx_data = []
                             if tx_res is not None and tx_res.status_code == 200:
-                                tx_data = tx_res.json().get("results", [])
-                                if tx_data:
-                                    self.process_and_store_transactions(session, tx_data, user_uuid, bank_uuid, acc_id)
-                                    ingested_count = len(tx_data)
-                                    logger.info(f"Successfully stored {ingested_count} transactions for account {acc_id}")
-                                else:
-                                    logger.info(f"TrueLayer returned 0 transactions for account {acc_id}")
+                                tx_data.extend(tx_res.json().get("results", []))
                             elif tx_res is not None:
                                 logger.warning(f"TrueLayer 1-year pull returned status {tx_res.status_code} for account {acc_id}: {tx_res.text}")
                             else:
                                 logger.warning(f"No response from TrueLayer for account {acc_id} 1-year pull")
+
+                            # Also pull pending authorizations
+                            try:
+                                pending_url = f"{self.base_url}/{acc_id}/transactions/pending"
+                                pending_res = self._make_request(pending_url, access_token, provider_id)
+                                if pending_res is not None and pending_res.status_code == 200:
+                                    pending_data = pending_res.json().get("results", [])
+                                    for ptx in pending_data:
+                                        ptx["status"] = "PENDING"
+                                    tx_data.extend(pending_data)
+                            except Exception as pend_err:
+                                logger.warning(f"Could not fetch pending transactions for {acc_id}: {pend_err}")
+
+                            if tx_data:
+                                self.process_and_store_transactions(session, tx_data, user_uuid, bank_uuid, acc_id)
+                                ingested_count = len(tx_data)
+                                logger.info(f"Successfully stored {ingested_count} transactions for account {acc_id}")
+                            else:
+                                logger.info(f"TrueLayer returned 0 transactions for account {acc_id}")
 
                             session.execute(
                                 text("UPDATE accounts SET sync_status = 'READY', last_synced_at = :now WHERE account_id = :acc_id"),
@@ -204,18 +218,10 @@ class TrueLayerSync:
                     except Exception as sync_err:
                         logger.error(f"Post-initialization delta sync failed for user {user_uuid}: {sync_err}")
                     try:
-                        import asyncio
                         from utils.cache_utils import clear_user_cache
-                        async def _clear_cache():
-                            clear_user_cache(str(user_uuid), namespace="accounts")
-                            clear_user_cache(str(user_uuid), namespace="transactions")
-                            clear_user_cache(str(user_uuid), namespace="categorizer")
-                        
-                        try:
-                            loop = asyncio.get_running_loop()
-                            loop.create_task(_clear_cache())
-                        except RuntimeError:
-                            asyncio.run(_clear_cache())
+                        clear_user_cache(str(user_uuid), namespace="accounts")
+                        clear_user_cache(str(user_uuid), namespace="transactions")
+                        clear_user_cache(str(user_uuid), namespace="categorizer")
                     except Exception as ce:
                         logger.error(f"Failed to clear cache: {ce}")
                     return True
@@ -269,19 +275,49 @@ class TrueLayerSync:
 
                 # Direct synchronous pull without webhooks
                 res = self._make_request(url, access_token, p_id, params=params)
+                tx_data = []
                 if res is not None and res.status_code == 200:
-                    tx_data = res.json().get("results", [])
-                    if tx_data:
-                        with SessionLocal() as s3:
-                            self.process_and_store_transactions(s3, tx_data, user_uuid, b_uuid, acc_id)
-                        from config import redis_client
-                        try:
-                            redis_client.publish(f"budai_events_{user_uuid}", json.dumps({
-                                "event_type": "TRANSACTIONS_UPDATED",
-                                "account_id": acc_id
-                            }))
-                        except Exception:
-                            pass
+                    tx_data.extend(res.json().get("results", []))
+
+                # Also capture pending transactions
+                try:
+                    pending_url = f"{self.base_url}/{acc_id}/transactions/pending"
+                    pending_res = self._make_request(pending_url, access_token, p_id)
+                    if pending_res is not None and pending_res.status_code == 200:
+                        pending_items = pending_res.json().get("results", [])
+                        for pit in pending_items:
+                            pit["status"] = "PENDING"
+                        tx_data.extend(pending_items)
+                except Exception as pend_err:
+                    logger.warning(f"Could not fetch pending transactions during sync for {acc_id}: {pend_err}")
+
+                # Also anchor live physical balance
+                try:
+                    bal_url = f"{self.base_url}/{acc_id}/balance"
+                    bal_res = self._make_request(bal_url, access_token, p_id)
+                    if bal_res is not None and bal_res.status_code == 200:
+                        bal_info = bal_res.json().get("results", [{}])[0]
+                        current_bal = float(bal_info.get("current", bal_info.get("available", 0.0)))
+                        with SessionLocal() as s_bal:
+                            s_bal.execute(
+                                text("UPDATE accounts SET account_balance = :bal, last_synced_at = :now WHERE account_id = :acc"),
+                                {"bal": current_bal, "now": datetime.utcnow(), "acc": acc_id}
+                            )
+                            s_bal.commit()
+                except Exception as bal_err:
+                    logger.warning(f"Could not anchor live balance during sync for {acc_id}: {bal_err}")
+
+                if tx_data:
+                    with SessionLocal() as s3:
+                        self.process_and_store_transactions(s3, tx_data, user_uuid, b_uuid, acc_id)
+                    from config import redis_client
+                    try:
+                        redis_client.publish(f"budai_events_{user_uuid}", json.dumps({
+                            "event_type": "TRANSACTIONS_UPDATED",
+                            "account_id": acc_id
+                        }))
+                    except Exception:
+                        pass
             except Exception as e:
                 logger.error(json.dumps({"message": f"Failed to fetch API transactions for {acc_id}: {e}", "status_code": 500}))
         except Exception:
@@ -367,8 +403,6 @@ class TrueLayerSync:
             anchor_service = get_anchor_service()
             new_txs = anchor_service.process_and_anchor_batch(new_txs, session)
         except Exception as e:
-            from services.logger_setup import get_core_logger
-            logger = get_core_logger(__name__)
             logger.error(f"Anchor processing failed: {e}")
 
         for tx in new_txs:
@@ -398,6 +432,11 @@ class TrueLayerSync:
         session.execute(stmt)
         # Update last_synced_at
         session.execute(text("UPDATE accounts SET last_synced_at = :now WHERE account_id = :acc_id"), {"now": datetime.utcnow(), "acc_id": account_id})
+        # Rolling 365-day circular buffer FIFO purge
+        session.execute(
+            text("DELETE FROM transactions WHERE user_uuid = :u AND date < (CURRENT_DATE - INTERVAL '365 days')"),
+            {"u": user_uuid}
+        )
         session.commit()
 
         rag_matches = sum(1 for tx in new_txs if tx.get("merchant_knowledge_uuid") is not None)
@@ -425,30 +464,13 @@ class TrueLayerSync:
             message=f"Stored {len(new_txs)} transactions for account {account_id} ({rag_matches} RAG matches)"
         )
 
-        # Update cache and run ML in a separate thread
-        def trigger_categorization():
-            try:
-                import asyncio
-                from agents.core_financial.Categorizer_Agent.lazy_ml import categorize_specific_transactions_bg
-                tx_uuids = [tx["transaction_uuid"] for tx in new_txs]
-                asyncio.run(categorize_specific_transactions_bg(tx_uuids, user_uuid))
-                from utils.cache_utils import clear_user_cache
-                clear_user_cache(str(user_uuid), namespace="transactions")
-                clear_user_cache(str(user_uuid), namespace="categorizer")
-                
-                # Reactive Surge Detection Trigger
-                from services.analytics.surge_detector import get_surge_detector
-                get_surge_detector().check_daily_surge(str(user_uuid))
-            except Exception as e:
-                logger.error(json.dumps({"message": f"Failed in trigger_categorization: {e}", "status_code": 500}), exc_info=True)
-            finally:
-                from utils.state_manager import clear_account_state
-                from utils.cache_utils import clear_user_cache
-                
-                clear_account_state(account_id)
-                clear_user_cache(str(user_uuid), namespace="transactions")
-                clear_user_cache(str(user_uuid), namespace="categorizer")
+        # Release raw transaction dicts from memory and flush cache
+        del new_txs
+        import gc
+        gc.collect()
 
-        
-        import threading
-        threading.Thread(target=trigger_categorization, daemon=True).start()
+        from utils.state_manager import clear_account_state
+        from utils.cache_utils import clear_user_cache
+        clear_account_state(account_id)
+        clear_user_cache(str(user_uuid), namespace="transactions")
+        clear_user_cache(str(user_uuid), namespace="categorizer")

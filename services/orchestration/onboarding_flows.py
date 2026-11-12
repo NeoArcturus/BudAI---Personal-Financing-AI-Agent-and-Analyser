@@ -102,20 +102,21 @@ def commit_onboarding_db_task(user_uuid: str, llm_analysis_dict: dict):
             user.persona = persona_deduced
             user.is_onboarded = True
             
-            # Seed the mandatory DEFAULT bucket for the zero-sum ledger system
-            existing_bucket = db.query(Bucket).filter(Bucket.user_id == user_uuid, Bucket.type == BucketType.DEFAULT).first()
+            # Seed the mandatory UNALLOCATED bucket
+            existing_bucket = db.query(Bucket).filter(Bucket.user_id == user_uuid, Bucket.type == BucketType.UNALLOCATED).first()
             if not existing_bucket:
                 default_bucket = Bucket(
                     id=str(uuid.uuid4()),
                     user_id=user_uuid,
-                    type=BucketType.DEFAULT,
-                    name="Unallocated Funds",
-                    priority_index=100.0,
+                    type=BucketType.UNALLOCATED,
+                    name="Unallocated",
                     cached_balance=0.0,
+                    cached_balances={},
+                    currency="GBP",
                     is_active=True
                 )
                 db.add(default_bucket)
-                run_logger.info("Seeded default Unallocated Funds bucket.")
+                run_logger.info("Seeded default Unallocated bucket.")
 
             # Update or create UserLifestyleProfile
             profile = db.query(UserLifestyleProfile).filter(UserLifestyleProfile.user_uuid == user_uuid).first()

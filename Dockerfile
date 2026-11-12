@@ -5,6 +5,11 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 ENV DEBIAN_FRONTEND noninteractive
+ENV OMP_NUM_THREADS 1
+ENV MKL_NUM_THREADS 1
+ENV OPENBLAS_NUM_THREADS 1
+ENV FASTEMBED_THREADS 1
+ENV FASTEMBED_CACHE_PATH /app/model_cache
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -28,6 +33,10 @@ WORKDIR /app
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Pre-download FastEmbed model into container layer to avoid runtime memory consumption in tmpfs
+RUN mkdir -p /app/model_cache && \
+    python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='nomic-ai/nomic-embed-text-v1.5', cache_dir='/app/model_cache', threads=1)"
 
 # Copy application code
 COPY . .

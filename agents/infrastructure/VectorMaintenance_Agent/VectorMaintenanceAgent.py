@@ -89,6 +89,73 @@ def merge_duplicate_vectors(keep_id: str, delete_id: str) -> str:
             session.rollback()
             return f"Failed to merge: {str(e)}"
 
+@tool
+def cascade_merchant_relabeling(clean_merchant_name: str, new_category: str, new_sub_category: str, tags: list[str]) -> str:
+    """
+    Cascades a category change across all identical merchants in PostgreSQL and updates Qdrant vectors.
+    """
+    with SessionLocal() as session:
+        try:
+            update_mk = text("""
+                UPDATE merchant_knowledge
+                SET category = :cat, sub_category = :sub_cat, tags = :tags::jsonb, is_human_verified = TRUE
+                WHERE clean_merchant_name = :name
+            """)
+            session.execute(update_mk, {
+                "cat": new_category,
+                "sub_cat": new_sub_category,
+                "tags": json.dumps(tags),
+                "name": clean_merchant_name
+            })
+            
+            update_txs = text("""
+                UPDATE transactions
+                SET sub_category = :sub_cat, tags = :tags::jsonb
+                WHERE merchant_knowledge_uuid IN (
+                    SELECT knowledge_uuid FROM merchant_knowledge WHERE clean_merchant_name = :name
+                ) OR semi_cleaned_description ILIKE :name_like
+            """)
+            session.execute(update_txs, {
+                "sub_cat": new_sub_category,
+                "tags": json.dumps(tags),
+                "name": clean_merchant_name,
+                "name_like": f"%{clean_merchant_name.lower()}%"
+            })
+            session.commit()
+
+            try:
+                from services.qdrant_service import get_qdrant_service
+                from services.embedding_service import get_embedding_service
+                qdrant = get_qdrant_service()
+                embedder = get_embedding_service()
+                rich_context = f"{clean_merchant_name} | {new_category} | {new_sub_category} | {', '.join(tags)}"
+                new_vec = embedder.embed_query(rich_context)
+                
+                anchor_row = session.execute(
+                    text("SELECT knowledge_uuid FROM merchant_knowledge WHERE clean_merchant_name = :name"),
+                    {"name": clean_merchant_name}
+                ).fetchone()
+                if anchor_row:
+                    k_uuid = anchor_row[0]
+                    qdrant.upsert_merchant(
+                        knowledge_uuid=k_uuid,
+                        clean_merchant_name=clean_merchant_name,
+                        category=new_category,
+                        sub_category=new_sub_category,
+                        tags=tags,
+                        vector=new_vec,
+                        is_human_verified=True
+                    )
+            except Exception as q_err:
+                logger.warning(f"Could not update Qdrant during cascade: {q_err}")
+
+            return f"Successfully cascaded {clean_merchant_name} to {new_category}."
+        except Exception as e:
+            session.rollback()
+            return f"Failed to cascade relabeling: {str(e)}"
+
+tools = [fetch_duplicate_candidates, merge_duplicate_vectors, cascade_merchant_relabeling]
+
 class VectorMaintenanceAgent:
     """
     Refactored to be a standalone LangGraph Agent with ChatOpenAI capabilities.
@@ -97,7 +164,6 @@ class VectorMaintenanceAgent:
         self.app = self._build_graph()
         
     def _build_graph(self):
-        tools = [fetch_duplicate_candidates, merge_duplicate_vectors]
         tool_node = ToolNode(tools)
         
         from services.llm_factory import get_chat_llm

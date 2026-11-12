@@ -169,7 +169,10 @@ class AccountReader:
             with SessionLocal() as session:
                 query = session.query(Transaction, MerchantKnowledge).outerjoin(
                     MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid
-                ).filter(Transaction.account_id == account_id, Transaction.user_uuid == user_uuid)
+                ).filter(Transaction.user_uuid == user_uuid)
+
+                if account_id:
+                    query = query.filter(Transaction.account_id == account_id)
 
                 if parsed_start:
                     query = query.filter(Transaction.date >= parsed_start)
@@ -191,7 +194,7 @@ class AccountReader:
                             "start_date": str(start_date) if start_date else None,
                             "end_date": str(end_date) if end_date else None,
                         },
-                        message=f"No transactions found for account {account_id}"
+                        message=f"No transactions found for user {user_uuid}" + (f" account {account_id}" if account_id else "")
                     )
                     return pd.DataFrame()
                 

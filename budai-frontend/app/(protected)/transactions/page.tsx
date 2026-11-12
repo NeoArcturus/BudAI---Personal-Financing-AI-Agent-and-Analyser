@@ -71,7 +71,7 @@ export default function TransactionsPage() {
     if (timeRange === "30d") start.setDate(end.getDate() - 30);
     else if (timeRange === "90d") start.setDate(end.getDate() - 90);
     else if (timeRange === "180d") start.setDate(end.getDate() - 180);
-    else start.setFullYear(end.getFullYear() - 5);
+    else start.setDate(end.getDate() - 365);
 
     return {
       fromDate: start.toISOString().split("T")[0],
@@ -173,6 +173,24 @@ export default function TransactionsPage() {
     const txId = tx.transaction_uuid || tx.transaction_id || (tx as any).id;
     if (!txId) return;
 
+    const effectiveFrom = timeRange === "all" ? undefined : fromDate;
+    const effectiveTo = timeRange === "all" ? undefined : toDate;
+    const queryKey = ["transactions", targetAccountId, effectiveFrom, effectiveTo];
+
+    // Snapshot previous data for rollback resilience
+    const previousTransactions = queryClient.getQueryData<Transaction[]>(queryKey);
+
+    // 1. Optimistic in-memory update (0ms immediate feedback)
+    queryClient.setQueryData<Transaction[]>(queryKey, (old = []) =>
+      old.map((t) => {
+        const currentId = t.transaction_uuid || t.transaction_id || (t as any).id;
+        return currentId === txId
+          ? { ...t, category: newCategory, Category: newCategory }
+          : t;
+      }),
+    );
+    setEditingTx(null);
+
     setIsUpdatingCategory(true);
     try {
       const res = await apiFetch(
@@ -192,11 +210,18 @@ export default function TransactionsPage() {
       if (res.ok) {
         toast(`Transaction category updated to ${newCategory}.`);
         queryClient.invalidateQueries({ queryKey: ["transactions"] });
-        setEditingTx(null);
+        queryClient.invalidateQueries({ queryKey: ["expense-categories"] });
+        queryClient.invalidateQueries({ queryKey: ["spending-trends"] });
       } else {
+        if (previousTransactions) {
+          queryClient.setQueryData(queryKey, previousTransactions);
+        }
         toast("Failed to update category.", { variant: "danger" } as any);
       }
     } catch {
+      if (previousTransactions) {
+        queryClient.setQueryData(queryKey, previousTransactions);
+      }
       toast("Network error updating transaction category.", {
         variant: "danger",
       } as any);

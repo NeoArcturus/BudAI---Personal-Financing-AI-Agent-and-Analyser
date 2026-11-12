@@ -2,13 +2,30 @@ import json
 import logging
 import pandas as pd
 import yfinance as yf
+from pydantic import BaseModel, Field
 from langchain_core.tools import tool
-from services.mcp_tools.market_tools_schema import MarketComparisonInput, HistoricalMarketDataInput
 from services.mcp_tools.shared_utils import _get_combined_categorized_data
 from services.logger_setup import get_core_logger
 from datetime import datetime, timedelta
 
 logger = get_core_logger(__name__)
+
+
+class MarketComparisonInput(BaseModel):
+    user_uuid: str = Field(..., description="The user UUID.")
+    category: str = Field(
+        ..., description="The expense category to analyze (e.g., 'Bills & Utilities', 'Entertainment').")
+    ticker: str = Field(
+        ..., description="The Yahoo Finance ticker to compare against (e.g., 'NG=F', '^GSPC').")
+    days: int = Field(default=180, description="The lookback period in days.")
+
+
+class HistoricalMarketDataInput(BaseModel):
+    ticker: str = Field(..., description="The Yahoo Finance ticker.")
+    period: str = Field(
+        default="6mo", description="The period (1mo, 6mo, 1y).")
+    interval: str = Field(default="1d", description="The interval (1d, 1wk).")
+
 
 
 @tool(args_schema=HistoricalMarketDataInput)

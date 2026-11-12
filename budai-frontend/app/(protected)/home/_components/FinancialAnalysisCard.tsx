@@ -53,10 +53,12 @@ export type CardViewMode =
 
 export interface FinancialAnalysisCardProps {
   currency?: string;
+  intelligence?: any;
 }
 
 export const FinancialAnalysisCard = ({
   currency = "GBP",
+  intelligence = null,
 }: FinancialAnalysisCardProps) => {
   const { accounts, activeAccountId } = useBudAI();
 
@@ -70,6 +72,20 @@ export const FinancialAnalysisCard = ({
   const [isFetchingBackendForecast, setIsFetchingBackendForecast] = useState<boolean>(false);
   const [backendForecastSeries, setBackendForecastSeries] = useState<any[] | null>(null);
   const [safetyCushion, setSafetyCushion] = useState<number>(500);
+
+  // Seed initial 30-day forecast series directly from snapshot intelligence if available
+  useEffect(() => {
+    if (intelligence) {
+      const forecastData = intelligence.forecaster || intelligence.stochastic_forecast;
+      const trajectory =
+        forecastData?.mean_trajectory ||
+        forecastData?.corridors?.Mean ||
+        forecastData?.corridors?.mean;
+      if (trajectory && Array.isArray(trajectory) && trajectory.length > 0) {
+        setBackendForecastSeries(trajectory);
+      }
+    }
+  }, [intelligence]);
 
   // Calendar State (Spanning -50 Years to +5 Years)
   const todayDate = useMemo(() => today(getLocalTimeZone()), []);

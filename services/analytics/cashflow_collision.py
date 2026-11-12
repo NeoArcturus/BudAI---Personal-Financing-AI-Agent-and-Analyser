@@ -41,9 +41,9 @@ class CashflowCollisionEngine:
             for b in buckets:
                 b_type = str(r_type := b[0]).upper()
                 bal = float(b[1]) if b[1] else 0.0
-                if b_type == "DEFAULT":
+                if b_type == "UNALLOCATED":
                     default_balance = bal
-                elif b_type == "RECURRING":
+                elif b_type == "BILLS":
                     recurring_balance = bal
 
             total_liquid = default_balance + recurring_balance

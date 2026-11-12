@@ -26,6 +26,8 @@ interface DashboardClientProps {
   initialBuckets?: any[];
   initialAlerts?: any[];
   initialAccounts?: any[];
+  initialTransactions?: any[];
+  initialIntelligence?: any;
 }
 
 export default function DashboardClient({
@@ -34,6 +36,8 @@ export default function DashboardClient({
   initialBuckets = [],
   initialAlerts = [],
   initialAccounts = [],
+  initialTransactions = [],
+  initialIntelligence = null,
 }: DashboardClientProps) {
   const { userName, accounts, activeAccountId } = useBudAI();
   const router = useRouter();
@@ -85,8 +89,14 @@ export default function DashboardClient({
 
           {/* Center Column (Financial Analysis & Transactions) - Un-squeezed & expansive */}
           <div className="w-full lg:flex-1 min-w-0 flex flex-col gap-6">
-            <FinancialAnalysisCard currency={activeCurrency} />
-            <RecentTransactionsCard currency={activeCurrency} />
+            <FinancialAnalysisCard
+              currency={activeCurrency}
+              intelligence={initialIntelligence}
+            />
+            <RecentTransactionsCard
+              currency={activeCurrency}
+              initialTransactions={initialTransactions}
+            />
           </div>
 
           {/* Right Column (Activity & Safety Safeguards) */}

@@ -177,7 +177,7 @@ interface MockResponse {
 export async function apiFetch(
   path: string,
   init?: RequestInit,
-  withAuth = false,
+  withAuth = true,
 ): Promise<MockResponse> {
   const axiosOptions: AxiosRequestConfig = {
     method: init?.method || "GET",

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Button, Dropdown, Skeleton } from "@heroui/react";
+import { Button, Dropdown, Skeleton, Chip } from "@heroui/react";
 import {
   Plus,
   ArrowLeftRight,
@@ -56,7 +56,7 @@ export const VirtualBucketsPanel = ({
     queryKey: ["buckets", activeAccountCurrency],
     queryFn: async () => {
       const res = await apiFetch(
-        `/api/buckets/?base_currency=${encodeURIComponent(activeAccountCurrency)}`
+        `/api/buckets/?currency=${encodeURIComponent(activeAccountCurrency)}`
       );
       if (res.ok) {
         const json = await res.json();
@@ -411,6 +411,7 @@ export const VirtualBucketsPanel = ({
             const Icon = meta.icon;
             const isDefault =
               bType === "DEFAULT" ||
+              bType === "UNALLOCATED" ||
               (typeof bucket.name === "string" &&
                 bucket.name.toLowerCase().includes("unallocated"));
             const rawBalance = bucket.cached_balance || 0;
@@ -420,6 +421,12 @@ export const VirtualBucketsPanel = ({
             const target = bucket.target_amount || 0;
             const progress =
               target > 0 ? Math.min(100, Math.round((balance / target) * 100)) : 0;
+
+            const multiCurrencies = bucket.cached_balances
+              ? Object.entries(bucket.cached_balances)
+                  .map(([curr, amt]) => [curr, Number(amt)] as [string, number])
+                  .filter(([_, amt]) => Math.abs(amt) > 0.001)
+              : [];
 
             return (
               <div
@@ -450,65 +457,81 @@ export const VirtualBucketsPanel = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-sm font-bold text-foreground font-mono">
-                      {formatCurrency(balance, activeAccountCurrency)}
-                    </span>
-                    <Dropdown>
-                      <Button
-                        isIconOnly
-                        aria-label="Bucket options"
-                        variant="ghost"
-                        className="w-7 h-7 min-w-0 rounded-lg hover:bg-foreground/5 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer shadow-none"
-                      >
-                        <MoreVertical size={14} />
-                      </Button>
-                      <Dropdown.Popover className="bg-popover/95 backdrop-blur-2xl border border-border shadow-2xl rounded-xl w-48 p-1.5 z-50">
-                        <Dropdown.Menu
-                          onAction={(key) => {
-                            if (key === "transfer")
-                              handleOpenTransferForBucket(bucketId);
-                            else if (key === "edit") {
-                              setSelectedBucket(bucket);
-                              setIsEditOpen(true);
-                            } else if (key === "delete") {
-                              setSelectedBucket(bucket);
-                              setIsDeleteOpen(true);
-                            }
-                          }}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-foreground font-mono">
+                        {formatCurrency(balance, activeAccountCurrency)}
+                      </span>
+                      <Dropdown>
+                        <Button
+                          isIconOnly
+                          aria-label="Bucket options"
+                          variant="ghost"
+                          className="w-7 h-7 min-w-0 rounded-lg hover:bg-foreground/5 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer shadow-none"
                         >
-                          <Dropdown.Item
-                            id="transfer"
-                            textValue="Move Money"
-                            className="px-3 py-2 rounded-lg text-xs hover:bg-foreground/5 cursor-pointer flex items-center gap-2"
+                          <MoreVertical size={14} />
+                        </Button>
+                        <Dropdown.Popover className="bg-popover/95 backdrop-blur-2xl border border-border shadow-2xl rounded-xl w-48 p-1.5 z-50">
+                          <Dropdown.Menu
+                            onAction={(key) => {
+                              if (key === "transfer")
+                                handleOpenTransferForBucket(bucketId);
+                              else if (key === "edit") {
+                                setSelectedBucket(bucket);
+                                setIsEditOpen(true);
+                              } else if (key === "delete") {
+                                setSelectedBucket(bucket);
+                                setIsDeleteOpen(true);
+                              }
+                            }}
                           >
-                            <ArrowLeftRight size={13} />
-                            <span>Move Money</span>
-                          </Dropdown.Item>
-                          {!isDefault && (
                             <Dropdown.Item
-                              id="edit"
-                              textValue="Edit Bucket"
+                              id="transfer"
+                              textValue="Move Money"
                               className="px-3 py-2 rounded-lg text-xs hover:bg-foreground/5 cursor-pointer flex items-center gap-2"
                             >
-                              <Edit2 size={13} />
-                              <span>Edit Details</span>
+                              <ArrowLeftRight size={13} />
+                              <span>Move Money</span>
                             </Dropdown.Item>
-                          )}
-                          {!isDefault && (
-                            <Dropdown.Item
-                              id="delete"
-                              textValue="Delete Bucket"
-                              variant="danger"
-                              className="px-3 py-2 rounded-lg text-xs text-danger hover:bg-danger/10 cursor-pointer flex items-center gap-2"
-                            >
-                              <Trash2 size={13} />
-                              <span>Delete</span>
-                            </Dropdown.Item>
-                          )}
-                        </Dropdown.Menu>
-                      </Dropdown.Popover>
-                    </Dropdown>
+                            {!isDefault && (
+                              <Dropdown.Item
+                                id="edit"
+                                textValue="Edit Bucket"
+                                className="px-3 py-2 rounded-lg text-xs hover:bg-foreground/5 cursor-pointer flex items-center gap-2"
+                              >
+                                <Edit2 size={13} />
+                                <span>Edit Details</span>
+                              </Dropdown.Item>
+                            )}
+                            {!isDefault && (
+                              <Dropdown.Item
+                                id="delete"
+                                textValue="Delete Bucket"
+                                variant="danger"
+                                className="px-3 py-2 rounded-lg text-xs text-danger hover:bg-danger/10 cursor-pointer flex items-center gap-2"
+                              >
+                                <Trash2 size={13} />
+                                <span>Delete</span>
+                              </Dropdown.Item>
+                            )}
+                          </Dropdown.Menu>
+                        </Dropdown.Popover>
+                      </Dropdown>
+                    </div>
+                    {isDefault && multiCurrencies.length > 1 && (
+                      <div className="flex flex-wrap items-center justify-end gap-1 mt-0.5">
+                        {multiCurrencies.map(([curr, amt]) => (
+                          <Chip
+                            key={curr}
+                            size="sm"
+                            variant="secondary"
+                            className="font-mono text-[10px] h-4 px-1.5 bg-content2 text-muted-foreground border border-white/5"
+                          >
+                            {formatCurrency(amt, curr)} {curr}
+                          </Chip>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 

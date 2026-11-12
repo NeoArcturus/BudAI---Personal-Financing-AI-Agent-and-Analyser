@@ -1,5 +1,6 @@
 import re
 import uuid
+import json
 import numpy as np
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
@@ -144,9 +145,41 @@ class AnchorService:
             )
 
             if hits:
-                matched_uuid = hits[0]["payload"].get("knowledge_uuid") or hits[0]["id"]
+                payload = hits[0].get("payload", {})
+                matched_uuid = payload.get("knowledge_uuid") or hits[0]["id"]
+                matched_name = payload.get("clean_merchant_name") or clean_name
+                matched_cat = payload.get("category") or "Uncategorized"
+                matched_sub = payload.get("sub_category")
+                matched_tags = payload.get("tags") or []
+                matched_verified = bool(payload.get("is_human_verified", False))
+
+                # Ensure matched anchor exists in PostgreSQL to prevent foreign key violations
+                try:
+                    insert_hit_stmt = text("""
+                        INSERT INTO merchant_knowledge (
+                            knowledge_uuid, clean_merchant_name, category, sub_category, tags, is_human_verified, created_at
+                        ) VALUES (
+                            :uuid, :name, :category, :sub_cat, :tags::json, :verified, :now
+                        ) ON CONFLICT (knowledge_uuid) DO NOTHING;
+                    """)
+                    session.execute(insert_hit_stmt, {
+                        "uuid": matched_uuid,
+                        "name": matched_name,
+                        "category": matched_cat,
+                        "sub_cat": matched_sub,
+                        "tags": json.dumps(matched_tags),
+                        "verified": matched_verified,
+                        "now": datetime.utcnow()
+                    })
+                except Exception as pg_err:
+                    logger.warning(f"Failed ensuring matched anchor {matched_uuid} in PostgreSQL: {pg_err}")
+
                 for tx_idx in cl["indices"]:
                     transactions[tx_idx]["merchant_knowledge_uuid"] = matched_uuid
+                    if matched_sub:
+                        transactions[tx_idx]["sub_category"] = matched_sub
+                    if matched_tags:
+                        transactions[tx_idx]["tags"] = matched_tags
             else:
                 # No existing anchor in Qdrant; create new anchor for this entire cluster
                 new_uuid = str(uuid.uuid4())
@@ -154,32 +187,41 @@ class AnchorService:
                 rep_raw = descriptions[cl["rep_idx"]]
                 rep_amt = float(rep_tx.get("amount") or 0.0)
 
-                init_cat = "Uncategorized"
-                init_sub = None
-                init_tags = []
+                from services.categorization.classifier import classify_merchant
+                from services.categorization.taxonomy import enrich_transaction_taxonomy
 
-                if re.search(r"(?i)^(Sent money to|Received money from|Transfer to|Transfer from|Splitwise)", rep_raw):
-                    if rep_amt >= 0:
-                        init_cat = "Income"
-                        init_sub = "Transfers & Gifts"
-                        init_tags = ["#income", "#transfers"]
-                    else:
-                        init_cat = "Transfers & Payments"
-                        init_sub = "Peer-to-Peer"
-                        init_tags = ["#transfers", "#p2p"]
+                cat_rule, sub_rule = classify_merchant(clean_name, rep_raw, rep_amt)
+                init_cat = cat_rule if cat_rule != "Uncategorized" else "Shopping & Retail"
+                init_sub = sub_rule or "General Merchandise"
+                
+                matched_cat, matched_sub, enriched_tags, _ = enrich_transaction_taxonomy(
+                    category=init_cat,
+                    sub_category=init_sub,
+                    description=f"{clean_name} {rep_raw}",
+                    existing_tags=[]
+                )
+
+                # Context-rich embedding combining Merchant + Category + SubCategory + Tags
+                rich_context_str = f"{clean_name} | {matched_cat} | {matched_sub} | {', '.join(enriched_tags)}"
+                try:
+                    rich_vec = self.embedding_service.embed_query(rich_context_str)
+                except Exception:
+                    rich_vec = rep_vec
 
                 new_anchor = {
                     "knowledge_uuid": new_uuid,
                     "clean_merchant_name": clean_name,
-                    "category": init_cat,
-                    "sub_category": init_sub,
-                    "tags": init_tags,
-                    "vector": rep_vec,
+                    "category": matched_cat,
+                    "sub_category": matched_sub,
+                    "tags": enriched_tags,
+                    "vector": rich_vec,
                     "is_human_verified": False
                 }
                 new_anchors.append(new_anchor)
                 for tx_idx in cl["indices"]:
                     transactions[tx_idx]["merchant_knowledge_uuid"] = new_uuid
+                    transactions[tx_idx]["sub_category"] = matched_sub
+                    transactions[tx_idx]["tags"] = enriched_tags
 
         # Step 5: Bulk persist newly created anchors into PostgreSQL
         if new_anchors:
@@ -206,6 +248,12 @@ class AnchorService:
                 self.qdrant_service.upsert_merchants_batch(new_anchors)
             except Exception as e:
                 logger.error(f"Failed to upsert new merchant anchors into Qdrant: {e}")
+
+        # Step 7: Explicitly release temporary batch vectors to release heap memory
+        import gc
+        del vectors
+        del clusters
+        gc.collect()
 
         return transactions
 

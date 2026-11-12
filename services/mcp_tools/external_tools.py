@@ -7,7 +7,7 @@ from datetime import datetime
 from langchain_core.tools import tool
 from config import SessionLocal
 from models.database_models import Transaction
-from services.mcp_tools.tool_schema import (
+from services.mcp_tools.shared_utils import (
     ExportAdvisoryStateInput,
     ExportAnalyzedStatementInput,
     MemorySearchInput,

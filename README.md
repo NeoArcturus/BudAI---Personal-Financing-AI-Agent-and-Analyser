@@ -1,84 +1,203 @@
-# BudAI: Personal Finance Assistant
+# BudAI Backend
 
-BudAI is a personal finance platform that uses AI and quantitative models to help users manage their money. It connects to bank accounts, categorizes transactions, runs financial simulations, and provides an interactive dashboard tailored to the user's specific financial situation.
+BudAI is an intelligent personal finance platform that connects to bank accounts, organizes capital into virtual buckets, analyzes spending patterns, and projects future cashflow corridors.
 
-## How It Works
-
-### 1. User Profiles and Onboarding
-When users register, they provide basic demographic data and financial goals. A local AI model analyzes this input and assigns a **Persona** (e.g., STUDENT, PROFESSIONAL, BUSINESS, RETIREE, CREATIVE). 
-To keep the database lightweight, the backend does not store UI layout data. Instead, it dynamically generates a customized dashboard layout for the frontend based on the user's Persona every time they log in.
-
-### 2. Transaction Syncing and Categorization
-BudAI connects to banks via TrueLayer. Transactions are synced in the background using a 3-day overlap to prevent missing data. Once downloaded, transactions go through a 4-step categorization process without relying on expensive external APIs:
-1. **Direct Match:** Checks local database for known merchants.
-2. **Vector Search:** Uses semantic search (`pgvector`/FAISS) to find similar merchants.
-3. **Local AI:** Uses a local LLM to guess the category for unknown merchants.
-4. **Web Search:** Falls back to an automated browser search to figure out obscure charges.
-
-### 3. Financial Forecasting
-BudAI goes beyond simple budgeting by running actual financial simulations:
-- A PyTorch LSTM network looks at the last 30 days of spending to extract mathematical parameters.
-- A custom C++ core runs 1,000 parallel Monte Carlo simulations per account to predict future balances and flag potential overdrafts before they happen.
-
-### 4. Interactive AI Chat
-The chat interface has programmatic access to the dashboard. The AI can highlight charts, filter transaction data globally, and stream interactive widgets (like a debt payoff slider) directly into the chat window using the Vercel AI SDK.
+The backend mirrors physical bank accounts into virtual allocations without transferring actual money between bank accounts. This enables automated budgeting for upcoming expenses, protection of savings goals, and cashflow forecasting.
 
 ---
 
-## Technology Stack
+## Architecture Overview
 
-- **Backend:** FastAPI (Python), SQLAlchemy, PostgreSQL
-- **Frontend:** Next.js (React 19), HeroUI, Chart.js, TanStack Query
-- **AI & Data:** LangGraph, Ollama (Local Inference), PyTorch, FAISS/pgvector
-- **Simulations:** Custom C++ shared objects (`.so`)
+### Virtual Money Allocation
+BudAI organizes available capital into distinct virtual partitions:
+- **Unallocated Funds:** General available cash reflecting real-time liquid balances across connected accounts and currencies.
+- **Committed Expenses:** Capital earmarked for upcoming fixed commitments and recurring expenses.
+- **Savings Goals:** Priority-ordered targets designed to accumulate capital for future objectives.
 
-## Project Architecture
+When spending occurs, the platform automatically reconciles bank transactions against the appropriate virtual bucket, absorbing routine expenses while shielding higher-priority savings from unexpected deficits.
 
-The codebase follows strict RESTful standards and modular design:
-- **Controllers:** Separated by resource and HTTP method (e.g., `controllers/auth/get.py`, `controllers/chat/post.py`) for maintainability.
-- **Single-Account Focus:** Backend functions operate on single `account_id` strings to ensure clean logic and prevent data crossover between accounts.
-- **Stateless UI:** The backend manages data and AI state, while the frontend handles rendering and local UI customizations.
+### Execution Pipelines
+
+The backend operates across two coordinated workflows:
+
+#### Interactive Financial Assistant
+- Orchestrated using a stateful LangGraph multi-agent architecture.
+- Handles user queries through conversational chat endpoints.
+- Coordinates specialist workers to inspect account balances, rebalance virtual buckets, audit liquidity, and retrieve cashflow projections.
+- Streams agent reasoning and intermediate tool steps to client interfaces in real time via Server-Sent Events.
+
+#### Event-Driven Background Services
+- Managed through background task flows for reliability and automatic retries.
+- Runs automatically when Open Banking events or balance syncs occur.
+- Reconciles physical balances with virtual allocations, evaluates funding for upcoming expenses, and broadcasts real-time updates over WebSockets.
+
+### Ingestion and Merchant Classification
+- **Bank Synchronization:** Securely fetches settled and pending transactions from connected financial institutions through Open Banking APIs.
+- **Deduplication:** Verifies transaction uniqueness across accounts to ensure idempotent ingestion.
+- **In-Process Semantic Embeddings:** Computes compact text vector representations locally using lightweight embedding models, eliminating third-party API latency.
+- **Vector Retrieval:** Matches merchant names against knowledge bases in vector storage to assign standardized categories and merchant profiles.
+
+### Predictive Analytics and Cashflow Forecasting
+- **Recurrence Detection:** Identifies recurring subscriptions and variable utility payments using temporal rhythms and merchant classifications.
+- **Surge Monitoring:** Tracks rolling daily spend velocity against user baselines to flag unusual spending activity.
+- **Habit and Lifestyle Profiling:** Evaluates spending distributions across essential needs versus discretionary categories.
+- **Multi-Path Cashflow Simulation:** Combines neural network parameter estimation with a high-performance C++ simulation engine, generating parallel Monte Carlo trajectories to produce 30-day cashflow corridors (expected, conservative, and disciplined bounds).
+
+### Consolidated Data Delivery
+A unified dashboard endpoint provides a complete synthesized snapshot in a single request, including account balances, virtual bucket states, spending trends, alerts, and forecast trajectories. This eliminates client-side network roundtrips and ensures atomic state rendering.
 
 ---
 
-## Local Development Setup
+## Tech Stack
+
+### Web and API Framework
+- **FastAPI:** High-performance asynchronous web framework with native request validation and OpenAPI documentation.
+- **Uvicorn:** Production ASGI server for asynchronous event handling.
+- **Pydantic v2:** Strongly-typed schema definition and runtime data validation.
+
+### Database and Storage
+- **PostgreSQL 15+ / Neon PostgreSQL:** Primary relational database with connection pooling and database-level constraints.
+- **SQLModel & SQLAlchemy 2.0:** Relational ORM combining Pydantic validation with SQLAlchemy query generation.
+- **pgvector:** Vector similarity indexing for embedded financial attributes.
+
+### Agentic Intelligence and Vector Search
+- **LangGraph & LangChain:** Stateful graph execution for multi-agent workflows, tool execution, and streaming protocols.
+- **FastEmbed:** In-process embedding generation running locally for fast semantic vector creation.
+- **Qdrant:** Vector database managing semantic merchant records and similarity matching.
+- **Model Context Protocol (MCP):** Structured protocol for decoupling analytical tools from agent cores.
+
+### Machine Learning and High-Performance Compute
+- **Custom C++ Simulation Core:** C++17 shared engine running parallel Monte Carlo simulation paths for forward-looking balance projections.
+- **PyTorch:** Neural networks estimating time-series parameters and cashflow dynamics.
+- **NumPy & Pandas:** Vectorized tabular data transformations and statistical aggregation.
+
+### Orchestration, Security and Telemetry
+- **Open Banking:** Token-based integration with banking data providers.
+- **Prefect OSS:** Resilient workflow orchestration for scheduled evaluations and ingestion flows.
+- **Redis:** Key-value caching and publish-subscribe messaging for real-time WebSocket distribution.
+- **Structured JSON Logging:** Observability logging routed to standard error with contextual metadata.
+
+---
+
+## Directory Structure
+
+```
+├── agents/                       # Specialized financial agents and analytical engines
+│   └── core_financial/
+│       └── Forecaster_Agent/
+│           └── mathematics/      # C++ simulation library and neural models
+├── controllers/                  # Request handling, validation, and response formatting
+├── middleware/                   # Authentication, CORS, and caching middleware
+├── models/                       # Database tables, relationships, and status schemas
+├── routes/                       # FastAPI endpoint declarations
+├── schemas/                      # Pydantic request and response schemas
+├── services/                     # Core business services, integrations, and detection pipelines
+│   ├── a2a/                      # Agent-to-Agent communication interfaces
+│   ├── analytics/                # Spending habits, surge detection, and forecasting logic
+│   ├── api_integrator/           # Open Banking data sync and token management
+│   ├── mcp_tools/                # Tool implementations exposed to agent graphs
+│   └── orchestration/            # Background workflows and automated rebalancing
+├── config.py                     # Application configuration and service clients
+└── main.py                       # FastAPI application entry point
+```
+
+---
+
+## Key API Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/healthz` | System health and connectivity check |
+| `GET` | `/api/dashboard/snapshot` | Complete application state snapshot in a single request |
+| `GET` | `/api/accounts` | Connected accounts, nominal balances, and synchronization status |
+| `POST` | `/api/accounts/sync` | Initiates background synchronization with connected institutions |
+| `GET` | `/api/accounts/{id}/transactions` | Account-level transactions with optional date range filters |
+| `GET` | `/api/accounts/transactions/search` | Cross-account transaction search |
+| `GET` | `/api/buckets/` | Virtual bucket balances, targets, and currency breakdowns |
+| `POST` | `/api/buckets/` | Creates a new virtual bucket |
+| `POST` | `/api/buckets/transfer` | Reallocates funds between virtual buckets |
+| `POST` | `/api/chat` | Conversational assistant endpoint with real-time tool event streaming |
+| `POST` | `/api/categorizer/labels` | Updates merchant classification and adjusts semantic vector anchors |
+| `GET` | `/api/market/fx` | Live foreign exchange reference rates |
+
+---
+
+## Configuration
+
+System configuration is driven by environment variables. Copy the sample file to begin:
+
+```bash
+cp .env.example .env
+```
+
+Key configuration areas include:
+- **Database:** PostgreSQL pooled and direct connection URIs.
+- **Security:** Secret keys for JWT signing and token encryption at rest.
+- **Open Banking:** Provider credentials, redirect URLs, and API endpoints.
+- **Vector Storage and AI:** Vector database endpoints and language model access tokens.
+- **Caching and Events:** Redis connection strings and allowed CORS origins.
+
+---
+
+## Local Development
 
 ### Prerequisites
-- Docker Desktop
-- Node.js 20+
-- C++ Compiler (g++) for the forecasting engine
+- Python 3.11+
+- C++ compiler (`g++` or `clang++` with C++17 support)
+- PostgreSQL 15+ (or cloud-hosted PostgreSQL)
+- Redis (optional, for caching and event broadcasting)
 
-### 1. Start the Backend and Database
+### Setup Environment
+
 ```bash
-# Set up your environment variables (Database, TrueLayer API keys, Ollama URL)
-cp .env.example .env
+git clone <repository-url>
+cd BudAI---Personal-Financing-AI-Agent-and-Analyser
 
-# Build and start the Docker containers
-docker compose build --no-cache
-docker compose up -d
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### 2. Compile the C++ Engine
+### Compile Simulation Engine
+
+Build the high-performance C++ forecasting library:
+
 ```bash
-cd services/Forecaster_Agent/mathematics/algorithm
+cd agents/core_financial/Forecaster_Agent/mathematics/algorithm
 g++ -O3 -shared -fPIC -std=c++17 -o ../hybrid_forecaster.so algorithm.cpp hybrid_algorithm.cpp
+cd ../../../../../
 ```
 
-### 3. Start the Frontend
+### Initialize Database
+
+Initialize schema tables and required default partitions:
+
 ```bash
-cd budai-frontend
-npm install
-npm run dev
+python -c "from services.db_service import init_db; init_db()"
 ```
 
-The frontend will be available at `http://localhost:3000` and the backend API documentation at `http://localhost:8000/docs`.
+### Start Server
+
+Launch the development server:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+```
+
+Interactive documentation is available at `http://localhost:8080/docs`.
 
 ---
 
-## Recent Updates & Bug Fixes
+## Verification
 
-- **Frontend Authentication Flow:** Corrected routing mismatches and data parsing bugs in the TrueLayer Re-authentication flow. The `ConnectedAccounts` widget now flawlessly handles the API response (`data.reauth_url`) and routes requests to the correct `/api/auth/banks/` prefix.
-- **Dynamic Docker Environments:** Added shell parameter expansion fallbacks (`FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}`) to `docker-compose.yml`, enabling seamless switching between local testing and Vercel production hosting without code changes.
-- **AI Anti-Hallucination Guardrails:** Hardened the `CategorizerAgent`. Added a SQL existence check before executing foreign-key updates to ensure the pipeline safely recovers if the LLM hallucinates or truncates a `merchant_knowledge_uuid`.
-- **Subscription Pipeline Normalization:** Fixed the `analyze_subscriptions_task` crash by rewriting the tag mutation logic. It now correctly lazy-loads and updates the normalized `MerchantKnowledge` JSON structure via `flag_modified`, rather than attempting to mutate raw `Transaction` rows.
-- **Nginx Load Balancer Telemetry:** Enabled the `stub_status` module in `nginx.conf` to provide a real-time, zero-downtime dashboard (`/status`) for monitoring GPU cluster failover and active connection metrics.
+Check API health:
+
+```bash
+curl http://localhost:8080/healthz
+```
+
+Execute the test suite:
+
+```bash
+pytest tests/
+```

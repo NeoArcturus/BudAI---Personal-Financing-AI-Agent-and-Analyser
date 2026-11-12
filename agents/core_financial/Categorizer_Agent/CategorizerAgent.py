@@ -1,6 +1,7 @@
 import os
 import json
-from typing import Annotated, Sequence, TypedDict
+import asyncio
+from typing import Annotated, Sequence, TypedDict, List
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
@@ -142,7 +143,8 @@ def bulk_save_categories(transactions: list[dict]) -> str:
                 try:
                     if not embeddings:
                         embeddings = get_embeddings_model()
-                    vec = embeddings.embed_query(merchant_name)
+                    rich_context_str = f"{merchant_name} | {category} | {sub_category} | {', '.join(tags) if isinstance(tags, list) else tags}"
+                    vec = embeddings.embed_query(rich_context_str)
                     mk_uuid = str(uuid.uuid4())
                     
                     insert_query = text("""
@@ -324,6 +326,8 @@ class CategorizerAgent:
                     get_qdrant_service().update_merchant_payload(
                         knowledge_uuid=tx.merchant_knowledge_uuid,
                         category=cat,
+                        sub_category=sub_cat,
+                        tags=tags,
                         is_human_verified=True
                     )
                 except Exception as e:

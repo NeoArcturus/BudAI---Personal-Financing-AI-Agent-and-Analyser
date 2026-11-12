@@ -215,7 +215,7 @@ def get_upcoming_subscriptions(user_uuid: str) -> str:
             output = "### Upcoming Deterministic Subscriptions & Bills\n"
             for sub in subs:
                 date_str = sub.next_expected_date.strftime("%Y-%m-%d") if sub.next_expected_date else "Unknown"
-                alert = " ⚠️ [PRICE HIKE DETECTED!]" if sub.is_price_hike else ""
+                alert = " [PRICE HIKE DETECTED]" if sub.is_price_hike else ""
                 output += f"- **{sub.merchant_name}**: £{abs(sub.expected_amount):.2f} due on {date_str} ({sub.predicted_frequency}){alert}\n"
                 
             return output

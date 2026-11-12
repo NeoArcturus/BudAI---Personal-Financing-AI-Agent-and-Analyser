@@ -134,11 +134,17 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
               });
 
               // Invalidate auxiliary alert keys without forcing redundant GET /api/notifications
-              queueInvalidation(["systemAlerts"]);
+              queueInvalidation(["systemAlerts", "dashboard-snapshot"]);
             } else if (BUCKET_EVENTS.has(event_type)) {
-              queueInvalidation(["buckets", "accounts", "notifications"]);
+              queueInvalidation(["buckets", "accounts", "notifications", "dashboard-snapshot"]);
             } else if (event_type === "TRANSACTIONS_UPDATED") {
-              queueInvalidation(["transactions", "accounts", "spending-trends", "expense-categories"]);
+              const accountId = payload.account_id || payload.data?.account_id;
+              if (accountId) {
+                queryClient.invalidateQueries({ queryKey: ["transactions", accountId] });
+              } else {
+                queueInvalidation(["transactions"]);
+              }
+              queueInvalidation(["accounts", "spending-trends", "expense-categories", "dashboard-snapshot"]);
             }
           } catch (err) {
             console.error("Failed to parse WS message", err);

@@ -1,5 +1,5 @@
 import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Account, Transaction, BankChartData } from "@/types";
 import { useBudAIWebSocket } from "@/app/context/WebSocketProvider";
@@ -55,8 +55,8 @@ export function useAccounts(initialData?: Account[]) {
     },
     initialData: initialData && initialData.length > 0 ? initialData : undefined,
     staleTime: 1000 * 60,
-    refetchInterval: isConnected ? 60000 : 10000,
-    refetchOnWindowFocus: false,
+    refetchInterval: isConnected ? false : 30000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -103,9 +103,26 @@ export function useTransactions(
       );
       if (hasUncategorized) return 3000;
 
-      return isConnected ? 60000 : 30000;
+      return isConnected ? false : 30000;
     },
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useDashboardSnapshot(initialData?: any) {
+  const { isConnected } = useBudAIWebSocket();
+
+  return useQuery({
+    queryKey: ["dashboard-snapshot"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/dashboard/snapshot");
+      if (!res.ok) throw new Error("Failed to fetch dashboard snapshot");
+      return res.json();
+    },
+    initialData,
+    staleTime: 1000 * 60,
+    refetchInterval: isConnected ? false : 30000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -305,4 +322,79 @@ export function usePersistedDate(key: string, defaultDate: DateValue | null): [D
   }, [setStrValue]);
 
   return [dateValue, setDateValue];
+}
+
+export function useUpdateTransactionCategory() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      transactionUuid,
+      category,
+    }: {
+      transactionUuid: string;
+      category: string;
+    }) => {
+      const res = await apiFetch("/api/categorizer/labels", {
+        method: "POST",
+        body: JSON.stringify({
+          transaction_uuid: transactionUuid,
+          corrected_label: category,
+          retrain_model: true,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to update transaction category");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["expense-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["spending-trends"] });
+    },
+  });
+}
+
+export function useNotificationActions() {
+  const queryClient = useQueryClient();
+
+  const markAsRead = useMutation({
+    mutationFn: async (alertId: string) => {
+      const res = await apiFetch(`/api/notifications/${alertId}/read`, {
+        method: "PATCH",
+      });
+      if (!res.ok) throw new Error("Failed to mark notice as read");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
+  const dismissAlert = useMutation({
+    mutationFn: async (alertId: string) => {
+      const res = await apiFetch(`/api/notifications/${alertId}/dismiss`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Failed to dismiss notice");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
+  const markAllAsRead = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch("/api/notifications/read-all", {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Failed to mark all notices as read");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
+  return { markAsRead, dismissAlert, markAllAsRead };
 }

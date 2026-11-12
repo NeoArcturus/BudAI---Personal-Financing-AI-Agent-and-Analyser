@@ -1,158 +1,14 @@
 import json
-import logging
-from typing import Optional, List, Any
+from datetime import datetime, timezone
+from typing import Optional, List, Dict, Any
 from langchain_core.tools import tool
-from services.mcp_tools.shared_utils import (
-    GenerateFinancialForecastInput, GenerateExpenseForecastInput,
-    GenerateHypotheticalScenarioInput, ForecastBudgetImpactInput,
-    _cache_chart_data, _parse_accounts
-)
+from sqlalchemy import text
+from config import SessionLocal
+from services.mcp_tools.shared_utils import GenerateExpenseForecastInput, _parse_accounts
 from services.analytics.forecast_service import forecaster_engine
 from services.logger_setup import get_core_logger
 
 logger = get_core_logger(__name__)
-
-
-@tool(args_schema=GenerateHypotheticalScenarioInput)
-def generate_hypothetical_scenario(user_uuid: str, account_ids: Optional[List[str]] = None, account_id: Optional[str] = None, days: int = 30, injections: list = None) -> str:
-    """
-    Generate a financial forecast based on a hypothetical scenario with multiple custom financial injections.
-    
-    Args:
-        user_uuid (str): The unique identifier of the user.
-        account_ids (list[str]): The target account (must be exactly one).
-        account_id (str): The target account identifier.
-        days (int): The number of days to forecast.
-        injections (list, optional): List of custom injections/events to apply.
-        
-    Returns:
-        str: The scenario outcome and chart trigger payload.
-    """
-    logger.info(json.dumps({"message": f"Executing MCP Tool: generate_hypothetical_scenario", "status_code": 200}))
-    try:
-        if injections is None: injections = []
-        target_accounts = account_ids or ([account_id] if account_id else [])
-        accounts, suffix = _parse_accounts(target_accounts, user_uuid)
-        if not accounts: return "Error: No accounts found."
-        if len(accounts) > 1: return "Please specify exactly one account for scenario analysis."
-        
-        agent = forecaster_engine
-        payload, timeline_events = [], []
-        
-        clean_injections = []
-        for inj in injections:
-            if hasattr(inj, 'dict'):
-                clean_injections.append(inj.dict())
-            else:
-                clean_injections.append(inj)
-
-        for acc in accounts:
-            real_balance = agent.fetch_live_balance(acc, user_uuid)
-            S0, mu, _ = agent.fetch_and_calculate_parameters(acc, real_balance, user_uuid, 60)
-            
-            df_temp, timeline = agent.run_scenario_simulation(
-                acc, S0, mu, user_uuid, days=days, paths=1000000, 
-                injections=clean_injections
-            )
-            
-            bank_data = []
-            if not df_temp.empty:
-                exp_vals, care_vals, opt_vals = df_temp.iloc[0].values.tolist(), df_temp.iloc[1].values.tolist(), df_temp.iloc[2].values.tolist()
-                for i in range(days + 1):
-                    bank_data.append({
-                        "Day": f"Day {i}", 
-                        "Expected Balance": round(exp_vals[i], 2), 
-                        "careless_scenario": round(care_vals[i], 2), 
-                        "optimal_scenario": round(opt_vals[i], 2)
-                    })
-            payload.append({"bank_name": acc, "data": bank_data})
-            timeline_events.extend(timeline)
-        
-        cache_id = _cache_chart_data({"series": payload, "timeline": timeline_events})
-        
-        scenario_events = [e for e in timeline_events if "[SCENARIO]" in e.get('merchant', '')]
-        events_str = "\n".join([f"- Day {e['day']}: {e['merchant']} £{e['amount']}" for e in scenario_events])
-        
-        summary_text = ""
-        for p in payload:
-            if p["data"]:
-                last = p["data"][-1]
-                summary_text += f"\n- Account {p['bank_name']} (Day {days}): Projected Balance £{last['Expected Balance']}"
-
-        _res = f"Scenario simulation complete. Final projected balance at day {days}:{summary_text}\n\nINJECTED SCENARIO EVENTS:\n{events_str}\n\n[TRIGGER_BALANCE_FORECAST_CHART:{cache_id}]"
-        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-        return _res
-    except Exception as e:
-        logger.error(json.dumps({"message": f"Scenario error: {e}", "status_code": 500}))
-        _res = f"Error: {str(e)}"
-        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-        return _res
-
-@tool(args_schema=GenerateFinancialForecastInput)
-def generate_financial_forecast(
-    user_uuid: str, 
-    account_ids: Optional[List[str]] = None, 
-    account_id: Optional[str] = None, 
-    days: int = 30, 
-    discipline_multiplier: float = 1.0, 
-    drift_adjustment: float = 0.0, 
-    stress_test_active: bool = False, 
-    macro_environment: str = "Stable"
-) -> str:
-    """
-    Generate a high-precision multi-path financial forecast with 1 million paths and deterministic transaction mapping.
-    
-    Args:
-        user_uuid (str): The unique identifier of the user.
-        account_ids (list[str], optional): The target account list.
-        account_id (str, optional): The target account ID.
-        days (int): The number of days to forecast.
-        discipline_multiplier (float): Factor to scale expenditure discipline.
-        drift_adjustment (float): Factor to adjust the geometric drift.
-        stress_test_active (bool): Whether to run adverse stress scenarios.
-        macro_environment (str): The macroeconomic assumption (e.g. 'Stable').
-        
-    Returns:
-        str: The detailed financial forecast and chart trigger payload.
-    """
-    logger.info(json.dumps({"message": f"Executing MCP Tool: generate_financial_forecast", "status_code": 200}))
-    try:
-        target_accounts = account_ids or ([account_id] if account_id else [])
-        accounts, suffix = _parse_accounts(target_accounts, user_uuid)
-        if not accounts: return "Error: No accounts found."
-        if len(accounts) > 1: return "Please specify exactly one account for forecasting. The ForecasterAgent cannot process multiple accounts simultaneously."
-        
-        agent = forecaster_engine
-        payload, timeline_events = [], []
-        for acc in accounts:
-            real_balance = agent.fetch_live_balance(acc, user_uuid)
-            S0, mu, _ = agent.fetch_and_calculate_parameters(acc, real_balance, user_uuid, 60)
-            df_temp, timeline = agent.run_hybrid_simulation(acc, S0, mu, user_uuid, days=days, paths=1000000, discipline_multiplier=discipline_multiplier, drift_adjustment=drift_adjustment, stress_test_active=stress_test_active, macro_environment=macro_environment)
-            bank_data = []
-            if not df_temp.empty:
-                exp_vals, care_vals, opt_vals = df_temp.iloc[0].values.tolist(), df_temp.iloc[1].values.tolist(), df_temp.iloc[2].values.tolist()
-                for i in range(days + 1):
-                    bank_data.append({"Day": f"Day {i}", "Expected Balance": round(exp_vals[i], 2), "careless_scenario": round(care_vals[i], 2), "optimal_scenario": round(opt_vals[i], 2)})
-            payload.append({"bank_name": acc, "data": bank_data})
-            timeline_events.extend(timeline)
-        
-        cache_id = _cache_chart_data({"series": payload, "timeline": timeline_events})
-        events_str = "\n".join([f"- Day {e['day']}: {e['merchant']} ({e['category']}) £{e['amount']}" for e in timeline_events])
-        
-        summary_text = ""
-        for p in payload:
-            if p["data"]:
-                last = p["data"][-1]
-                summary_text += f"\n- Account {p['bank_name']} (Day {days}): Expected £{last['Expected Balance']}, Careless £{last['careless_scenario']}, Optimal £{last['optimal_scenario']}"
-
-        _res = f"Forecast generated with 1,000,000 paths. Final projections at day {days}:{summary_text}\n\nPROJECTED EVENTS:\n{events_str}\n\n[TRIGGER_BALANCE_FORECAST_CHART:{cache_id}]"
-        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-        return _res
-    except Exception as e:
-        logger.error(json.dumps({"message": f"Forecast error: {e}", "status_code": 500}))
-        _res = f"Error: {str(e)}"
-        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-        return _res
 
 @tool(args_schema=GenerateExpenseForecastInput)
 def generate_expense_forecast(
@@ -162,109 +18,177 @@ def generate_expense_forecast(
     days: int = 30
 ) -> str:
     """
-    Calculate future expense projections using 1 million paths and historical spending velocity.
-    
-    Args:
-        user_uuid (str): The unique identifier of the user.
-        account_id (str, optional): The specific account ID to analyze.
-        account_ids (list[str], optional): The target account list.
-        days (int): The number of days to forecast.
-        
-    Returns:
-        str: The projected cumulative spend at the end of the forecast period and chart trigger.
+    Project future cumulative expenditure and compare current spending pace against
+    prior month performance and active virtual bucket goals.
     """
-    logger.info(json.dumps({"message": f"Executing MCP Tool: generate_expense_forecast", "status_code": 200}))
+    logger.info(json.dumps({"message": "Executing tool: generate_expense_forecast", "user_uuid": user_uuid, "days": days}))
     try:
-        target_account = account_id or (account_ids[0] if account_ids else "")
-        if not target_account:
-            return "Error: No target account specified."
-            
-        agent = forecaster_engine
-        current_balance = agent.fetch_live_balance(target_account, user_uuid)
-        E0, mu_E = agent.fetch_expense_parameters(target_account, user_uuid, 60)
-        df_temp, timeline = agent.run_expense_simulation(target_account, E0, mu_E, user_uuid, days, 1000000, current_balance=current_balance)
+        target_accounts = account_ids or ([account_id] if account_id else [])
+        accounts, _ = _parse_accounts(target_accounts, user_uuid) if target_accounts else ([], "")
         
-        bank_data = []
+        target_account = None
+        if accounts:
+            target_account = accounts[0]
+        else:
+            with SessionLocal() as session:
+                acc_row = session.execute(
+                    text("SELECT account_id FROM accounts WHERE user_uuid = :u ORDER BY created_at ASC LIMIT 1"),
+                    {"u": user_uuid}
+                ).fetchone()
+                if acc_row:
+                    target_account = acc_row[0]
+
+        agent = forecaster_engine
+        current_balance = agent.fetch_live_balance(target_account, user_uuid) if target_account else 0.0
+        E0, mu_E = agent.fetch_expense_parameters(target_account, user_uuid, 60) if target_account else (0.0, 0.0)
+        df_temp, timeline = agent.run_expense_simulation(
+            target_account or "primary", 
+            E0, 
+            mu_E, 
+            user_uuid, 
+            days=days, 
+            paths=1000000, 
+            current_balance=current_balance
+        )
+
+        projected_spend = 0.0
         if not df_temp.empty:
             exp_vals = df_temp.iloc[0].values.tolist()
-            for i in range(days + 1):
-                bank_data.append({"Day": f"Day {i}", "Projected Spend": round(float(exp_vals[i]), 2)})
-                
-        payload = [{"bank_name": target_account, "data": bank_data}]
-        timeline_events = timeline
-        
-        cache_id = _cache_chart_data({"series": payload, "timeline": timeline_events})
-        events_str = "\n".join([f"- Day {e['day']}: {e['merchant']} ({e['category']}) £{e['amount']}" for e in timeline_events])
-        
-        summary_text = ""
-        last = None
-        for p in payload:
-            if p["data"]:
-                last = p["data"][-1]
-                summary_text += f"\n- Account {p['bank_name']} (Day {days}): Projected Cumulative Spend £{last['Projected Spend']}"
+            if exp_vals:
+                projected_spend = round(float(exp_vals[min(days, len(exp_vals) - 1)]), 2)
 
-        if last:
-            _res = f"Expense forecast generated. Final expected cumulative spend at day {days}: £{last['Projected Spend']}\n\n[TRIGGER_EXPENSE_FORECAST_CHART:{cache_id}]"
-        else:
-            _res = f"Expense forecast generated, but no projection data is available.\n\n[TRIGGER_EXPENSE_FORECAST_CHART:{cache_id}]"
-        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-        return _res
-    except Exception as e:
-        logger.error(json.dumps({"message": f"Error generating expense forecast: {e}", "status_code": 500}))
-        _res = f"Error: {str(e)}"
-        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-        return _res
+        with SessionLocal() as session:
+            # Query actual prior month spending (31 to 60 days ago) for run-rate comparison
+            prior_spend_row = session.execute(
+                text("""
+                    SELECT COALESCE(SUM(ABS(amount)), 0.0)
+                    FROM transactions
+                    WHERE user_uuid = :u
+                      AND is_pending = false
+                      AND amount < 0
+                      AND date >= CURRENT_DATE - INTERVAL '60 days'
+                      AND date < CURRENT_DATE - INTERVAL '30 days'
+                """),
+                {"u": user_uuid}
+            ).fetchone()
+            prior_month_spend = round(float(prior_spend_row[0]) if prior_spend_row else 0.0, 2)
 
-@tool(args_schema=ForecastBudgetImpactInput)
-def forecast_budget_impact(
-    user_uuid: str, 
-    account_ids: Optional[List[str]] = None, 
-    account_id: Optional[str] = None, 
-    days: int = 30
-) -> str:
-    """
-    Run a detailed financial forecast incorporating the user's live budget pacing (Spend Velocity & Variance) to clamp the deterministic floor in the Monte Carlo simulation.
-    
-    Args:
-        user_uuid (str): The unique identifier of the user.
-        account_ids (list[str], optional): The target account list.
-        account_id (str, optional): The target account ID.
-        days (int): The number of days to forecast.
-        
-    Returns:
-        str: The impact analysis and simulated forecast outcomes.
-    """
-    logger.info(json.dumps({"message": f"Executing MCP Tool: forecast_budget_impact", "status_code": 200}))
-    try:
-        from agents.core_financial.Analyser_Agent.budget_engine import BudgetEngine
-        engine = BudgetEngine(user_uuid)
-        budgets = engine.get_variance_for_category(None)
-        
-        target_accounts = account_ids or ([account_id] if account_id else [])
-        total_overspend = 0.0
-        for b in budgets:
-            if b['variance'] < 0:
-                total_overspend += abs(b['variance'])
-                
-        injections = []
-        if total_overspend > 0:
-            injections.append({
-                "day": min(28, days),
-                "amount": -total_overspend,
-                "type": "one-off",
-                "description": f"Projected Budget Overspend across {len([b for b in budgets if b['variance'] < 0])} categories"
+            # Query recent 30-day spending to date
+            current_30d_spend_row = session.execute(
+                text("""
+                    SELECT COALESCE(SUM(ABS(amount)), 0.0)
+                    FROM transactions
+                    WHERE user_uuid = :u
+                      AND is_pending = false
+                      AND amount < 0
+                      AND date >= CURRENT_DATE - INTERVAL '30 days'
+                """),
+                {"u": user_uuid}
+            ).fetchone()
+            current_30d_spend = round(float(current_30d_spend_row[0]) if current_30d_spend_row else 0.0, 2)
+
+            # Query recent 30-day regular income / inflows
+            income_row = session.execute(
+                text("""
+                    SELECT COALESCE(SUM(amount), 0.0)
+                    FROM transactions
+                    WHERE user_uuid = :u
+                      AND is_pending = false
+                      AND amount > 0
+                      AND date >= CURRENT_DATE - INTERVAL '30 days'
+                """),
+                {"u": user_uuid}
+            ).fetchone()
+            monthly_income = round(float(income_row[0]) if income_row else 0.0, 2)
+
+            # Query active goals from buckets table
+            goals_query = session.execute(
+                text("""
+                    SELECT id, name, type, target_amount, target_date, cached_balance, priority_index
+                    FROM buckets
+                    WHERE user_id = :u
+                      AND is_active = true
+                      AND target_amount IS NOT NULL
+                      AND target_amount > 0
+                    ORDER BY priority_index ASC
+                """),
+                {"u": user_uuid}
+            ).fetchall()
+
+        now = datetime.now(timezone.utc)
+        active_goals = []
+        total_required_monthly_savings = 0.0
+
+        for g in goals_query:
+            g_id, g_name, g_type, g_target, g_date, g_cached, g_priority = g
+            target_amt = float(g_target or 0.0)
+            cached_amt = float(g_cached or 0.0)
+            remaining_amt = max(0.0, target_amt - cached_amt)
+            completion_pct = min(100.0, round((cached_amt / target_amt) * 100.0, 1)) if target_amt > 0 else 100.0
+
+            # Calculate remaining months to target date
+            if g_date:
+                g_dt = g_date if g_date.tzinfo else g_date.replace(tzinfo=timezone.utc)
+                days_left = max(1, (g_dt - now).days)
+                months_left = max(1.0, days_left / 30.4375)
+            else:
+                months_left = 6.0  # default 6-month planning horizon
+
+            monthly_allocation = round(remaining_amt / months_left, 2)
+            total_required_monthly_savings += monthly_allocation
+
+            active_goals.append({
+                "name": g_name,
+                "type": str(g_type),
+                "target_amount": target_amt,
+                "cached_balance": cached_amt,
+                "remaining_amount": round(remaining_amt, 2),
+                "completion_pct": completion_pct,
+                "monthly_required_savings": monthly_allocation
             })
+
+        # Evaluate goal presence and build output
+        if active_goals:
+            base_capacity = monthly_income if monthly_income > 0 else (prior_month_spend if prior_month_spend > 0 else current_balance)
+            optimal_spend_ceiling = max(0.0, round(base_capacity - total_required_monthly_savings, 2))
             
-        _res = generate_hypothetical_scenario.invoke({
-            "user_uuid": user_uuid,
-            "account_ids": target_accounts,
-            "days": days,
-            "injections": injections
-        })
-        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-        return _res
+            pacing_variance = round(projected_spend - optimal_spend_ceiling, 2)
+            status_text = "ON_TRACK" if pacing_variance <= 0 else "OVERSPENDING_RISK"
+
+            goals_summary_lines = []
+            for goal in active_goals:
+                goals_summary_lines.append(
+                    f"  - {goal['name']} ({goal['type']}): Target £{goal['target_amount']:.2f}, "
+                    f"Saved £{goal['cached_balance']:.2f} ({goal['completion_pct']}%), "
+                    f"Monthly Allocation Needed: £{goal['monthly_required_savings']:.2f}"
+                )
+            goals_text = "\n".join(goals_summary_lines)
+
+            output = (
+                f"Expense Forecast ({days}-Day Horizon):\n"
+                f"- Current Projected Spend: £{projected_spend:.2f}\n"
+                f"- Prior Month Actual Spend: £{prior_month_spend:.2f}\n"
+                f"- Optimal Spend Ceiling (Derived from Goals): £{optimal_spend_ceiling:.2f}\n"
+                f"- Pacing Status: {status_text} (Variance: £{pacing_variance:+.2f})\n\n"
+                f"Active Savings Goals:\n"
+                f"{goals_text}\n"
+                f"- Total Required Monthly Goal Savings: £{total_required_monthly_savings:.2f}"
+            )
+        else:
+            spend_delta = round(projected_spend - prior_month_spend, 2)
+            pct_delta = round((spend_delta / prior_month_spend) * 100.0, 1) if prior_month_spend > 0 else 0.0
+
+            output = (
+                f"Expense Forecast ({days}-Day Horizon):\n"
+                f"- Current Projected Spend: £{projected_spend:.2f}\n"
+                f"- Prior Month Actual Spend: £{prior_month_spend:.2f}\n"
+                f"- Month-Over-Month Variance: £{spend_delta:+.2f} ({pct_delta:+.1f}%)\n\n"
+                f"Note: No active goals found in virtual buckets. Optimal expenditure curve dropped; displaying monthly comparison only."
+            )
+
+        logger.info(json.dumps({"message": "generate_expense_forecast complete", "status_code": 200}))
+        return output
+
     except Exception as e:
-        logger.error(json.dumps({"message": f"Error forecasting budget impact: {e}", "status_code": 500}))
-        _res = f"Error: {str(e)}"
-        logger.info(json.dumps({"message": f"Tool returned: {str(_res)[:1000]}", "status_code": 200}))
-        return _res
+        logger.error(json.dumps({"message": f"Error in generate_expense_forecast: {e}", "status_code": 500}))
+        return f"Error generating expense forecast: {str(e)}"

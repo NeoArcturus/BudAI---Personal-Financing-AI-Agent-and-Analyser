@@ -28,7 +28,7 @@ DEFAULT_PRIMARY_NODES = [
 DEFAULT_BACKUP_NODE = f"http://stpi-kohima-g11.{DEFAULT_TAILNET_DOMAIN}:{DEFAULT_LLM_PORT}/v1"
 
 DEFAULT_MODEL_NAME = os.getenv("LLM_MODEL", "qwen3.5-9b")
-DEFAULT_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "30.0"))
+DEFAULT_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "10.0"))
 
 class ClusterNode:
     """Represents a single GPU inference machine on Tailscale."""
@@ -72,9 +72,6 @@ class LLMClusterManager:
         env_primaries = os.getenv("LLM_PRIMARY_ENDPOINTS")
         if env_primaries:
             primary_urls = [u.strip() for u in env_primaries.split(",") if u.strip()]
-        elif os.getenv("OLLAMA_BASE_URL"):
-            # If explicit single URL provided (e.g. local offline dev)
-            primary_urls = [os.getenv("OLLAMA_BASE_URL")]
         else:
             primary_urls = DEFAULT_PRIMARY_NODES
 
@@ -98,30 +95,40 @@ class LLMClusterManager:
                 unique.append(n)
         return unique
 
-    def select_node(self) -> ClusterNode:
+    def select_node(self, excluded_urls: Optional[set] = None) -> ClusterNode:
         """
         Selects the best healthy node:
-        1. Filters healthy primary desktops and picks the one with fewest active requests.
-        2. If all 4 primaries are in cooldown, falls back to the Alienware backup node.
-        3. If all nodes including backup are down, resets cooldowns and retries least-failing desktop.
+        1. Filters healthy primary desktops (excluding already attempted nodes in the current request)
+           and picks the one with fewest active requests.
+        2. If all primaries are down or excluded, falls back to the Alienware backup node (if not excluded and healthy).
+        3. If all nodes are exhausted or in cooldown, resets cooldown on the least-failing node and returns it.
         """
         now = time.time()
+        excluded = excluded_urls or set()
         with self._lock:
-            healthy_primaries = [n for n in self.primary_nodes if n.is_healthy(now)]
+            available_primaries = [n for n in self.primary_nodes if n.url not in excluded]
+            healthy_primaries = [n for n in available_primaries if n.is_healthy(now)]
             if healthy_primaries:
-                # Least-Connections routing
-                return min(healthy_primaries, key=lambda n: n.active_requests)
+                return min(healthy_primaries, key=lambda n: (n.active_requests, n.consecutive_failures))
 
-            # All 4 primary desktops are down; check backup Alienware node
-            if self.backup_node.is_healthy(now):
+            # Check backup Alienware node if not excluded and healthy
+            if self.backup_node.url not in excluded and self.backup_node.is_healthy(now):
                 logger.warning(
-                    f"All {len(self.primary_nodes)} primary desktop nodes are down. "
+                    f"All available primary desktop nodes are down. "
                     f"Failing over to Alienware backup node: {self.backup_node.name} ({self.backup_node.url})"
                 )
                 return self.backup_node
 
-            # Extreme edge case: all primaries and backup are down. Reset the least-failing primary.
-            logger.error("All primary nodes and backup node are in cooldown. Resetting cooldown on primary pool.")
+            # If backup is also in cooldown or excluded, try any remaining primary that has not been tried yet
+            if available_primaries:
+                return min(available_primaries, key=lambda n: n.consecutive_failures)
+
+            if self.backup_node.url not in excluded:
+                return self.backup_node
+
+            # Extreme edge case: all cluster nodes were already tried or in cooldown.
+            # Reset the primary with the fewest failures
+            logger.error("All cluster nodes exhausted or in cooldown. Resetting cooldown on least-failing node.")
             best_fallback = min(self.primary_nodes, key=lambda n: n.consecutive_failures)
             best_fallback.cooldown_until = 0.0
             return best_fallback
@@ -133,15 +140,17 @@ class LLMClusterManager:
                     n.consecutive_failures = 0
                     n.cooldown_until = 0.0
 
-    def mark_failure(self, url: str, error: Exception, cooldown_seconds: float = 30.0):
+    def mark_failure(self, url: str, error: Exception, base_cooldown: float = 60.0):
         now = time.time()
         with self._lock:
             for n in self.primary_nodes + [self.backup_node]:
                 if n.url == url or f"{n.url}/" == url:
                     n.consecutive_failures += 1
-                    n.cooldown_until = now + cooldown_seconds
+                    # Exponential backoff capped at 300s (5 minutes): 60s, 120s, 240s, 300s
+                    cooldown = min(300.0, base_cooldown * (2 ** min(n.consecutive_failures - 1, 4)))
+                    n.cooldown_until = now + cooldown
                     logger.warning(
-                        f"LLM Node [{n.name}] ({n.url}) marked DOWN for {cooldown_seconds}s "
+                        f"LLM Node [{n.name}] ({n.url}) marked DOWN for {cooldown:.1f}s "
                         f"(Failures: {n.consecutive_failures}). Error: {error}"
                     )
 
@@ -208,9 +217,11 @@ class LoadBalancedChatOpenAI(ChatOpenAI):
         mgr = get_cluster_manager()
         max_attempts = len(mgr.all_nodes)
         last_error = None
+        attempted_urls = set()
 
         for attempt in range(max_attempts):
-            node = mgr.select_node()
+            node = mgr.select_node(excluded_urls=attempted_urls)
+            attempted_urls.add(node.url)
             mgr.increment_active(node.url)
             self._sync_client_url(node.url)
 
@@ -220,7 +231,7 @@ class LoadBalancedChatOpenAI(ChatOpenAI):
                 return result
             except RETRYABLE_ERROR_TYPES as err:
                 last_error = err
-                err_detail = getattr(err, "body", getattr(err, "message", str(err)))
+                err_detail = getattr(err, "message", None) or getattr(err, "body", None) or str(err)
                 mgr.mark_failure(node.url, err)
                 logger.warning(
                     f"Inference attempt {attempt + 1}/{max_attempts} failed on {node.name} ({node.url}): {err_detail}; failing over..."
@@ -242,9 +253,11 @@ class LoadBalancedChatOpenAI(ChatOpenAI):
         mgr = get_cluster_manager()
         max_attempts = len(mgr.all_nodes)
         last_error = None
+        attempted_urls = set()
 
         for attempt in range(max_attempts):
-            node = mgr.select_node()
+            node = mgr.select_node(excluded_urls=attempted_urls)
+            attempted_urls.add(node.url)
             mgr.increment_active(node.url)
             self._sync_client_url(node.url)
 
@@ -254,7 +267,7 @@ class LoadBalancedChatOpenAI(ChatOpenAI):
                 return result
             except RETRYABLE_ERROR_TYPES as err:
                 last_error = err
-                err_detail = getattr(err, "body", getattr(err, "message", str(err)))
+                err_detail = getattr(err, "message", None) or getattr(err, "body", None) or str(err)
                 mgr.mark_failure(node.url, err)
                 logger.warning(
                     f"Async inference attempt {attempt + 1}/{max_attempts} failed on {node.name} ({node.url}): {err_detail}; failing over..."
@@ -276,9 +289,11 @@ class LoadBalancedChatOpenAI(ChatOpenAI):
         mgr = get_cluster_manager()
         max_attempts = len(mgr.all_nodes)
         last_error = None
+        attempted_urls = set()
 
         for attempt in range(max_attempts):
-            node = mgr.select_node()
+            node = mgr.select_node(excluded_urls=attempted_urls)
+            attempted_urls.add(node.url)
             mgr.increment_active(node.url)
             self._sync_client_url(node.url)
 
@@ -291,7 +306,7 @@ class LoadBalancedChatOpenAI(ChatOpenAI):
                 return
             except RETRYABLE_ERROR_TYPES as err:
                 last_error = err
-                err_detail = getattr(err, "body", getattr(err, "message", str(err)))
+                err_detail = getattr(err, "message", None) or getattr(err, "body", None) or str(err)
                 mgr.mark_failure(node.url, err)
                 logger.warning(
                     f"Async stream attempt {attempt + 1}/{max_attempts} failed on {node.name} ({node.url}): {err_detail}; failing over..."

@@ -140,7 +140,7 @@ def get_etl_tool():
 def get_create_bucket_tool(user_uuid: str):
     @tool
     def create_virtual_bucket(bucket_type: str, name: str, target_amount: float = 0.0, target_date: str = "", priority_index: float = 0.0) -> str:
-        """Use this tool to autonomously create a new virtual bucket (e.g. TARGET_DATE, ACCUMULATING) to track goals or liabilities."""
+        """Use this tool to autonomously create a new virtual bucket (BILLS or GOALS)."""
         from services.bucket_service import create_new_bucket
         from datetime import datetime
         try:
@@ -235,7 +235,7 @@ def get_update_bucket_tool(reverse_map: dict, user_uuid: str):
 def get_delete_bucket_tool(reverse_map: dict, user_uuid: str):
     @tool
     def delete_virtual_bucket_tool(bucket_alias: str) -> str:
-        """Use this tool to completely remove/delete an active virtual bucket. Any remaining funds will be automatically moved to DEFAULT."""
+        """Use this tool to completely remove/delete an active virtual bucket. Any remaining funds will be automatically moved to Unallocated."""
         from services.bucket_service import delete_virtual_bucket
         bucket_id = reverse_map.get(bucket_alias)
         if not bucket_id:
