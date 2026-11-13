@@ -193,6 +193,7 @@ class Bucket(SQLModel, table=True):
     target_amount: Optional[float] = None
     target_date: Optional[datetime] = None
     priority: int = Field(default=10) # 1=High, 10=Low (Lower-priority goals tapped first)
+    priority_index: Optional[float] = Field(default=10.0)
     cached_balance: float = Field(default=0.0)
     cached_balances: dict = Field(default_factory=dict, sa_column=Column(JSON)) # Currency + per-bank account totals
     currency: str = Field(default="GBP", index=True)

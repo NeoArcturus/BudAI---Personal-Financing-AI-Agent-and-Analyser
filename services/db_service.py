@@ -76,6 +76,9 @@ def init_db(db_path=None):
             conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cluster_signature_hash VARCHAR UNIQUE;"))
 
             # Buckets table migrations
+            conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS priority_index DOUBLE PRECISION DEFAULT 10.0;"))
+            conn.execute(text("ALTER TABLE buckets ALTER COLUMN priority_index DROP NOT NULL;"))
+            conn.execute(text("ALTER TABLE buckets ALTER COLUMN priority_index SET DEFAULT 10.0;"))
             conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 10;"))
             conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS cached_balances JSONB DEFAULT '{}'::jsonb;"))
             conn.execute(text("ALTER TABLE buckets ADD COLUMN IF NOT EXISTS currency VARCHAR DEFAULT 'GBP';"))
