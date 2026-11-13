@@ -18,6 +18,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@heroui/react": "^3.0.3",
     "@heroui/styles": "^3.0.3",
+    "@neondatabase/auth": "^0.6.0-beta",
     "@tanstack/react-query": "^5.100.10",
     "@tanstack/react-query-devtools": "^5.100.10",
     "ai": "^6.0.256",

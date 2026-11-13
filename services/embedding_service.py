@@ -6,7 +6,7 @@ from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
 class EmbeddingService:
-    def __init__(self, model_name: str = "nomic-ai/nomic-embed-text-v1.5"):
+    def __init__(self, model_name: str = "nomic-ai/nomic-embed-text-v1.5-Q"):
         self.model_name = model_name
         self.threads = int(os.getenv("FASTEMBED_THREADS", "1"))
         self.cache_dir = os.getenv("FASTEMBED_CACHE_PATH", "/app/model_cache")

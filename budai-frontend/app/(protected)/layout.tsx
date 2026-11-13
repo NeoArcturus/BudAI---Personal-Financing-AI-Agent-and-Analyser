@@ -6,18 +6,27 @@ import { TopNavbar } from "@/app/(protected)/_components/layout/Navbar";
 import { FloatingBottomNav } from "@/app/(protected)/_components/layout/FloatingBottomNav";
 import GlobalBackground from "@/app/(protected)/_components/layout/Background";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth/server";
 import { Account } from "@/types";
+
+export const dynamic = "force-dynamic";
 
 export default async function ProtectedLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { data: session } = await auth.getSession().catch(() => ({ data: null }));
+  if (!session?.user) {
+    redirect("/login");
+  }
+
   const cookieStore = await cookies();
   const token =
-    cookieStore.get("budai_token")?.value ||
-    cookieStore.get("budai_access_token")?.value ||
+    (session as any)?.session?.token ||
     cookieStore.get("better-auth.session_token")?.value ||
+    cookieStore.get("budai_token")?.value ||
     cookieStore.get("access_token")?.value;
 
   const baseUrl =

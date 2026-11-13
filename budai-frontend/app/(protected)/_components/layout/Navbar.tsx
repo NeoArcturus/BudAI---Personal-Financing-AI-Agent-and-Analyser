@@ -12,6 +12,7 @@ import {
   Building2,
   CheckCircle2,
   AlertCircle,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiFetch, clearSession } from "@/lib/api";
@@ -19,6 +20,7 @@ import { useSearch } from "@/app/context/SearchContext";
 import { useBudAI } from "@/app/context/AppContext";
 import { useQuery } from "@tanstack/react-query";
 import { formatCurrency, getCurrencySymbol } from "@/lib/currency";
+import { AccountSecurityModal } from "@/app/(protected)/_components/modals/AccountSecurityModal";
 
 export const TopNavbar = () => {
   const router = useRouter();
@@ -27,6 +29,7 @@ export const TopNavbar = () => {
   const [persona, setPersona] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     async function fetchPersona() {
@@ -105,8 +108,8 @@ export const TopNavbar = () => {
     return accounts.find((a) => a.account_id === activeAccountId) || null;
   }, [accounts, activeAccountId]);
 
-  const handleLogout = () => {
-    clearSession();
+  const handleLogout = async () => {
+    await clearSession();
     router.push("/login");
   };
 
@@ -268,6 +271,7 @@ export const TopNavbar = () => {
                 if (key === "signout") handleLogout();
                 else if (key === "connections") router.push("/connections");
                 else if (key === "transactions") router.push("/transactions");
+                else if (key === "security") setIsSettingsOpen(true);
               }}
             >
               <Dropdown.Item
@@ -297,6 +301,14 @@ export const TopNavbar = () => {
                 Transactions
               </Dropdown.Item>
               <Dropdown.Item
+                id="security"
+                textValue="Account & Security"
+                className="px-3 py-2.5 rounded-lg cursor-pointer text-sm font-medium hover:bg-foreground/5 flex items-center gap-2"
+              >
+                <ShieldCheck size={15} />
+                <span>Account & Security</span>
+              </Dropdown.Item>
+              <Dropdown.Item
                 id="signout"
                 textValue="Sign Out"
                 variant="danger"
@@ -309,6 +321,14 @@ export const TopNavbar = () => {
           </Dropdown.Popover>
         </Dropdown>
       </div>
+
+      <AccountSecurityModal
+        isOpen={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+        currentName={name || "User"}
+        userEmail={email || ""}
+        onNameUpdated={(newName) => setName(newName)}
+      />
     </header>
   );
 };

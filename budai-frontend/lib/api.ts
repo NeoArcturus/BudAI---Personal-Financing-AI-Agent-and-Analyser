@@ -1,6 +1,7 @@
 "use client";
 
 import axios, { AxiosRequestConfig } from "axios";
+import { authClient } from "@/lib/auth/client";
 
 export const getApiBaseUrl = (): string => {
   if (typeof window !== "undefined") {
@@ -36,13 +37,41 @@ export const notifyAuthChange = (): void => {
   }
 };
 
+let cachedJwt: string | null = null;
+let tokenExpiry = 0;
+
+export const getAuthTokenAsync = async (): Promise<string> => {
+  if (typeof window === "undefined") return "";
+
+  // Return cached JWT if still valid (refresh 1 minute before 15m expiration)
+  if (cachedJwt && Date.now() < tokenExpiry) {
+    return cachedJwt;
+  }
+
+  try {
+    const res = await (authClient as any).token?.();
+    const token = res?.data?.token || res?.token;
+    if (token) {
+      cachedJwt = token;
+      tokenExpiry = Date.now() + 14 * 60 * 1000;
+      return token;
+    }
+  } catch {
+    // Fall back to stored session tokens
+  }
+
+  return getAuthToken();
+};
+
 export const getAuthToken = (): string => {
   if (typeof window === "undefined") return "";
+  if (cachedJwt) return cachedJwt;
+
   const local = localStorage.getItem("budai_token");
   if (local) return local;
 
-  // Secondary document.cookie fallback for synchronous initial loads
-  const match = document.cookie.match(/(?:^|;\s*)budai_token=([^;]+)/);
+  // Secondary cookie fallback (better-auth.session_token or budai_token)
+  const match = document.cookie.match(/(?:^|;\s*)(?:better-auth\.session_token|budai_token)=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : "";
 };
 
@@ -51,12 +80,13 @@ export const getUserUuid = (): string | null => {
   if (!token) return null;
   try {
     const base64Url = token.split('.')[1];
+    if (!base64Url) return null;
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
     const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
     }).join(''));
     return JSON.parse(jsonPayload).sub || null;
-  } catch (e) {
+  } catch {
     return null;
   }
 };
@@ -71,13 +101,19 @@ export const clearAdviceCache = (): void => {
   }
 };
 
-export const clearSession = (): void => {
+export const clearSession = async (): Promise<void> => {
   if (typeof window !== "undefined") {
+    cachedJwt = null;
+    tokenExpiry = 0;
     localStorage.removeItem("budai_token");
     localStorage.removeItem("budai_refresh_token");
+    localStorage.removeItem("budai_user_name");
     clearAdviceCache();
-    document.cookie =
-      "budai_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax";
+    document.cookie = "budai_token=; path=/; max-age=0";
+    document.cookie = "better-auth.session_token=; path=/; max-age=0";
+    try {
+      await authClient.signOut();
+    } catch {}
     notifyAuthChange();
   }
 };
@@ -88,79 +124,45 @@ export const apiClient = axios.create({
   },
 });
 
-apiClient.interceptors.request.use((config) => {
+apiClient.interceptors.request.use(async (config) => {
   config.baseURL = getApiBaseUrl();
+  const token = await getAuthTokenAsync();
+  if (token && !config.headers.Authorization) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
-
-let isRefreshing = false;
-let failedQueue: { resolve: (value: unknown) => void; reject: (reason?: unknown) => void }[] = [];
-
-const processQueue = (error: Error | null, token: string | null = null) => {
-  failedQueue.forEach(prom => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
-};
 
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
-    if (axios.isAxiosError(error) && error.response?.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        }).then(token => {
-          originalRequest.headers['Authorization'] = 'Bearer ' + token;
-          return apiClient(originalRequest);
-        }).catch(err => {
-          return Promise.reject(err);
-        });
-      }
-      
+
+    if (
+      axios.isAxiosError(error) &&
+      error.response?.status === 401 &&
+      !originalRequest._retry
+    ) {
       originalRequest._retry = true;
-      isRefreshing = true;
-      
+      cachedJwt = null;
+      tokenExpiry = 0;
+
       try {
-        const storedRefreshToken = typeof window !== "undefined" ? localStorage.getItem("budai_refresh_token") : null;
-        const refreshResponse = await axios.post(`${getApiBaseUrl()}/api/auth/refresh`, {
-          refresh_token: storedRefreshToken
-        }, {
-          withCredentials: true
-        });
-        const newToken = refreshResponse.data.token;
-        const newRefreshToken = refreshResponse.data.refresh_token;
-        if (typeof window !== "undefined") {
-          localStorage.setItem("budai_token", newToken);
-          if (newRefreshToken) {
-            localStorage.setItem("budai_refresh_token", newRefreshToken);
-          }
-          
-          document.cookie = `budai_token=${newToken}; path=/; max-age=604800; samesite=lax`;
-          notifyAuthChange();
+        const freshToken = await getAuthTokenAsync();
+        if (freshToken) {
+          originalRequest.headers.Authorization = `Bearer ${freshToken}`;
+          return apiClient(originalRequest);
         }
-        apiClient.defaults.headers.common['Authorization'] = 'Bearer ' + newToken;
-        originalRequest.headers['Authorization'] = 'Bearer ' + newToken;
-        processQueue(null, newToken);
-        return apiClient(originalRequest);
-      } catch (refreshError) {
-        processQueue(refreshError as Error, null);
-        clearSession();
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("budai-unauthorized"));
-        }
-        return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
+      } catch {
+        // Fall through to logout
+      }
+
+      await clearSession();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("budai-unauthorized"));
       }
     }
-    
+
     return Promise.reject(error);
   },
 );
@@ -171,7 +173,6 @@ interface MockResponse {
   statusText: string;
   json: () => Promise<unknown>;
 }
-
 
 export async function apiFetch(
   path: string,
@@ -192,8 +193,7 @@ export async function apiFetch(
         } else {
           break;
         }
-      } catch (e) {
-        console.log("Error:", e);
+      } catch {
         break;
       }
     }
@@ -205,7 +205,7 @@ export async function apiFetch(
   };
 
   if (withAuth) {
-    const token = getAuthToken();
+    const token = await getAuthTokenAsync();
     if (token) {
       axiosOptions.headers.Authorization = `Bearer ${token}`;
     }
@@ -224,13 +224,13 @@ export async function apiFetch(
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
       if (error.response.status === 401) {
-        clearSession();
+        await clearSession();
         if (typeof window !== "undefined") {
           window.dispatchEvent(new Event("budai-unauthorized"));
           window.location.href = "/login";
         }
       }
-      
+
       const errorData = error.response.data || {};
       throw new Error(
         (errorData as { message?: string }).message ||

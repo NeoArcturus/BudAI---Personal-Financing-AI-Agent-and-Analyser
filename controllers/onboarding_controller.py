@@ -12,7 +12,17 @@ from prefect.exceptions import ObjectNotFound, PrefectHTTPStatusError, ObjectLim
 logger = get_core_logger(__name__)
 
 
-def complete_core_onboarding_sync(user_uuid: str, goals: list, income_pattern: list, liabilities: list, user_summary: str = "") -> str:
+def complete_core_onboarding_sync(
+    user_uuid: str,
+    goals: list,
+    income_pattern: list,
+    liabilities: list,
+    user_summary: str = "",
+    name: str = None,
+    date_of_birth: str = None,
+    employment_status: str = None,
+    country_of_tax_residence: str = None
+) -> str:
     """
     Synchronously provisions the core zero-sum primitives.
     Guarantees user.is_onboarded = True and UNALLOCATED bucket exists.
@@ -26,6 +36,18 @@ def complete_core_onboarding_sync(user_uuid: str, goals: list, income_pattern: l
         user.is_onboarded = True
         if not user.persona:
             user.persona = persona
+        if name and not user.name:
+            user.name = name
+        if employment_status:
+            user.employment_status = employment_status
+        if country_of_tax_residence:
+            user.country_of_tax_residence = country_of_tax_residence
+        if date_of_birth:
+            from datetime import datetime
+            try:
+                user.date_of_birth = datetime.strptime(date_of_birth, "%Y-%m-%d")
+            except Exception:
+                pass
 
         # Seed mandatory UNALLOCATED bucket
         default_bucket = session.query(Bucket).filter(
@@ -90,7 +112,11 @@ async def complete_onboarding(request: OnboardingFormRequest, current_user: User
             goals=request.goals,
             income_pattern=request.income_pattern,
             liabilities=request.liabilities,
-            user_summary=request.user_summary
+            user_summary=request.user_summary,
+            name=request.name,
+            date_of_birth=request.date_of_birth,
+            employment_status=request.employment_status,
+            country_of_tax_residence=request.country_of_tax_residence
         )
     except Exception as e:
         logger.error(f"Core onboarding provisioning failed: {e}", exc_info=True)

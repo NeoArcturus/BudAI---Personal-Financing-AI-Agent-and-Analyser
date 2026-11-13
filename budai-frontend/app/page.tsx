@@ -117,7 +117,7 @@ export default function LandingPage() {
             Log In
           </Link>
           <Button
-            onPress={() => router.push("/onboarding")}
+            onPress={() => router.push("/register")}
             variant="secondary" className="font-extrabold text-xs tracking-wide px-6 h-9 rounded-md transition-all "
           >
             Get Started
@@ -162,7 +162,7 @@ export default function LandingPage() {
               className="flex flex-col sm:flex-row items-center gap-6 mt-4 w-full justify-start"
             >
               <Button
-                onPress={() => router.push("/onboarding")}
+                onPress={() => router.push("/register")}
                 variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl "
               >
                 Get Started

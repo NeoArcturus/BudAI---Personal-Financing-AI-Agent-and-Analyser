@@ -28,8 +28,8 @@ if os.path.exists("/.dockerenv") and ("localhost" in DATABASE_URL or "127.0.0.1"
 
 # Neon Platform Services configuration
 NEON_BRANCH = os.getenv("NEON_BRANCH", "production")
-NEON_AUTH_BASE_URL = os.getenv("NEON_AUTH_BASE_URL")
-NEON_AUTH_JWKS_URL = os.getenv("NEON_AUTH_JWKS_URL")
+NEON_AUTH_BASE_URL = os.getenv("NEON_AUTH_BASE_URL", "https://ep-divine-tooth-b8el23eg.neonauth.c-14.us-east-1.aws.neon.tech/budai-db/auth")
+NEON_AUTH_JWKS_URL = os.getenv("NEON_AUTH_JWKS_URL", "https://ep-divine-tooth-b8el23eg.neonauth.c-14.us-east-1.aws.neon.tech/budai-db/auth/.well-known/jwks.json")
 NEON_FUNCTION_HELLO_BASE_URL = os.getenv("NEON_FUNCTION_HELLO_BASE_URL")
 
 # Neon Object Storage (S3-compatible)

@@ -133,6 +133,44 @@ def init_db(db_path=None):
                 );
             """))
 
+            # 3. Triggers for neon_auth."user" synchronization into public.users
+            try:
+                conn.execute(text("""
+                    CREATE OR REPLACE FUNCTION sync_neon_auth_user()
+                    RETURNS TRIGGER AS $$
+                    BEGIN
+                        INSERT INTO public.users (user_uuid, email, name, is_onboarded)
+                        VALUES (NEW.id::text, NEW.email, NEW.name, FALSE)
+                        ON CONFLICT (user_uuid) DO UPDATE 
+                        SET email = EXCLUDED.email,
+                            name = COALESCE(public.users.name, EXCLUDED.name);
+                        RETURN NEW;
+                    END;
+                    $$ LANGUAGE plpgsql;
+
+                    DROP TRIGGER IF EXISTS trg_sync_neon_auth_user ON neon_auth."user";
+                    CREATE TRIGGER trg_sync_neon_auth_user
+                    AFTER INSERT OR UPDATE ON neon_auth."user"
+                    FOR EACH ROW
+                    EXECUTE FUNCTION sync_neon_auth_user();
+
+                    CREATE OR REPLACE FUNCTION delete_neon_auth_user()
+                    RETURNS TRIGGER AS $$
+                    BEGIN
+                        DELETE FROM public.users WHERE user_uuid = OLD.id::text;
+                        RETURN OLD;
+                    END;
+                    $$ LANGUAGE plpgsql;
+
+                    DROP TRIGGER IF EXISTS trg_delete_neon_auth_user ON neon_auth."user";
+                    CREATE TRIGGER trg_delete_neon_auth_user
+                    AFTER DELETE ON neon_auth."user"
+                    FOR EACH ROW
+                    EXECUTE FUNCTION delete_neon_auth_user();
+                """))
+            except Exception as trigger_err:
+                logger.debug(f"Neon Auth user sync triggers skipped (neon_auth schema not present): {trigger_err}")
+
         logger.debug(json.dumps({"message": f"Database initialized successfully", "status_code": 100}))
         
         # Ensure all users have an UNALLOCATED bucket

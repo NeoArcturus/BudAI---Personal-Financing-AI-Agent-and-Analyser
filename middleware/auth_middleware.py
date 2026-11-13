@@ -46,10 +46,29 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             if user_uuid:
                 logger.debug(f"Successfully authenticated via Neon Auth for sub: {user_uuid}")
         except Exception:
-            # Fall back to local JWT verification
+            # Fall back to session table or local JWT verification
             pass
 
-    # 2. Attempt verification via local HMAC secret
+    # 2. Check neon_auth.session table (if token is an opaque session token from Better Auth)
+    if not user_uuid:
+        try:
+            from sqlalchemy import text
+            from datetime import datetime, timezone
+            session_row = db.execute(
+                text('SELECT "userId", "expiresAt" FROM neon_auth.session WHERE token = :tok'),
+                {"tok": token}
+            ).mappings().first()
+            if session_row:
+                expires_at = session_row["expiresAt"]
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+                if expires_at > datetime.now(timezone.utc):
+                    user_uuid = str(session_row["userId"])
+                    logger.debug(f"Successfully authenticated via Neon Auth session table for userId: {user_uuid}")
+        except Exception as e:
+            logger.debug(f"Session table lookup failed: {e}")
+
+    # 3. Attempt verification via local HMAC secret
     if not user_uuid:
         try:
             payload = jose_jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -69,23 +88,40 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if not user_uuid:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
-    # 3. Resolve user in Lakebase Postgres database
+    # 4. Resolve user in Lakebase Postgres database
     user = db.query(User).filter(User.user_uuid == user_uuid).first()
     if not user and email:
         user = db.query(User).filter(User.email == email).first()
 
     # If user authenticated via Neon Auth but has no profile row yet, auto-provision
-    if not user and email:
+    if not user and user_uuid:
+        user_name = None
+        try:
+            from sqlalchemy import text
+            auth_user_row = db.execute(
+                text('SELECT name, email FROM neon_auth."user" WHERE id = :uid::uuid'),
+                {"uid": user_uuid}
+            ).mappings().first()
+            if auth_user_row:
+                email = auth_user_row.get("email") or email
+                user_name = auth_user_row.get("name")
+        except Exception:
+            pass
+
         user = User(
             user_uuid=user_uuid,
-            email=email,
-            password_hash="neon_managed_auth",
-            first_name=email.split("@")[0].capitalize(),
-            last_name=""
+            email=email or f"{user_uuid}@authed.user",
+            name=user_name or (email.split("@")[0].capitalize() if email else "User"),
+            password=None,
+            is_onboarded=False
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
+        try:
+            db.commit()
+            db.refresh(user)
+        except Exception:
+            db.rollback()
+            user = db.query(User).filter(User.user_uuid == user_uuid).first()
 
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")

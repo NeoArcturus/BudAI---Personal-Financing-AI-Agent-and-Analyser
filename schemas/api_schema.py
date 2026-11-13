@@ -50,6 +50,10 @@ class OnboardingFormRequest(BaseModel):
     income_pattern: List[str]
     liabilities: List[str]
     user_summary: str
+    name: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    employment_status: Optional[str] = None
+    country_of_tax_residence: Optional[str] = None
 
 class OnboardingLLMResult(BaseModel):
     persona: str = Field(description="Must be exactly one of: STUDENT, PROFESSIONAL, BUSINESS, RETIREE, CREATIVE")

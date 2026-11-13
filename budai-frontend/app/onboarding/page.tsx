@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Button, TextArea, ProgressBar, CheckboxGroup, Checkbox, RadioGroup, Radio, InputGroup, Label, TextField, Form, toast } from "@heroui/react";
+import { Button, TextArea, CheckboxGroup, Checkbox, RadioGroup, Radio, InputGroup, Label, TextField, Form, toast } from "@heroui/react";
 import { apiFetch } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { TerminalTypewriter } from "./_components/TerminalTypewriter";
@@ -16,18 +16,12 @@ import {
   Banknote,
   TrendingUp,
   Building,
-  Building2,
   CreditCard,
   GraduationCap,
-  CheckCircle2,
+  Ban,
   Database,
   Lock,
-  LayoutDashboard,
-  Ban,
-  User,
-  Mail,
-  Eye,
-  EyeClosed
+  LayoutDashboard
 } from "lucide-react";
 
 const GOAL_OPTIONS = [
@@ -60,14 +54,9 @@ export default function OnboardingPage() {
   const [liabilities, setLiabilities] = useState<string[]>([]);
   const [userSummary, setUserSummary] = useState("");
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [dob, setDob] = useState("");
   const [employmentStatus, setEmploymentStatus] = useState("Employed");
-  const [country, setCountry] = useState("");
-  const [isVisible, setIsVisible] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [country, setCountry] = useState("United Kingdom");
 
   useEffect(() => {
     if (currentStep !== 7) return;
@@ -83,7 +72,6 @@ export default function OnboardingPage() {
 
     return () => clearInterval(interval);
   }, [currentStep, router]);
-
 
   const [processingState, setProcessingState] = useState<"idle" | "saving" | "generating" | "redirecting">("idle");
 
@@ -121,93 +109,47 @@ export default function OnboardingPage() {
     setProcessingState("saving");
 
     try {
-      // Phase 1: Register
-      const regRes = await apiFetch("/api/auth/register", {
-        method: "POST",
-        body: JSON.stringify({
-          email,
-          password,
-          name,
-          date_of_birth: dob,
-          employment_status: employmentStatus,
-          country_of_tax_residence: country
-        }),
-      });
-
-      if (!regRes.ok) {
-        const errorData = (await regRes.json()) as { detail?: string };
-        toast.danger(errorData.detail || "Registration failed.");
-        setCurrentStep(5);
-        setProcessingState("idle");
-        return;
-      }
-
-      // Phase 1b: Login
-      const loginRes = await apiFetch("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
-      const loginData = await loginRes.json() as { token?: string; refresh_token?: string };
-
-      if (!loginRes.ok || !loginData.token) {
-        toast.danger("Authentication failed after registration.");
-        setCurrentStep(5);
-        setProcessingState("idle");
-        return;
-      }
-
-      // Save token
-      const username = email.split("@")[0] || "User";
-      localStorage.removeItem(`budai_widgets_dashboard_${username}`);
-      localStorage.setItem("budai_token", loginData.token);
-      if (loginData.refresh_token) {
-        localStorage.setItem("budai_refresh_token", loginData.refresh_token);
-      }
-      localStorage.setItem("budai_user_name", username);
-      document.cookie = `budai_token=${loginData.token}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
-
-      // Phase 2: Onboarding
-      setProcessingState("generating");
-
       const payload = {
         goals,
         income_pattern: incomePattern,
         liabilities,
-        user_summary: userSummary
+        user_summary: userSummary,
+        date_of_birth: dob,
+        employment_status: employmentStatus,
+        country_of_tax_residence: country,
       };
+
+      setProcessingState("generating");
 
       const onbRes = await apiFetch("/api/onboarding/complete", {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${loginData.token}`
-        },
         body: JSON.stringify(payload),
-      });
+      }, true);
 
       if (!onbRes.ok) {
         const errorData = await onbRes.json();
-        toast.danger((errorData as any).detail || "Profile generation failed.");
+        toast.danger((errorData as any)?.detail || "Profile generation failed.");
         setCurrentStep(5);
         setProcessingState("idle");
         return;
       }
 
-      // Fetch TrueLayer URL and redirect instantly
+      setProcessingState("redirecting");
+
+      // Fetch TrueLayer URL and redirect
       const res = await apiFetch("/api/auth/truelayer/status", {}, true);
       if (res.ok) {
         const data = await res.json() as any;
         if (data.auth_url) {
           window.location.href = data.auth_url;
-        } else {
-          router.push("/home"); // fallback
+          return;
         }
-      } else {
-        router.push("/home"); // fallback
       }
 
+      router.push("/home");
     } catch (error) {
-      console.error(error);
-      toast.danger("Unable to connect to servers.");
+      console.error("Onboarding submission error:", error);
+      toast.danger("Unable to save profile. Please try again.");
       setCurrentStep(5);
       setProcessingState("idle");
     }
@@ -228,7 +170,6 @@ export default function OnboardingPage() {
   const iconActiveClass = "group-data-[selected=true]:bg-primary group-data-[selected=true]:text-black group-data-[selected=true]:shadow-[0_0_10px_rgba(0,242,255,0.4)]";
 
   const labelBaseClass = "text-sm font-bold tracking-tight transition-colors duration-400 text-foreground";
-  const labelActiveClass = "group-data-[selected=true]:text-primary";
 
   return (
     <div className="flex flex-col h-screen w-full bg-black text-foreground font-sans overflow-hidden items-center justify-center relative">
@@ -236,7 +177,6 @@ export default function OnboardingPage() {
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[150px] pointer-events-none" />
 
       <div className="w-full max-w-2xl px-6 relative z-10">
-
         <div className="backdrop-blur-3xl bg-[#0a0a0a]/60 border border-white/10 rounded-[2rem] p-10 shadow-[0_0_40px_rgba(0,0,0,0.5),inset_0_0_20px_rgba(255,255,255,0.02)] relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent opacity-50 pointer-events-none" />
 
@@ -278,31 +218,36 @@ export default function OnboardingPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: isTypingComplete ? 1 : 0, y: isTypingComplete ? 0 : 10, pointerEvents: isTypingComplete ? 'auto' : 'none' }}
                       transition={{ duration: 0.5 }}
-                      className="flex flex-col gap-4"
+                      className="flex flex-col gap-6"
                     >
-                      <CheckboxGroup name="goals" value={goals} onChange={setGoals} className="w-full">
-                        <div className="flex flex-col gap-3">
+                      <CheckboxGroup
+                        value={goals}
+                        onChange={(val) => setGoals(val as string[])}
+                        className="w-full"
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
                           {GOAL_OPTIONS.map((opt) => (
-                            <Checkbox key={opt.id} value={opt.id} variant="secondary">
-                              <Checkbox.Content className={`${contentBaseClass} ${contentInactiveClass} ${contentActiveClass}`}>
-                                <Checkbox.Control className="absolute right-4 top-1/2 -translate-y-1/2 size-5 rounded-full before:rounded-full">
-                                  <Checkbox.Indicator />
-                                </Checkbox.Control>
+                            <Checkbox
+                              key={opt.id}
+                              value={opt.id}
+                              className={`${contentBaseClass} ${contentInactiveClass} ${contentActiveClass}`}
+                            >
+                              <div className="flex items-center gap-3 w-full">
                                 <div className={`${iconBaseClass} ${iconInactiveClass} ${iconActiveClass}`}>
                                   <opt.icon size={20} />
                                 </div>
-                                <div className="flex flex-col gap-1 flex-1 pr-8">
-                                  <span className={`${labelBaseClass} ${labelActiveClass}`}>{opt.label}</span>
-                                  <span className="text-xs text-muted-foreground/80 font-medium leading-relaxed">{opt.desc}</span>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className={labelBaseClass}>{opt.label}</span>
+                                  <span className="text-xs text-muted-foreground">{opt.desc}</span>
                                 </div>
-                              </Checkbox.Content>
+                              </div>
                             </Checkbox>
                           ))}
                         </div>
                       </CheckboxGroup>
 
                       <div className="flex justify-end mt-4">
-                        <Button onPress={nextStep} isDisabled={goals.length === 0} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
+                        <Button onPress={nextStep} isDisabled={goals.length === 0} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap">
                           <span>CONTINUE</span>
                           <ArrowRight size={16} />
                         </Button>
@@ -317,7 +262,7 @@ export default function OnboardingPage() {
                   <div>
                     <h1 className="text-3xl font-bold tracking-tight mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">Income Structure</h1>
                     <TerminalTypewriter
-                      text="Define the predictability of your primary cash inflows."
+                      text="Describe your recurring cash inflow dynamics."
                       onComplete={() => setIsTypingComplete(true)}
                       className="text-muted-foreground/70 text-sm h-6"
                     />
@@ -328,42 +273,40 @@ export default function OnboardingPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: isTypingComplete ? 1 : 0, y: isTypingComplete ? 0 : 10, pointerEvents: isTypingComplete ? 'auto' : 'none' }}
                       transition={{ duration: 0.5 }}
-                      className="flex flex-col gap-4"
+                      className="flex flex-col gap-6"
                     >
-                      <CheckboxGroup
-                        name="income"
-                        value={incomePattern}
-                        onChange={(vals) => setIncomePattern(vals.length > 0 ? [vals[vals.length - 1]] : [])}
-                        className="w-full flex flex-col gap-3"
+                      <RadioGroup
+                        value={incomePattern[0] || ""}
+                        onChange={(val) => setIncomePattern([val])}
+                        className="w-full"
                       >
-                        {INCOME_OPTIONS.map((opt) => {
-                          const isSelected = incomePattern.includes(opt.id);
-
-                          return (
-                            <Checkbox key={opt.id} value={opt.id} variant="secondary">
-                              <Checkbox.Content className={`${contentBaseClass} ${contentInactiveClass} ${contentActiveClass}`}>
-                                <Checkbox.Control className="absolute right-4 top-1/2 -translate-y-1/2 size-5 rounded-full before:rounded-full">
-                                  <Checkbox.Indicator />
-                                </Checkbox.Control>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
+                          {INCOME_OPTIONS.map((opt) => (
+                            <Radio
+                              key={opt.id}
+                              value={opt.id}
+                              className={`${contentBaseClass} ${contentInactiveClass} ${contentActiveClass}`}
+                            >
+                              <div className="flex items-center gap-3 w-full">
                                 <div className={`${iconBaseClass} ${iconInactiveClass} ${iconActiveClass}`}>
                                   <opt.icon size={20} />
                                 </div>
-                                <div className="flex flex-col gap-1 flex-1 pr-8">
-                                  <span className={`${labelBaseClass} ${labelActiveClass}`}>{opt.label}</span>
-                                  <span className="text-xs text-muted-foreground/80 font-medium leading-relaxed">{opt.desc}</span>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className={labelBaseClass}>{opt.label}</span>
+                                  <span className="text-xs text-muted-foreground">{opt.desc}</span>
                                 </div>
-                              </Checkbox.Content>
-                            </Checkbox>
-                          );
-                        })}
-                      </CheckboxGroup>
+                              </div>
+                            </Radio>
+                          ))}
+                        </div>
+                      </RadioGroup>
 
                       <div className="flex justify-between mt-4">
                         <Button onPress={prevStep} variant="outline" className="border-white/10 text-foreground/60 px-12 h-14 text-[10px] font-mono font-bold uppercase tracking-[0.2em] rounded-xl bg-white/5 backdrop-blur-xl hover:bg-white/10 hover:text-foreground transition-all flex items-center justify-center gap-2 whitespace-nowrap">
                           <ArrowLeft size={16} />
                           <span>BACK</span>
                         </Button>
-                        <Button onPress={nextStep} isDisabled={incomePattern.length === 0} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
+                        <Button onPress={nextStep} isDisabled={incomePattern.length === 0} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap">
                           <span>CONTINUE</span>
                           <ArrowRight size={16} />
                         </Button>
@@ -376,9 +319,9 @@ export default function OnboardingPage() {
               {currentStep === 3 && (
                 <motion.div key="step3" variants={deckVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-8 min-h-[300px]">
                   <div>
-                    <h1 className="text-3xl font-bold tracking-tight mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">Current Liabilities</h1>
+                    <h1 className="text-3xl font-bold tracking-tight mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">Existing Liabilities</h1>
                     <TerminalTypewriter
-                      text="Identify active debt obligations requiring management. (Optional)"
+                      text="Flag any structural debt or loan commitments."
                       onComplete={() => setIsTypingComplete(true)}
                       className="text-muted-foreground/70 text-sm h-6"
                     />
@@ -389,24 +332,29 @@ export default function OnboardingPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: isTypingComplete ? 1 : 0, y: isTypingComplete ? 0 : 10, pointerEvents: isTypingComplete ? 'auto' : 'none' }}
                       transition={{ duration: 0.5 }}
-                      className="flex flex-col gap-4"
+                      className="flex flex-col gap-6"
                     >
-                      <CheckboxGroup name="liabilities" value={liabilities} onChange={setLiabilities} className="w-full">
-                        <div className="flex flex-col gap-3">
+                      <CheckboxGroup
+                        value={liabilities}
+                        onChange={(val) => setLiabilities(val as string[])}
+                        className="w-full"
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full">
                           {LIABILITY_OPTIONS.map((opt) => (
-                            <Checkbox key={opt.id} value={opt.id} variant="secondary">
-                              <Checkbox.Content className={`${contentBaseClass} ${contentInactiveClass} ${contentActiveClass}`}>
-                                <Checkbox.Control className="absolute right-4 top-1/2 -translate-y-1/2 size-5 rounded-full before:rounded-full">
-                                  <Checkbox.Indicator />
-                                </Checkbox.Control>
+                            <Checkbox
+                              key={opt.id}
+                              value={opt.id}
+                              className={`${contentBaseClass} ${contentInactiveClass} ${contentActiveClass}`}
+                            >
+                              <div className="flex flex-col items-center text-center gap-3 w-full p-2">
                                 <div className={`${iconBaseClass} ${iconInactiveClass} ${iconActiveClass}`}>
                                   <opt.icon size={20} />
                                 </div>
-                                <div className="flex flex-col gap-1 flex-1 pr-8">
-                                  <span className={`${labelBaseClass} ${labelActiveClass}`}>{opt.label}</span>
-                                  <span className="text-xs text-muted-foreground/80 font-medium leading-relaxed">{opt.desc}</span>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className={labelBaseClass}>{opt.label}</span>
+                                  <span className="text-xs text-muted-foreground">{opt.desc}</span>
                                 </div>
-                              </Checkbox.Content>
+                              </div>
                             </Checkbox>
                           ))}
                         </div>
@@ -417,7 +365,7 @@ export default function OnboardingPage() {
                           <ArrowLeft size={16} />
                           <span>BACK</span>
                         </Button>
-                        <Button onPress={nextStep} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
+                        <Button onPress={nextStep} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap">
                           <span>CONTINUE</span>
                           <ArrowRight size={16} />
                         </Button>
@@ -464,7 +412,7 @@ export default function OnboardingPage() {
                           <ArrowLeft size={16} />
                           <span>BACK</span>
                         </Button>
-                        <Button onPress={nextStep} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
+                        <Button onPress={nextStep} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap">
                           <span>CONTINUE</span>
                         </Button>
                       </div>
@@ -473,13 +421,12 @@ export default function OnboardingPage() {
                 </motion.div>
               )}
 
-
               {currentStep === 5 && (
                 <motion.div key="step5" variants={deckVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-8 min-h-[300px]">
                   <div>
-                    <h1 className="text-3xl font-bold tracking-tight mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">Finalize Profile</h1>
+                    <h1 className="text-3xl font-bold tracking-tight mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">Profile Details</h1>
                     <TerminalTypewriter
-                      text="Secure your configuration and initialize your workspace."
+                      text="Provide tax residence and profile details before connecting your bank."
                       onComplete={() => setIsTypingComplete(true)}
                       className="text-muted-foreground/70 text-sm h-6"
                     />
@@ -493,50 +440,35 @@ export default function OnboardingPage() {
                       className="flex flex-col gap-4"
                     >
                       <Form validationBehavior="native" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="flex flex-col gap-4 w-full">
-                        <div className="grid grid-cols-2 gap-4">
-                          <TextField className="w-full" name="Name" isRequired>
-                            <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">Full Name</Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <TextField className="w-full" name="Country" isRequired>
+                            <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">Country of Tax Residence</Label>
                             <InputGroup className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary focus-within:shadow-[0_0_15px_rgba(0,242,255,0.2)] focus-within:bg-white/10 transition-all w-full border border-white/10 h-14" variant="secondary">
                               <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
-                                <User size={18} />
+                                <Building size={18} />
                               </InputGroup.Prefix>
-                              <InputGroup.Input placeholder="John Doe" className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-5 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none" value={name} onChange={(e) => setName(e.target.value)} required />
+                              <InputGroup.Input placeholder="United Kingdom" className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-5 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none" value={country} onChange={(e) => setCountry(e.target.value)} required />
                             </InputGroup>
                           </TextField>
 
-                          <TextField className="w-full" name="Country" isRequired>
-                            <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">Country</Label>
+                          <TextField className="w-full" name="DOB" isRequired>
+                            <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">Date of Birth</Label>
                             <InputGroup className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary focus-within:shadow-[0_0_15px_rgba(0,242,255,0.2)] focus-within:bg-white/10 transition-all w-full border border-white/10 h-14" variant="secondary">
                               <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
                                 <Activity size={18} />
                               </InputGroup.Prefix>
-                              <InputGroup.Input placeholder="Country of Tax Residence" className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-5 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none" value={country} onChange={(e) => setCountry(e.target.value)} required />
+                              <InputGroup.Input type="date" className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-5 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none" value={dob} onChange={(e) => setDob(e.target.value)} required />
                             </InputGroup>
                           </TextField>
                         </div>
 
-                        <TextField className="w-full" name="Email" isRequired>
-                          <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">Email Address</Label>
+                        <TextField className="w-full" name="EmploymentStatus" isRequired>
+                          <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">Employment Status</Label>
                           <InputGroup className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary focus-within:shadow-[0_0_15px_rgba(0,242,255,0.2)] focus-within:bg-white/10 transition-all w-full border border-white/10 h-14" variant="secondary">
                             <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
-                              <Mail size={18} />
+                              <Briefcase size={18} />
                             </InputGroup.Prefix>
-                            <InputGroup.Input type="email" placeholder="name@email.com" className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-5 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                          </InputGroup>
-                        </TextField>
-
-                        <TextField className="w-full" name="Password" isRequired>
-                          <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">Password</Label>
-                          <InputGroup className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary focus-within:shadow-[0_0_15px_rgba(0,242,255,0.2)] focus-within:bg-white/10 transition-all w-full border border-white/10 h-14" variant="secondary">
-                            <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
-                              <Lock size={18} />
-                            </InputGroup.Prefix>
-                            <InputGroup.Input type={isVisible ? "text" : "password"} placeholder="••••••••" className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-2 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                            <InputGroup.Suffix className="pr-5 z-10 pointer-events-auto flex items-center shrink-0">
-                              <Button isIconOnly type="button" variant="ghost" onPress={() => setIsVisible(!isVisible)} size="sm" className="bg-transparent border-none text-muted-foreground hover:text-white flex items-center justify-center">
-                                {isVisible ? <Eye size={18} /> : <EyeClosed size={18} />}
-                              </Button>
-                            </InputGroup.Suffix>
+                            <InputGroup.Input placeholder="Employed / Self-Employed / Freelance" className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-5 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none" value={employmentStatus} onChange={(e) => setEmploymentStatus(e.target.value)} required />
                           </InputGroup>
                         </TextField>
 
@@ -545,12 +477,33 @@ export default function OnboardingPage() {
                             <ArrowLeft size={16} />
                             <span>BACK</span>
                           </Button>
-                          <Button type="submit" isPending={processingState !== "idle"} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl  flex items-center justify-center gap-2 whitespace-nowrap">
-                            <span>CONNECT YOUR BANK ACCOUNT</span>
+                          <Button type="submit" isPending={processingState !== "idle"} variant="secondary" className="font-mono font-black tracking-[0.2em] text-[10px] uppercase px-12 h-14 rounded-xl flex items-center justify-center gap-2 whitespace-nowrap">
+                            <span>CONNECT BANK ACCOUNT</span>
                           </Button>
                         </div>
                       </Form>
                     </motion.div>
+                  </div>
+                </motion.div>
+              )}
+
+              {currentStep === 6 && (
+                <motion.div key="step6" variants={deckVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} className="flex flex-col gap-8 min-h-[300px] items-center justify-center text-center">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="relative">
+                      <div className="w-16 h-16 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Database size={24} className="text-primary animate-pulse" />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <h2 className="text-xl font-bold tracking-tight">Initializing Financial Workspace</h2>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {processingState === "saving" && "Recording parameters..."}
+                        {processingState === "generating" && "Configuring risk corridors..."}
+                        {processingState === "redirecting" && "Connecting Open Banking gateway..."}
+                      </p>
+                    </div>
                   </div>
                 </motion.div>
               )}
