@@ -70,8 +70,8 @@ export const getAuthToken = (): string => {
   const local = localStorage.getItem("budai_token");
   if (local) return local;
 
-  // Secondary cookie fallback (better-auth.session_token or budai_token)
-  const match = document.cookie.match(/(?:^|;\s*)(?:better-auth\.session_token|budai_token)=([^;]+)/);
+  // Secondary cookie fallback (__Secure-neon-auth.session_token, better-auth.session_token, or budai_token)
+  const match = document.cookie.match(/(?:^|;\s*)(?:__Secure-neon-auth\.session_token|better-auth\.session_token|budai_token)=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : "";
 };
 
@@ -111,6 +111,7 @@ export const clearSession = async (): Promise<void> => {
     clearAdviceCache();
     document.cookie = "budai_token=; path=/; max-age=0";
     document.cookie = "better-auth.session_token=; path=/; max-age=0";
+    document.cookie = "__Secure-neon-auth.session_token=; path=/; max-age=0";
     try {
       await authClient.signOut();
     } catch {}

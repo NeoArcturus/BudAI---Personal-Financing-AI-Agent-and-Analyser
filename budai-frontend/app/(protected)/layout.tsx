@@ -25,6 +25,7 @@ export default async function ProtectedLayout({
   const cookieStore = await cookies();
   const token =
     (session as any)?.session?.token ||
+    cookieStore.get("__Secure-neon-auth.session_token")?.value ||
     cookieStore.get("better-auth.session_token")?.value ||
     cookieStore.get("budai_token")?.value ||
     cookieStore.get("access_token")?.value;

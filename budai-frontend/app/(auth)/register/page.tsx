@@ -89,7 +89,7 @@ export default function RegisterPage() {
       localStorage.setItem("budai_user_name", name || email.split("@")[0] || "User");
       notifyAuthChange();
       toast.success("Email verified.");
-      router.push("/onboarding");
+      window.location.href = "/onboarding";
     } catch (err: any) {
       console.error("Verification error:", err);
       toast.danger(err?.message || "Verification failed. Please try again.");

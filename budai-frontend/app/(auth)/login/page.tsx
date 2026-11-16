@@ -63,7 +63,7 @@ export default function LoginPage() {
       const userName = (data as any)?.user?.name || email.split("@")[0] || "User";
       localStorage.setItem("budai_user_name", userName);
       notifyAuthChange();
-      router.push("/home");
+      window.location.href = "/home";
     } catch (err: any) {
       console.error("Login error:", err);
       toast.danger(err?.message || "Unable to connect. Please try again.");
@@ -94,7 +94,7 @@ export default function LoginPage() {
       const userName = (data as any)?.user?.name || email.split("@")[0] || "User";
       localStorage.setItem("budai_user_name", userName);
       notifyAuthChange();
-      router.push("/home");
+      window.location.href = "/home";
     } catch (err: any) {
       console.error("Verification error:", err);
       toast.danger(err?.message || "Verification failed.");

@@ -17,7 +17,6 @@ class User(SQLModel, table=True):
     user_uuid: str = Field(primary_key=True, index=True)
     name: Optional[str] = None
     email: str = Field(default="", index=True, unique=True)
-    password: Optional[str] = None
     date_of_birth: Optional[datetime] = None
     employment_status: Optional[str] = None
     country_of_tax_residence: Optional[str] = Field(default="UK")

@@ -2,12 +2,21 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function proxy(request: NextRequest) {
-  const token = request.cookies.get('budai_token')?.value;
+  const token =
+    request.cookies.get('__Secure-neon-auth.session_token')?.value ||
+    request.cookies.get('better-auth.session_token')?.value ||
+    request.cookies.get('budai_token')?.value;
   const path = request.nextUrl.pathname;
 
-  const isPublicPath = path === '/' || path === '/login' || path === '/register' || path === '/onboarding';
+  const isPublicPath =
+    path === '/' ||
+    path === '/login' ||
+    path === '/register' ||
+    path === '/onboarding' ||
+    path === '/reset-password' ||
+    path === '/callback';
 
-  if (isPublicPath && token) {
+  if ((path === '/login' || path === '/register') && token) {
     return NextResponse.redirect(new URL('/home', request.url));
   }
 

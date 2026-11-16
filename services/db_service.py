@@ -71,6 +71,7 @@ def init_db(db_path=None):
         from sqlalchemy import text
         with direct_engine.begin() as conn:
             # Column migrations
+            conn.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS password;"))
             conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_category VARCHAR;"))
             conn.execute(text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_semantic_anomaly BOOLEAN DEFAULT FALSE;"))
             conn.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cluster_signature_hash VARCHAR UNIQUE;"))
