@@ -21,18 +21,18 @@ class TransactionToolOutput(BaseModel):
 
 def test_rag_embedding_strict_type_and_dimensionality():
     """
-    Enforces that the embedding generation service strictly returns a 768-dimensional 
+    Enforces that the embedding generation service strictly returns a 384-dimensional 
     floating point array. A failure here prevents database insertion panics.
     """
-    # Mocking the local LLM embedding response (e.g., nomic-embed-text)
+    # Mocking the local LLM embedding response (e.g., bge-small-en-v1.5)
     mock_embedding_api = Mock()
-    mock_embedding_api.generate.return_value = [0.015] * 768  # 768-dimension vector
+    mock_embedding_api.generate.return_value = [0.015] * 384  # 384-dimension vector
     
     result = mock_embedding_api.generate("TESCO STORES LTD")
     
     assert isinstance(result, list), "RAG output must be a List"
     assert all(isinstance(x, float) for x in result), "RAG vector elements must be strictly Float"
-    assert len(result) == 768, f"Expected vector dimension 768, got {len(result)}"
+    assert len(result) == 384, f"Expected vector dimension 384, got {len(result)}"
 
 # =====================================================================
 # SUITE 2: TOOL DATA FORMAT EXHAUSTIVE PARAMETRIZATION

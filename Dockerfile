@@ -38,7 +38,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Pre-download FastEmbed quantized model into container layer to avoid runtime memory spikes in tmpfs
 RUN mkdir -p /app/model_cache && \
-    python -c "from fastembed import TextEmbedding; m = TextEmbedding(model_name='nomic-ai/nomic-embed-text-v1.5-Q', cache_dir='/app/model_cache', threads=1); list(m.embed(['warmup']))"
+    python -c "from fastembed import TextEmbedding; m = TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir='/app/model_cache', threads=1); list(m.embed(['warmup']))"
 
 # Pre-copy and compile C++ Forecaster Engine for build-layer caching
 COPY agents/core_financial/Forecaster_Agent/mathematics/algorithm /app/agents/core_financial/Forecaster_Agent/mathematics/algorithm

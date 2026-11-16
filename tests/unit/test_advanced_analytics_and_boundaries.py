@@ -3,13 +3,13 @@ from datetime import datetime, timezone
 import math
 
 # 1-4: Database & Schema Boundaries
-@pytest.mark.parametrize("vector_len, expected_error", [(768, None), (384, ValueError), (1536, ValueError)])
-def test_1_nomic_dimensionality_enforcement(vector_len, expected_error):
+@pytest.mark.parametrize("vector_len, expected_error", [(384, None), (768, ValueError), (1536, ValueError)])
+def test_1_bge_dimensionality_enforcement(vector_len, expected_error):
     if expected_error:
         with pytest.raises(expected_error):
-            if vector_len != 768: raise ValueError("Invalid dim")
+            if vector_len != 384: raise ValueError("Invalid dim")
     else:
-        assert vector_len == 768
+        assert vector_len == 384
 
 def test_2_ledger_precision_drift():
     # Simulate DB Numeric(10,4)

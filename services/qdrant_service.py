@@ -68,8 +68,14 @@ class QdrantService:
 
             existing = [c.name for c in self.client.get_collections().collections]
             if collection_name in existing:
-                logger.info(f"Collection {collection_name} already exists.")
-                return True
+                col_info = self.client.get_collection(collection_name)
+                current_size = getattr(getattr(col_info.config.params, "vectors", None), "size", None)
+                if current_size == vector_size:
+                    logger.info(f"Collection {collection_name} already exists with vector size {vector_size}.")
+                    return True
+                elif current_size is not None:
+                    logger.warning(f"Collection {collection_name} dimension mismatch (existing={current_size}, target={vector_size}). Recreating collection.")
+                    self.client.delete_collection(collection_name)
 
             quantization_config = None
             if enable_quantization:

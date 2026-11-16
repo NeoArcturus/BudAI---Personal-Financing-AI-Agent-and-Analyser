@@ -98,7 +98,7 @@ class AnchorService:
             for tx in transactions
         ]
 
-        # Step 2: Batch compute 768-dim embeddings in-process
+        # Step 2: Batch compute 384-dim embeddings in-process
         vectors = self.embedding_service.embed_documents(descriptions)
 
         # Step 3: Cluster incoming transactions in-memory first to minimize WAN latency

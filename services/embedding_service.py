@@ -6,8 +6,9 @@ from services.logger_setup import get_core_logger
 logger = get_core_logger(__name__)
 
 class EmbeddingService:
-    def __init__(self, model_name: str = "nomic-ai/nomic-embed-text-v1.5-Q"):
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5"):
         self.model_name = model_name
+        self.dimension = 384
         self.threads = int(os.getenv("FASTEMBED_THREADS", "1"))
         self.cache_dir = os.getenv("FASTEMBED_CACHE_PATH", "/app/model_cache")
         self._model = None
@@ -31,20 +32,20 @@ class EmbeddingService:
 
     def embed_query(self, text: str) -> List[float]:
         """
-        Generates a 768-dimensional float embedding for a single text query.
+        Generates a 384-dimensional float embedding for a single text query.
         """
         if not text or not text.strip():
-            return [0.0] * 768
+            return [0.0] * self.dimension
         try:
             embeddings = list(self.model.embed([text], batch_size=1, parallel=0))
             return embeddings[0].tolist()
         except Exception as e:
             logger.error(f"Error generating embedding for query: {e}")
-            return [0.0] * 768
+            return [0.0] * self.dimension
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """
-        Generates 768-dimensional float embeddings for a batch of text documents.
+        Generates 384-dimensional float embeddings for a batch of text documents.
         Enforces small mini-batches and single-thread execution to strictly bound memory.
         """
         if not texts:
@@ -59,7 +60,7 @@ class EmbeddingService:
             return results
         except Exception as e:
             logger.error(f"Error generating embeddings for batch: {e}")
-            return [[0.0] * 768 for _ in texts]
+            return [[0.0] * self.dimension for _ in texts]
 
 _embedding_instance = None
 
