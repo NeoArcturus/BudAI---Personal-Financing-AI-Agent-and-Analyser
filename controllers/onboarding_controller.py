@@ -43,9 +43,9 @@ def complete_core_onboarding_sync(
         if country_of_tax_residence:
             user.country_of_tax_residence = country_of_tax_residence
         if date_of_birth:
-            from datetime import datetime
+            from datetime import datetime, timezone
             try:
-                user.date_of_birth = datetime.strptime(date_of_birth, "%Y-%m-%d")
+                user.date_of_birth = datetime.strptime(date_of_birth, "%Y-%m-%d").replace(tzinfo=timezone.utc)
             except Exception:
                 pass
 

@@ -50,11 +50,11 @@ class UserService:
                 raise ValueError("Email already registered.")
             new_uuid = str(uuid.uuid4())
             
-            from datetime import datetime
+            from datetime import datetime, timezone
             dob = None
             if date_of_birth:
                 try:
-                    dob = datetime.strptime(date_of_birth, "%Y-%m-%d")
+                    dob = datetime.strptime(date_of_birth, "%Y-%m-%d").replace(tzinfo=timezone.utc)
                 except ValueError:
                     pass
             
