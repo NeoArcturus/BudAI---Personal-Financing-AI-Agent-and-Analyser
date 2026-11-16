@@ -136,8 +136,12 @@ def init_db(db_path=None):
             # 3. Triggers for neon_auth."user" synchronization into public.users
             try:
                 conn.execute(text("""
-                    CREATE OR REPLACE FUNCTION sync_neon_auth_user()
-                    RETURNS TRIGGER AS $$
+                    CREATE OR REPLACE FUNCTION public.sync_neon_auth_user()
+                    RETURNS TRIGGER 
+                    LANGUAGE plpgsql
+                    SECURITY DEFINER
+                    SET search_path = public
+                    AS $$
                     BEGIN
                         INSERT INTO public.users (user_uuid, email, name, is_onboarded)
                         VALUES (NEW.id::text, NEW.email, NEW.name, FALSE)
@@ -146,27 +150,34 @@ def init_db(db_path=None):
                             name = COALESCE(public.users.name, EXCLUDED.name);
                         RETURN NEW;
                     END;
-                    $$ LANGUAGE plpgsql;
+                    $$;
 
                     DROP TRIGGER IF EXISTS trg_sync_neon_auth_user ON neon_auth."user";
                     CREATE TRIGGER trg_sync_neon_auth_user
                     AFTER INSERT OR UPDATE ON neon_auth."user"
                     FOR EACH ROW
-                    EXECUTE FUNCTION sync_neon_auth_user();
+                    EXECUTE FUNCTION public.sync_neon_auth_user();
 
-                    CREATE OR REPLACE FUNCTION delete_neon_auth_user()
-                    RETURNS TRIGGER AS $$
+                    CREATE OR REPLACE FUNCTION public.delete_neon_auth_user()
+                    RETURNS TRIGGER 
+                    LANGUAGE plpgsql
+                    SECURITY DEFINER
+                    SET search_path = public
+                    AS $$
                     BEGIN
                         DELETE FROM public.users WHERE user_uuid = OLD.id::text;
                         RETURN OLD;
                     END;
-                    $$ LANGUAGE plpgsql;
+                    $$;
 
                     DROP TRIGGER IF EXISTS trg_delete_neon_auth_user ON neon_auth."user";
                     CREATE TRIGGER trg_delete_neon_auth_user
                     AFTER DELETE ON neon_auth."user"
                     FOR EACH ROW
-                    EXECUTE FUNCTION delete_neon_auth_user();
+                    EXECUTE FUNCTION public.delete_neon_auth_user();
+
+                    GRANT USAGE ON SCHEMA public TO neon_auth;
+                    GRANT SELECT, INSERT, UPDATE, DELETE ON public.users TO neon_auth;
                 """))
             except Exception as trigger_err:
                 logger.debug(f"Neon Auth user sync triggers skipped (neon_auth schema not present): {trigger_err}")
