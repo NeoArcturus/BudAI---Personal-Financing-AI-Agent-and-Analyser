@@ -26,13 +26,17 @@ async def get_optional_current_user(credentials: Optional[HTTPAuthorizationCrede
 
 jwk_client = PyJWKClient(NEON_AUTH_JWKS_URL) if NEON_AUTH_JWKS_URL else None
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
-    token = credentials.credentials
+def resolve_token_user_info(token: str, db: Session) -> tuple[str, Optional[str]]:
+    """
+    Resolves token claims using Neon Auth JWKS (EdDSA/RS256/ES256),
+    neon_auth.session database table (opaque session tokens), or local secret.
+    Returns (user_uuid, email).
+    """
     user_uuid = None
     email = None
 
-    # 1. Attempt verification via Neon Auth Managed Better Auth JWKS if configured
-    if jwk_client:
+    # 1. Attempt verification via Neon Auth JWKS if the token appears to be a JWT
+    if jwk_client and "." in token:
         try:
             signing_key = jwk_client.get_signing_key_from_jwt(token)
             payload = pyjwt.decode(
@@ -45,50 +49,58 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             email = payload.get("email")
             if user_uuid:
                 logger.debug(f"Successfully authenticated via Neon Auth for sub: {user_uuid}")
-        except Exception:
-            # Fall back to session table or local JWT verification
-            pass
-
-    # 2. Check neon_auth.session table (if token is an opaque session token from Better Auth)
-    if not user_uuid:
-        try:
-            from sqlalchemy import text
-            from datetime import datetime, timezone
-            session_row = db.execute(
-                text('SELECT "userId", "expiresAt" FROM neon_auth.session WHERE token = :tok'),
-                {"tok": token}
-            ).mappings().first()
-            if session_row:
-                expires_at = session_row["expiresAt"]
-                if expires_at.tzinfo is None:
-                    expires_at = expires_at.replace(tzinfo=timezone.utc)
-                if expires_at > datetime.now(timezone.utc):
-                    user_uuid = str(session_row["userId"])
-                    logger.debug(f"Successfully authenticated via Neon Auth session table for userId: {user_uuid}")
+                return user_uuid, email
+        except pyjwt.ExpiredSignatureError:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
         except Exception as e:
-            logger.debug(f"Session table lookup failed: {e}")
+            logger.debug(f"Neon Auth JWKS decode failed, falling back: {e}")
 
-    # 3. Attempt verification via local HMAC secret
-    if not user_uuid:
+    # 2. Check neon_auth.session table (opaque session token from Better Auth)
+    try:
+        from sqlalchemy import text
+        from datetime import datetime, timezone
+        session_row = db.execute(
+            text('SELECT "userId", "expiresAt" FROM neon_auth.session WHERE token = :tok'),
+            {"tok": token}
+        ).mappings().first()
+        if session_row:
+            expires_at = session_row["expiresAt"]
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at <= datetime.now(timezone.utc):
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+            user_uuid = str(session_row["userId"])
+            logger.debug(f"Successfully authenticated via Neon Auth session table for userId: {user_uuid}")
+            return user_uuid, None
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.debug(f"Session table lookup failed: {e}")
+
+    # 3. Attempt verification via local HMAC secret (legacy JWT fallback)
+    if "." in token:
         try:
             payload = jose_jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             user_uuid = payload.get("sub")
             email = payload.get("email")
+            if user_uuid:
+                return user_uuid, email
         except JoseExpiredError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token expired"
             )
         except JoseJWTError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token"
-            )
+            pass
 
-    if not user_uuid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    # 4. Resolve user in Lakebase Postgres database
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    token = credentials.credentials
+    user_uuid, email = resolve_token_user_info(token, db)
+
+    # Resolve user in Lakebase Postgres database
     user = db.query(User).filter(User.user_uuid == user_uuid).first()
     if not user and email:
         user = db.query(User).filter(User.email == email).first()
@@ -112,7 +124,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             user_uuid=user_uuid,
             email=email or f"{user_uuid}@authed.user",
             name=user_name or (email.split("@")[0].capitalize() if email else "User"),
-            password=None,
             is_onboarded=False
         )
         db.add(user)

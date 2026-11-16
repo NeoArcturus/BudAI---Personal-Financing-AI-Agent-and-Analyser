@@ -68,7 +68,7 @@ A unified dashboard endpoint provides a complete synthesized snapshot in a singl
 
 ### Machine Learning and High-Performance Compute
 - **Custom C++ Simulation Core:** C++17 shared engine running parallel Monte Carlo simulation paths for forward-looking balance projections.
-- **PyTorch:** Neural networks estimating time-series parameters and cashflow dynamics.
+- **FastEmbed & ONNX Runtime:** In-process quantized semantic embeddings with single-threaded bounds for memory efficiency.
 - **NumPy & Pandas:** Vectorized tabular data transformations and statistical aggregation.
 
 ### Orchestration, Security and Telemetry

@@ -3,139 +3,18 @@ from fastapi import HTTPException, Response, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
-from jose import jwt, JWTError
 from models.database_models import User, Bank
 from models.status_codes import OpenBankingStatus
 from config import (
-    SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES,
     FRONTEND_URL, SessionLocal,
     TRUELAYER_CLIENT_ID, TRUELAYER_CLIENT_SECRET, TRUELAYER_REDIRECT_URI
 )
-from schemas.api_schema import LoginRequest, RegisterRequest
-from services.user_service import UserService
 from services.api_integrator.access_token_generator import AccessTokenGenerator
 from services.logger_setup import get_core_logger
 import httpx
 import dateutil.parser
 
 logger = get_core_logger(__name__)
-
-
-def create_access_token(user_uuid: str, username: str = ""):
-    """Generates a short-lived JWT access token."""
-    now = datetime.now(timezone.utc)
-    expires_at = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    token = jwt.encode(
-        {"sub": user_uuid, "username": username, "token_type": "access",
-         "iat": int(now.timestamp()), "exp": int(expires_at.timestamp())},
-        SECRET_KEY,
-        algorithm=ALGORITHM
-    )
-    return token
-
-
-def create_refresh_token(user_uuid: str):
-    """Generates a long-lived JWT refresh token."""
-    now = datetime.now(timezone.utc)
-    expires_at = now + timedelta(days=7)
-    token = jwt.encode(
-        {"sub": user_uuid, "token_type": "refresh", "iat": int(
-            now.timestamp()), "exp": int(expires_at.timestamp())},
-        SECRET_KEY,
-        algorithm=ALGORITHM
-    )
-    return token
-
-
-async def login_user(request: LoginRequest, response: Response):
-    """Authenticates user credentials and issues tokens."""
-    user_service = UserService()
-    try:
-        user_uuid = user_service.authenticate_user(request.email, request.password)
-    except ValueError as e:
-        logger.warning(json.dumps({"message": f"Authentication failed for {request.email}: {e}", "status_code": 400}))
-        raise HTTPException(status_code=401, detail=str(e))
-
-    username = request.email.split('@')[0]
-    access_token = create_access_token(user_uuid, username)
-    refresh_token = create_refresh_token(user_uuid)
-
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        httponly=True,
-        secure=False,
-        samesite="lax",
-        max_age=7 * 24 * 60 * 60
-    )
-    return {
-        "token": access_token,
-        "refresh_token": refresh_token,
-        "status": "success",
-        "expires_in_minutes": ACCESS_TOKEN_EXPIRE_MINUTES,
-        "username": username,
-        "email": request.email,
-        "user_id": user_uuid
-    }
-
-
-async def refresh_user_token(response: Response, db: Session, refresh_token: str | None):
-    """Validates refresh token and issues fresh access/refresh tokens."""
-    if not refresh_token:
-        raise HTTPException(status_code=401, detail="Refresh token missing")
-    try:
-        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
-        if payload.get("token_type") != "refresh":
-            raise HTTPException(status_code=401, detail="Invalid token type")
-        user_uuid = payload.get("sub")
-        if not user_uuid:
-            raise HTTPException(status_code=401, detail="Invalid payload")
-
-        from utils.cache_utils import clear_user_cache
-        clear_user_cache(str(user_uuid), namespace="transactions")
-        clear_user_cache(str(user_uuid), namespace="categorizer")
-        clear_user_cache(str(user_uuid), namespace="accounts")
-
-        user = db.query(User).filter(User.user_uuid == user_uuid).first()
-        username = user.email.split('@')[0] if user and hasattr(user, 'email') else "User"
-        new_access_token = create_access_token(user_uuid, username)
-        new_refresh_token = create_refresh_token(user_uuid)
-
-        response.set_cookie(
-            key="refresh_token",
-            value=new_refresh_token,
-            httponly=True,
-            secure=False,
-            samesite="lax",
-            max_age=7 * 24 * 60 * 60
-        )
-
-        return {
-            "token": new_access_token,
-            "status": "success",
-            "username": username
-        }
-    except JWTError as e:
-        logger.error(json.dumps({"message": f"JWT Error during token refresh: {e}", "status_code": 500}))
-        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
-
-
-async def register_user(request: RegisterRequest):
-    """Registers a new user."""
-    user_service = UserService()
-    try:
-        user_uuid = user_service.register_user(
-            email=request.email,
-            password=request.password,
-            name=request.name,
-            date_of_birth=request.date_of_birth,
-            employment_status=request.employment_status,
-            country_of_tax_residence=request.country_of_tax_residence
-        )
-    except ValueError as e:
-        logger.warning(json.dumps({"message": f"Registration failed for {request.email}: {e}", "status_code": 400}))
-        raise HTTPException(status_code=400, detail=str(e))
-    return {"status": "success", "user_uuid": user_uuid}
 
 
 async def get_user_profile(current_user: User):

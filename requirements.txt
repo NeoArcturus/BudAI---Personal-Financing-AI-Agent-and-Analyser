@@ -39,9 +39,6 @@ joblib
 yfinance
 newsdataapi
 faiss-cpu
---extra-index-url https://download.pytorch.org/whl/cpu
-torch
-torchvision
 redis
 opentelemetry-distro
 opentelemetry-exporter-otlp

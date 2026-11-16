@@ -2,7 +2,6 @@ import json
 import os
 import pandas as pd
 import numpy as np
-import torch
 from typing import Dict, Any, List, Tuple, Optional
 from sqlalchemy import text
 from config import SessionLocal

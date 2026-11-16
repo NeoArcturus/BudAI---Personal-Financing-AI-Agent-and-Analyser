@@ -10,13 +10,6 @@ os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("FASTEMBED_THREADS", "1")
 
-try:
-    import torch
-    torch.set_num_threads(1)
-except Exception:
-    pass
-
-
 import langchain_openai.chat_models.base as base
 
 original_convert_delta = base._convert_delta_to_message_chunk

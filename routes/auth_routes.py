@@ -1,14 +1,11 @@
-from fastapi import APIRouter, Depends, Request, Response, Cookie
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from config import get_db, FRONTEND_URL
-from schemas.api_schema import LoginRequest, RegisterRequest, ExtendConnectionRequest, RevokeConnectionRequest
+from schemas.api_schema import ExtendConnectionRequest, RevokeConnectionRequest
 from middleware.auth_middleware import get_current_user
 from models.database_models import User
 
 from controllers.auth_controller import (
-    login_user,
-    refresh_user_token,
-    register_user,
     get_user_profile,
     get_truelayer_status,
     handle_truelayer_callback,
@@ -22,31 +19,9 @@ auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 callback_router = APIRouter(tags=["callback"])
 
 
-@auth_router.post("/login")
-async def login_route(request: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    return await login_user(request, response)
-
-
-@auth_router.post("/refresh")
-async def refresh_token_route(request: Request, response: Response, db: Session = Depends(get_db), refresh_cookie: str | None = Cookie(alias="refresh_token", default=None)):
-    try:
-        body = await request.json()
-        token_from_body = body.get("refresh_token")
-    except Exception:
-        token_from_body = None
-
-    final_token = token_from_body or refresh_cookie
-    return await refresh_user_token(response, db, final_token)
-
-
 @auth_router.get("/me")
 async def get_current_user_profile_route(current_user: User = Depends(get_current_user)):
     return await get_user_profile(current_user)
-
-
-@auth_router.post("/register")
-async def register_route(request: RegisterRequest, db: Session = Depends(get_db)):
-    return await register_user(request)
 
 
 @auth_router.get("/truelayer/status")
