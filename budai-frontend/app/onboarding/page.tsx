@@ -2,7 +2,23 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Button, TextArea, CheckboxGroup, Checkbox, RadioGroup, Radio, InputGroup, Label, TextField, Form, toast } from "@heroui/react";
+import {
+  Button,
+  TextArea,
+  CheckboxGroup,
+  Checkbox,
+  RadioGroup,
+  Radio,
+  InputGroup,
+  Label,
+  TextField,
+  Form,
+  toast,
+  DatePicker,
+  DateField,
+  Calendar,
+} from "@heroui/react";
+import { DateValue, CalendarDate, today, getLocalTimeZone } from "@internationalized/date";
 import { apiFetch } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { TerminalTypewriter } from "./_components/TerminalTypewriter";
@@ -21,7 +37,8 @@ import {
   Ban,
   Database,
   Lock,
-  LayoutDashboard
+  LayoutDashboard,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 
 const GOAL_OPTIONS = [
@@ -54,7 +71,7 @@ export default function OnboardingPage() {
   const [liabilities, setLiabilities] = useState<string[]>([]);
   const [userSummary, setUserSummary] = useState("");
 
-  const [dob, setDob] = useState("");
+  const [dobDate, setDobDate] = useState<DateValue | null>(null);
   const [employmentStatus, setEmploymentStatus] = useState("Employed");
   const [country, setCountry] = useState("United Kingdom");
 
@@ -105,6 +122,14 @@ export default function OnboardingPage() {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+
+    if (!dobDate) {
+      toast.danger("Please select your date of birth.");
+      return;
+    }
+
+    const formattedDob = `${dobDate.year}-${String(dobDate.month).padStart(2, "0")}-${String(dobDate.day).padStart(2, "0")}`;
+
     setCurrentStep(6);
     setProcessingState("saving");
 
@@ -114,7 +139,7 @@ export default function OnboardingPage() {
         income_pattern: incomePattern,
         liabilities,
         user_summary: userSummary,
-        date_of_birth: dob,
+        date_of_birth: formattedDob,
         employment_status: employmentStatus,
         country_of_tax_residence: country,
       };
@@ -451,15 +476,86 @@ export default function OnboardingPage() {
                             </InputGroup>
                           </TextField>
 
-                          <TextField className="w-full" name="DOB" isRequired>
-                            <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">Date of Birth</Label>
-                            <InputGroup className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary focus-within:shadow-[0_0_15px_rgba(0,242,255,0.2)] focus-within:bg-white/10 transition-all w-full border border-white/10 h-14" variant="secondary">
-                              <InputGroup.Prefix className="pl-5 pr-2 text-muted-foreground flex items-center shrink-0">
-                                <Activity size={18} />
-                              </InputGroup.Prefix>
-                              <InputGroup.Input type="date" className="flex-1 w-full bg-transparent text-white font-medium py-3 pr-5 placeholder:text-muted-foreground/30 border-none focus:ring-0 focus:outline-none" value={dob} onChange={(e) => setDob(e.target.value)} required />
-                            </InputGroup>
-                          </TextField>
+                          <div className="w-full flex flex-col">
+                            <DatePicker
+                              className="w-full"
+                              name="DOB"
+                              isRequired
+                              value={dobDate}
+                              onChange={setDobDate}
+                              maxValue={today(getLocalTimeZone())}
+                            >
+                              <Label className="uppercase tracking-[0.2em] text-[10px] font-black mb-2 text-primary/70 pl-1">
+                                Date of Birth
+                              </Label>
+                              <DateField.Group
+                                fullWidth
+                                className="bg-white/5 backdrop-blur-xl rounded-2xl flex items-center focus-within:border-primary focus-within:shadow-[0_0_15px_rgba(0,242,255,0.2)] focus-within:bg-white/10 transition-all w-full border border-white/10 h-14 px-4"
+                              >
+                                <DateField.Prefix className="pr-3 text-muted-foreground flex items-center shrink-0">
+                                  <CalendarIcon size={18} />
+                                </DateField.Prefix>
+                                <DateField.Input className="flex-1 text-white font-medium text-sm">
+                                  {(segment) => (
+                                    <DateField.Segment
+                                      segment={segment}
+                                      className="focus:bg-primary/20 rounded-md px-1 outline-none text-white font-mono"
+                                    />
+                                  )}
+                                </DateField.Input>
+                                <DateField.Suffix className="ml-2 flex items-center shrink-0">
+                                  <DatePicker.Trigger className="text-muted-foreground hover:text-primary cursor-pointer transition-colors outline-none">
+                                    <CalendarIcon size={18} />
+                                  </DatePicker.Trigger>
+                                </DateField.Suffix>
+                              </DateField.Group>
+                              <DatePicker.Popover className="popover min-w-max p-6 bg-black/95 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-2xl">
+                                <Calendar aria-label="Date of Birth" className="w-full min-w-[280px]">
+                                  <Calendar.Header className="flex items-center gap-3 mb-6">
+                                    <Calendar.YearPickerTrigger className="flex items-center gap-2 mr-auto cursor-pointer hover:opacity-70 transition-opacity outline-none">
+                                      <Calendar.YearPickerTriggerHeading className="text-sm font-black uppercase tracking-widest text-primary italic" />
+                                      <Calendar.YearPickerTriggerIndicator className="text-foreground/30 w-4 h-4" />
+                                    </Calendar.YearPickerTrigger>
+                                    <Calendar.NavButton
+                                      slot="previous"
+                                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors outline-none"
+                                    />
+                                    <Calendar.NavButton
+                                      slot="next"
+                                      className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors outline-none"
+                                    />
+                                  </Calendar.Header>
+                                  <Calendar.Grid className="w-full border-collapse">
+                                    <Calendar.GridHeader>
+                                      {(day) => (
+                                        <Calendar.HeaderCell className="text-[9px] font-black text-foreground/20 pb-4 text-center uppercase tracking-widest">
+                                          {day}
+                                        </Calendar.HeaderCell>
+                                      )}
+                                    </Calendar.GridHeader>
+                                    <Calendar.GridBody>
+                                      {(date) => (
+                                        <Calendar.Cell
+                                          date={date}
+                                          className="w-8 h-8 flex items-center justify-center mx-auto text-xs font-mono text-foreground rounded-lg hover:bg-white/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-all"
+                                        />
+                                      )}
+                                    </Calendar.GridBody>
+                                  </Calendar.Grid>
+                                  <Calendar.YearPickerGrid>
+                                    <Calendar.YearPickerGridBody>
+                                      {({ year }) => (
+                                        <Calendar.YearPickerCell
+                                          year={year}
+                                          className="h-8 px-2 w-full flex items-center justify-center mx-auto text-xs font-mono text-foreground rounded-lg hover:bg-white/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-all"
+                                        />
+                                      )}
+                                    </Calendar.YearPickerGridBody>
+                                  </Calendar.YearPickerGrid>
+                                </Calendar>
+                              </DatePicker.Popover>
+                            </DatePicker>
+                          </div>
                         </div>
 
                         <TextField className="w-full" name="EmploymentStatus" isRequired>
