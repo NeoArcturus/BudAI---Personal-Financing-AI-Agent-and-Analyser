@@ -23,29 +23,30 @@ extern "C"
         std::hash<std::string> hasher;
         int seed = static_cast<int>(hasher(std::string(account_id)));
 
-        std::vector<std::vector<double>> final_paths = heston_jump_mc(hp, jp, mu, dt, days, paths, seed, deterministic_calendar);
+        std::vector<double> final_paths = heston_jump_mc(hp, jp, mu, dt, days, paths, seed, deterministic_calendar);
 
         if (final_paths.empty()) return 1;
 
+        std::vector<double> day_vals(paths);
+        const int p05_idx = static_cast<int>(0.05 * paths);
+        const int p95_idx = static_cast<int>(0.95 * paths);
+
         for (int j = 0; j < buffer_size; ++j)
         {
-            std::vector<double> day_vals(paths);
             double sum = 0.0;
             for (int i = 0; i < paths; ++i)
             {
-                day_vals[i] = final_paths[i][j];
-                sum += final_paths[i][j];
+                double val = final_paths[static_cast<size_t>(i) * buffer_size + j];
+                day_vals[i] = val;
+                sum += val;
             }
 
             mean_out[j] = sum / paths;
 
-            int p05_idx = static_cast<int>(0.05 * paths);
-            int p95_idx = static_cast<int>(0.95 * paths);
-
             std::nth_element(day_vals.begin(), day_vals.begin() + p05_idx, day_vals.end());
             careless_out[j] = day_vals[p05_idx];
 
-            std::nth_element(day_vals.begin(), day_vals.begin() + p95_idx, day_vals.end());
+            std::nth_element(day_vals.begin() + p05_idx, day_vals.begin() + p95_idx, day_vals.end());
             optimal_out[j] = day_vals[p95_idx];
         }
 
@@ -65,7 +66,7 @@ extern "C"
         std::hash<std::string> hasher;
         int seed = static_cast<int>(hasher(std::string(account_id)));
 
-        std::vector<std::vector<double>> final_paths = heston_jump_mc(hp, jp, mu, dt, days, paths, seed, deterministic_calendar);
+        std::vector<double> final_paths = heston_jump_mc(hp, jp, mu, dt, days, paths, seed, deterministic_calendar);
         if (final_paths.empty()) return 1;
 
         double historical_expected_total = 0.0;
@@ -78,8 +79,9 @@ extern "C"
 
         for (int i = 0; i < paths; ++i) {
             double path_sum = 0.0;
+            const size_t path_offset = static_cast<size_t>(i) * buffer_size;
             for (int j = 1; j < buffer_size; ++j) {
-                path_sum += final_paths[i][j];
+                path_sum += final_paths[path_offset + j];
             }
             double diff = std::abs(path_sum - historical_expected_total);
             if (diff < smallest_difference) {
@@ -88,8 +90,9 @@ extern "C"
             }
         }
 
+        const size_t best_offset = static_cast<size_t>(best_path_idx) * buffer_size;
         for (int j = 0; j < buffer_size; ++j) {
-            expected_out[j] = final_paths[best_path_idx][j];
+            expected_out[j] = final_paths[best_offset + j];
         }
 
         return 0;

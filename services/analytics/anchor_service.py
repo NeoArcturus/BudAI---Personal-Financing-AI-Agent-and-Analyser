@@ -159,7 +159,7 @@ class AnchorService:
                         INSERT INTO merchant_knowledge (
                             knowledge_uuid, clean_merchant_name, category, sub_category, tags, is_human_verified, created_at
                         ) VALUES (
-                            :uuid, :name, :category, :sub_cat, :tags::json, :verified, :now
+                            :uuid, :name, :category, :sub_cat, CAST(:tags AS json), :verified, :now
                         ) ON CONFLICT (knowledge_uuid) DO NOTHING;
                     """)
                     session.execute(insert_hit_stmt, {

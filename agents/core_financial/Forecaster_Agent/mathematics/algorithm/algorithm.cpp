@@ -42,11 +42,16 @@ complex<double> bates_characteristic_function(double u, double T, double r, Hest
     return exp(C + D * hp.v0 + i_comp * cu * log(hp.S0) + jump_comp);
 }
 
-vector<vector<double>> heston_jump_mc(HestonParams hp, JumpParams jp, double mu, double dt, int days, int paths, int seed, const double* deterministic_calendar)
+vector<double> heston_jump_mc(HestonParams hp, JumpParams jp, double mu, double dt, int days, int paths, int seed, const double* deterministic_calendar)
 {
-    vector<vector<double>> results(paths, vector<double>(days + 1, 0.0));
+    const int step_stride = days + 1;
+    vector<double> results(static_cast<size_t>(paths) * step_stride, 0.0);
+    
+    // Clamp worker threads to avoid container CPU/RAM over-allocation
     unsigned int num_threads = thread::hardware_concurrency();
-    if (num_threads == 0) num_threads = 4;
+    if (num_threads == 0) num_threads = 2;
+    num_threads = min(num_threads, 2u);
+    
     vector<thread> threads;
     int chunk_size = paths / num_threads;
 
@@ -61,7 +66,8 @@ vector<vector<double>> heston_jump_mc(HestonParams hp, JumpParams jp, double mu,
             mt19937 gen(seed + p);
             double S = hp.S0;
             double v = hp.v0;
-            results[p][0] = S;
+            size_t path_offset = static_cast<size_t>(p) * step_stride;
+            results[path_offset] = S;
             for (int t = 0; t < days; ++t)
             {
                 double Z1 = norm(gen);
@@ -81,7 +87,7 @@ vector<vector<double>> heston_jump_mc(HestonParams hp, JumpParams jp, double mu,
                     S += deterministic_calendar[t + 1];
                 }
                 v = v_next;
-                results[p][t + 1] = S;
+                results[path_offset + t + 1] = S;
             }
         }
     };
