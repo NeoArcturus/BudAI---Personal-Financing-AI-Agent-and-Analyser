@@ -55,6 +55,10 @@ export default async function ProtectedLayout({
       }),
     ]);
 
+    if (snapshotRes?.status === 401 || snapshotRes?.status === 403) {
+      redirect("/login");
+    }
+
     if (snapshotRes?.ok) {
       try {
         initialSnapshot = await snapshotRes.json();

@@ -47,15 +47,15 @@ export default function DashboardClient({
     setMounted(true);
   }, []);
 
-  // First time user check: If user has 0 linked accounts, redirect straight to onboarding
+  // First time user check: If snapshot is loaded and user has 0 linked accounts, redirect straight to onboarding
   useEffect(() => {
-    if (mounted && accounts && accounts.length === 0) {
+    if (mounted && snapshot && accounts && accounts.length === 0) {
       const timer = setTimeout(() => {
         router.push("/onboarding");
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [mounted, accounts, router]);
+  }, [mounted, snapshot, accounts, router]);
 
   const resolvedBuckets = useMemo(() => {
     if (initialBuckets && initialBuckets.length > 0) return initialBuckets;

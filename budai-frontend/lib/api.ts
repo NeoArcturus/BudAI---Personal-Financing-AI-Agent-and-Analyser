@@ -141,7 +141,7 @@ apiClient.interceptors.response.use(
 
     if (
       axios.isAxiosError(error) &&
-      error.response?.status === 401 &&
+      (error.response?.status === 401 || error.response?.status === 403) &&
       !originalRequest._retry
     ) {
       originalRequest._retry = true;
@@ -224,7 +224,7 @@ export async function apiFetch(
     };
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
-      if (error.response.status === 401) {
+      if (error.response.status === 401 || error.response.status === 403) {
         await clearSession();
         if (typeof window !== "undefined") {
           window.dispatchEvent(new Event("budai-unauthorized"));
