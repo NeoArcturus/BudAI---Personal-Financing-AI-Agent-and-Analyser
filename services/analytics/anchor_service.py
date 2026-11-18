@@ -1,6 +1,8 @@
 import re
 import uuid
 import json
+import time
+import concurrent.futures
 import numpy as np
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
@@ -8,7 +10,7 @@ from sqlalchemy import text
 from config import SessionLocal
 from services.embedding_service import get_embedding_service
 from services.qdrant_service import get_qdrant_service
-from services.logger_setup import get_core_logger
+from services.logger_setup import get_core_logger, log_pipeline_data
 
 logger = get_core_logger(__name__)
 
@@ -85,12 +87,30 @@ class AnchorService:
     ) -> List[Dict[str, Any]]:
         """
         Takes a list of transaction dictionaries (with 'semi_cleaned_description' or 'description'),
-        computes embeddings, matches existing Qdrant merchant anchors (>= 0.88), clusters unmatched
-        transactions within the batch into new anchors, persists new anchors to PostgreSQL and Qdrant,
-        and assigns 'merchant_knowledge_uuid' to every transaction.
+        computes embeddings in parallel via FastEmbed ONNX, matches existing Qdrant merchant anchors,
+        clusters unmatched transactions within the batch into new anchors, resolves LLM and vector search
+        concurrently, persists new anchors to PostgreSQL and Qdrant in batch, and assigns 'merchant_knowledge_uuid'.
         """
         if not transactions:
             return transactions
+
+        t_start_total = time.time()
+        log_pipeline_data(
+            logger=logger,
+            pipeline="anchor_service",
+            stage="batch_intake",
+            data={
+                "transaction_count": len(transactions),
+                "sample": [
+                    {
+                        "desc": (tx.get("description") or tx.get("semi_cleaned_description") or "")[:40],
+                        "amount": tx.get("amount")
+                    }
+                    for tx in transactions[:3]
+                ]
+            },
+            message=f"Starting parallel anchor resolution and vectorisation for {len(transactions)} transactions"
+        )
 
         # Step 1: Prepare text to embed (prioritizing full raw description)
         descriptions = [
@@ -98,13 +118,14 @@ class AnchorService:
             for tx in transactions
         ]
 
-        # Step 2: Batch compute 384-dim embeddings in-process
+        # Step 2: Batch compute 384-dim embeddings in parallel via FastEmbed ONNX
+        t0_vec = time.time()
         vectors = self.embedding_service.embed_documents(descriptions)
+        vec_ms = int((time.time() - t0_vec) * 1000)
 
         # Step 3: Cluster incoming transactions in-memory first to minimize WAN latency
-        # Clusters map representative index -> list of transaction indices belonging to it
+        t0_cluster = time.time()
         clusters: List[Dict[str, Any]] = []
-        # Each cluster: {"rep_idx": int, "vector": List[float], "indices": List[int], "clean_name": str}
 
         for idx, tx in enumerate(transactions):
             v = vectors[idx]
@@ -130,30 +151,190 @@ class AnchorService:
                     "clean_name": clean_name
                 })
 
-        # Step 4: Resolve each cluster against Qdrant in batch or individually
-        new_anchors: List[Dict[str, Any]] = []
+        cluster_ms = int((time.time() - t0_cluster) * 1000)
+        log_pipeline_data(
+            logger=logger,
+            pipeline="anchor_service",
+            stage="clustering_completed",
+            data={
+                "transactions_total": len(transactions),
+                "clusters_formed": len(clusters),
+                "elapsed_ms": cluster_ms,
+                "cluster_samples": [
+                    {"rep": cl["clean_name"], "size": len(cl["indices"])}
+                    for cl in clusters[:5]
+                ]
+            },
+            message=f"Clustered {len(transactions)} transactions into {len(clusters)} distinct merchant entities in {cluster_ms}ms"
+        )
 
-        for cl in clusters:
+        # Step 4: Resolve each cluster against LLM and Qdrant concurrently in parallel
+        t0_resolve = time.time()
+
+        def resolve_single_cluster(cl: Dict[str, Any]) -> Dict[str, Any]:
             rep_vec = cl["vector"]
             clean_name = cl["clean_name"]
+            rep_tx = transactions[cl["rep_idx"]]
+            rep_raw = descriptions[cl["rep_idx"]]
+            rep_amt = float(rep_tx.get("amount") or 0.0)
 
-            # Query Qdrant for existing anchor
-            hits = self.qdrant_service.search_merchant_knowledge(
-                rep_vec,
-                limit=1,
-                score_threshold=SIMILARITY_THRESHOLD
-            )
+            # Concurrent LLM Call + Qdrant Vector Search
+            def _call_llm():
+                try:
+                    from agents.finance.Categorizer_Agent.CategorizerAgent import classify_transaction_with_llm
+                    return classify_transaction_with_llm(
+                        merchant_name=clean_name,
+                        description=rep_raw,
+                        amount=rep_amt
+                    )
+                except Exception as llm_err:
+                    logger.warning(f"Primary LLM categorization for '{clean_name}' failed: {llm_err}")
+                    return None
+
+            def _call_qdrant():
+                try:
+                    return self.qdrant_service.search_merchant_knowledge(
+                        rep_vec,
+                        limit=1,
+                        score_threshold=SIMILARITY_THRESHOLD
+                    )
+                except Exception as q_err:
+                    logger.warning(f"Qdrant vector search for '{clean_name}' failed: {q_err}")
+                    return []
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as inner_pool:
+                f_llm = inner_pool.submit(_call_llm)
+                f_qdrant = inner_pool.submit(_call_qdrant)
+                llm_res = f_llm.result()
+                hits = f_qdrant.result()
+
+            llm_cat = None
+            llm_sub = None
+            llm_tags = []
+            if llm_res and llm_res.get("category") and llm_res["category"] != "Uncategorized":
+                llm_cat = llm_res["category"]
+                llm_sub = llm_res.get("sub_category")
+                llm_tags = llm_res.get("tags") or []
+
+            source = "LLM" if llm_cat else ("QDRANT_CACHE" if hits else "REGEX_FALLBACK")
 
             if hits:
                 payload = hits[0].get("payload", {})
                 matched_uuid = payload.get("knowledge_uuid") or hits[0]["id"]
                 matched_name = payload.get("clean_merchant_name") or clean_name
-                matched_cat = payload.get("category") or "Uncategorized"
-                matched_sub = payload.get("sub_category")
-                matched_tags = payload.get("tags") or []
+                matched_cat = llm_cat or payload.get("category") or "Uncategorized"
+                matched_sub = llm_sub or payload.get("sub_category")
+                matched_tags = llm_tags or payload.get("tags") or []
                 matched_verified = bool(payload.get("is_human_verified", False))
 
-                # Ensure matched anchor exists in PostgreSQL to prevent foreign key violations
+                return {
+                    "is_new": False,
+                    "matched_uuid": matched_uuid,
+                    "clean_name": matched_name,
+                    "category": matched_cat,
+                    "sub_category": matched_sub,
+                    "tags": matched_tags,
+                    "is_verified": matched_verified,
+                    "indices": cl["indices"],
+                    "source": source
+                }
+            else:
+                # Novel anchor: needs creation and context vectorisation
+                new_uuid = str(uuid.uuid4())
+                init_cat = llm_cat
+                init_sub = llm_sub
+                if not init_cat or init_cat == "Uncategorized":
+                    from services.categorization.classifier import classify_merchant
+                    cat_rule, sub_rule = classify_merchant(clean_name, rep_raw, rep_amt)
+                    init_cat = cat_rule if cat_rule != "Uncategorized" else "Shopping & Retail"
+                    init_sub = sub_rule or "General Merchandise"
+
+                from services.categorization.taxonomy import enrich_transaction_taxonomy
+                matched_cat, matched_sub, enriched_tags, _ = enrich_transaction_taxonomy(
+                    category=init_cat,
+                    sub_category=init_sub,
+                    description=f"{clean_name} {rep_raw}",
+                    existing_tags=llm_tags
+                )
+
+                rich_context_str = f"{clean_name} | {matched_cat} | {matched_sub} | {', '.join(enriched_tags)}"
+                return {
+                    "is_new": True,
+                    "knowledge_uuid": new_uuid,
+                    "clean_merchant_name": clean_name,
+                    "category": matched_cat,
+                    "sub_category": matched_sub,
+                    "tags": enriched_tags,
+                    "rich_context_str": rich_context_str,
+                    "fallback_vector": rep_vec,
+                    "indices": cl["indices"],
+                    "source": source
+                }
+
+        max_workers = min(8, max(1, len(clusters)))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as cluster_pool:
+            resolved_clusters = list(cluster_pool.map(resolve_single_cluster, clusters))
+
+        resolve_ms = int((time.time() - t0_resolve) * 1000)
+        llm_count = sum(1 for r in resolved_clusters if r["source"] == "LLM")
+        qdrant_count = sum(1 for r in resolved_clusters if r["source"] == "QDRANT_CACHE")
+        regex_count = sum(1 for r in resolved_clusters if r["source"] == "REGEX_FALLBACK")
+
+        log_pipeline_data(
+            logger=logger,
+            pipeline="anchor_service",
+            stage="parallel_resolution_completed",
+            data={
+                "clusters_count": len(clusters),
+                "parallel_workers": max_workers,
+                "llm_classified": llm_count,
+                "qdrant_cache_hits": qdrant_count,
+                "regex_fallbacks": regex_count,
+                "elapsed_ms": resolve_ms
+            },
+            message=f"Parallel cluster resolution completed for {len(clusters)} clusters in {resolve_ms}ms (LLM={llm_count}, Qdrant={qdrant_count}, Regex={regex_count})"
+        )
+
+        # Step 5: Process existing anchors and batch-vectorise new anchors in parallel
+        new_anchor_items = [r for r in resolved_clusters if r["is_new"]]
+        new_anchors: List[Dict[str, Any]] = []
+
+        if new_anchor_items:
+            t0_anchor_vec = time.time()
+            rich_context_strings = [item["rich_context_str"] for item in new_anchor_items]
+            rich_vectors = self.embedding_service.embed_documents(rich_context_strings)
+            anchor_vec_ms = int((time.time() - t0_anchor_vec) * 1000)
+
+            log_pipeline_data(
+                logger=logger,
+                pipeline="anchor_service",
+                stage="new_anchors_vectorised",
+                data={
+                    "new_anchors_count": len(new_anchor_items),
+                    "elapsed_ms": anchor_vec_ms,
+                    "sample": [
+                        {"name": item["clean_merchant_name"], "cat": item["category"], "sub": item["sub_category"]}
+                        for item in new_anchor_items[:3]
+                    ]
+                },
+                message=f"Vectorised {len(new_anchor_items)} new merchant anchors in {anchor_vec_ms}ms in parallel"
+            )
+
+            for item, rich_vec in zip(new_anchor_items, rich_vectors):
+                vec = rich_vec if rich_vec and any(rich_vec) else item["fallback_vector"]
+                new_anchors.append({
+                    "knowledge_uuid": item["knowledge_uuid"],
+                    "clean_merchant_name": item["clean_merchant_name"],
+                    "category": item["category"],
+                    "sub_category": item["sub_category"],
+                    "tags": item["tags"],
+                    "vector": vec,
+                    "is_human_verified": False
+                })
+
+        # Apply assignments to transactions and ensure matched anchors exist in PostgreSQL
+        for r in resolved_clusters:
+            if not r["is_new"]:
                 try:
                     insert_hit_stmt = text("""
                         INSERT INTO merchant_knowledge (
@@ -163,67 +344,30 @@ class AnchorService:
                         ) ON CONFLICT (knowledge_uuid) DO NOTHING;
                     """)
                     session.execute(insert_hit_stmt, {
-                        "uuid": matched_uuid,
-                        "name": matched_name,
-                        "category": matched_cat,
-                        "sub_cat": matched_sub,
-                        "tags": json.dumps(matched_tags),
-                        "verified": matched_verified,
+                        "uuid": r["matched_uuid"],
+                        "name": r["clean_name"],
+                        "category": r["category"],
+                        "sub_cat": r["sub_category"],
+                        "tags": json.dumps(r["tags"]),
+                        "verified": r["is_verified"],
                         "now": datetime.utcnow()
                     })
                 except Exception as pg_err:
-                    logger.warning(f"Failed ensuring matched anchor {matched_uuid} in PostgreSQL: {pg_err}")
+                    logger.warning(f"Failed ensuring matched anchor {r['matched_uuid']} in PostgreSQL: {pg_err}")
 
-                for tx_idx in cl["indices"]:
-                    transactions[tx_idx]["merchant_knowledge_uuid"] = matched_uuid
-                    if matched_sub:
-                        transactions[tx_idx]["sub_category"] = matched_sub
-                    if matched_tags:
-                        transactions[tx_idx]["tags"] = matched_tags
+                for tx_idx in r["indices"]:
+                    transactions[tx_idx]["merchant_knowledge_uuid"] = r["matched_uuid"]
+                    if r["sub_category"]:
+                        transactions[tx_idx]["sub_category"] = r["sub_category"]
+                    if r["tags"]:
+                        transactions[tx_idx]["tags"] = r["tags"]
             else:
-                # No existing anchor in Qdrant; create new anchor for this entire cluster
-                new_uuid = str(uuid.uuid4())
-                rep_tx = transactions[cl["rep_idx"]]
-                rep_raw = descriptions[cl["rep_idx"]]
-                rep_amt = float(rep_tx.get("amount") or 0.0)
+                for tx_idx in r["indices"]:
+                    transactions[tx_idx]["merchant_knowledge_uuid"] = r["knowledge_uuid"]
+                    transactions[tx_idx]["sub_category"] = r["sub_category"]
+                    transactions[tx_idx]["tags"] = r["tags"]
 
-                from services.categorization.classifier import classify_merchant
-                from services.categorization.taxonomy import enrich_transaction_taxonomy
-
-                cat_rule, sub_rule = classify_merchant(clean_name, rep_raw, rep_amt)
-                init_cat = cat_rule if cat_rule != "Uncategorized" else "Shopping & Retail"
-                init_sub = sub_rule or "General Merchandise"
-                
-                matched_cat, matched_sub, enriched_tags, _ = enrich_transaction_taxonomy(
-                    category=init_cat,
-                    sub_category=init_sub,
-                    description=f"{clean_name} {rep_raw}",
-                    existing_tags=[]
-                )
-
-                # Context-rich embedding combining Merchant + Category + SubCategory + Tags
-                rich_context_str = f"{clean_name} | {matched_cat} | {matched_sub} | {', '.join(enriched_tags)}"
-                try:
-                    rich_vec = self.embedding_service.embed_query(rich_context_str)
-                except Exception:
-                    rich_vec = rep_vec
-
-                new_anchor = {
-                    "knowledge_uuid": new_uuid,
-                    "clean_merchant_name": clean_name,
-                    "category": matched_cat,
-                    "sub_category": matched_sub,
-                    "tags": enriched_tags,
-                    "vector": rich_vec,
-                    "is_human_verified": False
-                }
-                new_anchors.append(new_anchor)
-                for tx_idx in cl["indices"]:
-                    transactions[tx_idx]["merchant_knowledge_uuid"] = new_uuid
-                    transactions[tx_idx]["sub_category"] = matched_sub
-                    transactions[tx_idx]["tags"] = enriched_tags
-
-        # Step 5: Bulk persist newly created anchors into PostgreSQL
+        # Step 6: Bulk persist newly created anchors into PostgreSQL
         if new_anchors:
             now = datetime.utcnow()
             for anchor in new_anchors:
@@ -243,13 +387,28 @@ class AnchorService:
                     "now": now
                 })
 
-            # Step 6: Batch upsert new anchor vectors into Qdrant
+            # Step 7: Batch upsert new anchor vectors into Qdrant
             try:
                 self.qdrant_service.upsert_merchants_batch(new_anchors)
             except Exception as e:
                 logger.error(f"Failed to upsert new merchant anchors into Qdrant: {e}")
 
-        # Step 7: Explicitly release temporary batch vectors to release heap memory
+        # Step 8: Finalized summary logging and memory release
+        total_ms = int((time.time() - t_start_total) * 1000)
+        log_pipeline_data(
+            logger=logger,
+            pipeline="anchor_service",
+            stage="batch_finalized",
+            data={
+                "total_transactions": len(transactions),
+                "total_clusters": len(clusters),
+                "new_anchors_created": len(new_anchors),
+                "matched_anchors": len(clusters) - len(new_anchors),
+                "total_elapsed_ms": total_ms
+            },
+            message=f"Anchor batch processing finalized in {total_ms}ms ({len(new_anchors)} new anchors, {len(clusters) - len(new_anchors)} matched)"
+        )
+
         import gc
         del vectors
         del clusters

@@ -4,7 +4,7 @@ from config import SessionLocal
 from sqlalchemy import text
 from langchain_core.tools import tool
 from services.mcp_tools.shared_utils import GetBudgetVarianceInput
-from agents.core_financial.Analyser_Agent.budget_engine import BudgetEngine
+from agents.finance.Analyser_Agent.budget_engine import BudgetEngine
 from services.logger_setup import get_core_logger
 
 logger = get_core_logger(__name__)

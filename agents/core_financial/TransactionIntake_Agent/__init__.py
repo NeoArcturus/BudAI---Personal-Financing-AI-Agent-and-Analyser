@@ -1,2 +1,0 @@
-# TransactionIntake_Agent package
-from agents.core_financial.TransactionIntake_Agent.TransactionIntakeAgent import TransactionIntakeAgent

@@ -192,7 +192,7 @@ async def call_analyser_agent(
     state: Annotated[BudAIState, InjectedState]
 ):
     user_uuid = resolve_user_uuid(state)
-    from agents.core_financial.Analyser_Agent.AnalyserAgent import AnalyserAgent
+    from agents.finance.Analyser_Agent.AnalyserAgent import AnalyserAgent
     agent = AnalyserAgent()
     result = await agent.app.ainvoke({"messages": [{"role": "user", "content": query}], "user_uuid": user_uuid})
     return Command(update={"messages": [ToolMessage(content=_extract_content(result), tool_call_id=tool_call_id)]})
@@ -205,7 +205,7 @@ async def call_forecaster_agent(
     state: Annotated[BudAIState, InjectedState]
 ):
     user_uuid = resolve_user_uuid(state)
-    from agents.core_financial.Forecaster_Agent.ForecasterAgent import ForecasterAgent
+    from agents.finance.Forecaster_Agent.ForecasterAgent import ForecasterAgent
     agent = ForecasterAgent()
     result = await agent.app.ainvoke({"messages": [{"role": "user", "content": query}], "user_uuid": user_uuid})
     return Command(update={"messages": [ToolMessage(content=_extract_content(result), tool_call_id=tool_call_id)]})
@@ -218,7 +218,7 @@ async def call_categorizer_agent(
     state: Annotated[BudAIState, InjectedState]
 ):
     user_uuid = resolve_user_uuid(state)
-    from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+    from agents.finance.Categorizer_Agent.CategorizerAgent import CategorizerAgent
     agent = CategorizerAgent()
     result = await agent.app.ainvoke({"messages": [{"role": "user", "content": query}], "user_uuid": user_uuid})
     return Command(update={"messages": [ToolMessage(content=_extract_content(result), tool_call_id=tool_call_id)]})
@@ -231,7 +231,7 @@ async def call_health_agent(
     state: Annotated[BudAIState, InjectedState]
 ):
     user_uuid = resolve_user_uuid(state)
-    from agents.intelligence.Health_Agent.HealthAgent import HealthAgent
+    from agents.analytics.Health_Agent.HealthAgent import HealthAgent
     agent = HealthAgent()
     result = await agent.app.ainvoke({"messages": [{"role": "user", "content": query}], "user_uuid": user_uuid})
     return Command(update={"messages": [ToolMessage(content=_extract_content(result), tool_call_id=tool_call_id)]})
@@ -258,7 +258,7 @@ async def call_market_agent(
     state: Annotated[BudAIState, InjectedState]
 ):
     user_uuid = resolve_user_uuid(state)
-    from agents.intelligence.Market_Agent.MarketAgent import MarketAgent
+    from agents.analytics.Market_Agent.MarketAgent import MarketAgent
     agent = MarketAgent()
     result = await agent.app.ainvoke({"messages": [{"role": "user", "content": query}], "user_uuid": user_uuid})
     return Command(update={"messages": [ToolMessage(content=_extract_content(result), tool_call_id=tool_call_id)]})

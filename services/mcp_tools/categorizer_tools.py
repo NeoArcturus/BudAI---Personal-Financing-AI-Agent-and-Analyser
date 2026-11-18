@@ -27,7 +27,7 @@ def update_transaction_category(transaction_uuid: str, corrected_category: str, 
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: update_transaction_category", "status_code": 200}))
     try:
-        from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+        from agents.finance.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
         agent.save_manual_label(user_uuid, transaction_uuid, corrected_category)
         _res = f"Successfully updated transaction {transaction_uuid} to {corrected_category}."
@@ -52,7 +52,7 @@ def retrain_categorization_model(user_uuid: Annotated[str, InjectedState("user_u
     """
     logger.info(json.dumps({"message": f"Executing MCP Tool: retrain_categorization_model", "status_code": 200}))
     try:
-        from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+        from agents.finance.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
         result = agent.train_global()
         _res = "Categorization RAG learning active: All verified manual merchant anchors are indexed immediately in Qdrant vector memory."

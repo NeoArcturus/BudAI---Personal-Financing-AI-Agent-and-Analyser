@@ -1,7 +1,7 @@
 import os
 import json
 import asyncio
-from typing import Annotated, Sequence, TypedDict, List
+from typing import Annotated, Sequence, TypedDict, List, Optional, Dict, Any
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
@@ -276,6 +276,12 @@ class CategorizerAgent:
 
     # --- LEGACY METHODS FOR API COMPATIBILITY ---
     
+    def classify_transaction(self, merchant_name: str, description: str = "", amount: float = 0.0) -> Optional[dict]:
+        return classify_transaction_with_llm(merchant_name, description, amount)
+
+    def classify_batch(self, items: list[dict]) -> dict:
+        return classify_batch_with_llm(items)
+
     @property
     def valid_categories(self):
         return [
@@ -291,7 +297,7 @@ class CategorizerAgent:
             from models.database_models import Transaction, MerchantKnowledge
             from services.categorization.taxonomy import enrich_transaction_taxonomy
             import uuid
-            from datetime import datetime
+            from datetime import datetime, timezone
             import json
             
             tx = session.query(Transaction).filter_by(transaction_uuid=transaction_uuid).first()
@@ -312,7 +318,7 @@ class CategorizerAgent:
             if tx.merchant_knowledge_uuid:
                 update_query = text("""
                     UPDATE merchant_knowledge
-                    SET category = :cat, sub_category = :sub_cat, tags = :tags::jsonb, is_human_verified = TRUE
+                    SET category = :cat, sub_category = :sub_cat, tags = CAST(:tags AS jsonb), is_human_verified = TRUE
                     WHERE knowledge_uuid = :uuid
                 """)
                 session.execute(update_query, {
@@ -362,7 +368,7 @@ class CategorizerAgent:
                 
                 insert_query = text("""
                     INSERT INTO merchant_knowledge (knowledge_uuid, clean_merchant_name, category, sub_category, tags, is_human_verified, created_at)
-                    VALUES (:uuid, :name, :cat, :sub_cat, :tags::jsonb, TRUE, :now)
+                    VALUES (:uuid, :name, :cat, :sub_cat, CAST(:tags AS jsonb), TRUE, :now)
                 """)
                 session.execute(insert_query, {
                     "uuid": new_mk_uuid,
@@ -370,7 +376,7 @@ class CategorizerAgent:
                     "cat": cat,
                     "sub_cat": sub_cat,
                     "tags": json.dumps(tags),
-                    "now": datetime.utcnow()
+                    "now": datetime.now(timezone.utc)
                 })
 
                 from services.qdrant_service import get_qdrant_service
@@ -390,3 +396,127 @@ class CategorizerAgent:
     def train_global(self):
         # Deprecated: RAG Fast-Learning handles this now. Returning success for Prefect cron.
         return {"trained": True, "reason": "Global training deprecated; RAG Fast-Learning enabled.", "samples": 0}
+
+VALID_CATEGORIES = [
+    "Income", "Housing", "Food & Dining", "Transportation", "Utilities",
+    "Entertainment & Lifestyle", "Subscriptions & Digital Services",
+    "Shopping & Retail", "Healthcare", "Transfers & Payments",
+    "Fees & Charges", "Savings & Investments", "Taxes & Government Payments"
+]
+
+def classify_transaction_with_llm(
+    merchant_name: str,
+    description: str = "",
+    amount: float = 0.0,
+    timeout: float = 5.0
+) -> Optional[Dict[str, Any]]:
+    """
+    Primary transaction classification using the Qwen LLM cluster via Tailscale.
+    Returns a dict with 'category', 'sub_category', and 'tags', or None on failure.
+    """
+    from services.llm_factory import get_chat_llm
+    from langchain_core.messages import SystemMessage, HumanMessage
+    import json
+    import re
+
+    system_prompt = (
+        "You are the Primary Transaction Categorizer for BudAI. "
+        "Classify the given transaction into EXACTLY one of these categories:\n"
+        f"{', '.join(VALID_CATEGORIES)}\n\n"
+        "Return STRICT JSON only, with no markdown or additional commentary, in this format:\n"
+        '{"category": "<ExactCategoryName>", "sub_category": "<SpecificSubcategory>", "tags": ["tag1", "tag2"]}'
+    )
+
+    user_prompt = f"Merchant: {merchant_name}\nDescription: {description}\nAmount: £{abs(amount):.2f}"
+
+    try:
+        llm = get_chat_llm(temperature=0.0, timeout=timeout)
+        response = llm.invoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt)
+        ])
+        content = response.content.strip() if hasattr(response, "content") else str(response).strip()
+
+        if "```" in content:
+            content = re.sub(r"^```(?:json)?\s*", "", content)
+            content = re.sub(r"\s*```$", "", content).strip()
+
+        data = json.loads(content)
+        category = data.get("category", "").strip()
+        if category in VALID_CATEGORIES:
+            return {
+                "category": category,
+                "sub_category": str(data.get("sub_category", "")).strip(),
+                "tags": [str(t).strip() for t in data.get("tags", []) if t]
+            }
+        logger.warning(f"LLM returned non-standard category '{category}' for '{merchant_name}'")
+        return None
+    except Exception as e:
+        logger.warning(f"LLM classification attempt failed for '{merchant_name}': {e}")
+        return None
+
+def classify_batch_with_llm(
+    items: List[Dict[str, Any]],
+    timeout: float = 12.0
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Classify a batch of merchants or transactions using Qwen via Tailscale.
+    items: list of dicts with 'id' (or 'clean_merchant_name'/'merchant'), 'description', 'amount'
+    Returns dict mapping item id (or merchant name) to {'category', 'sub_category', 'tags'}
+    """
+    if not items:
+        return {}
+
+    from services.llm_factory import get_chat_llm
+    from langchain_core.messages import SystemMessage, HumanMessage
+    import json
+    import re
+
+    system_prompt = (
+        "You are the Primary Transaction Categorizer for BudAI. "
+        "Classify the given list of merchants into EXACTLY one of these categories:\n"
+        f"{', '.join(VALID_CATEGORIES)}\n\n"
+        "Return STRICT JSON only, with no markdown or additional commentary, as an array of objects:\n"
+        '[{"id": "<id>", "category": "<ExactCategoryName>", "sub_category": "<SpecificSubcategory>", "tags": ["tag1", "tag2"]}]'
+    )
+
+    batch_payload = []
+    for item in items:
+        item_id = item.get("id") or item.get("knowledge_uuid") or item.get("merchant_knowledge_uuid") or item.get("clean_merchant_name") or item.get("merchant") or "unknown"
+        m_name = item.get("clean_merchant_name") or item.get("merchant") or item.get("name") or "unknown"
+        desc = item.get("description", "")
+        amt = float(item.get("amount") or item.get("total_amount") or 0.0)
+        batch_payload.append({
+            "id": item_id,
+            "merchant": m_name,
+            "description": desc,
+            "amount": round(abs(amt), 2)
+        })
+
+    try:
+        llm = get_chat_llm(temperature=0.0, timeout=timeout)
+        response = llm.invoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=json.dumps(batch_payload))
+        ])
+        content = response.content.strip() if hasattr(response, "content") else str(response).strip()
+        if "```" in content:
+            content = re.sub(r"^```(?:json)?\s*", "", content)
+            content = re.sub(r"\s*```$", "", content).strip()
+
+        parsed = json.loads(content)
+        results = {}
+        if isinstance(parsed, list):
+            for entry in parsed:
+                eid = entry.get("id")
+                cat = entry.get("category", "").strip()
+                if eid and cat in VALID_CATEGORIES:
+                    results[eid] = {
+                        "category": cat,
+                        "sub_category": str(entry.get("sub_category", "")).strip(),
+                        "tags": [str(t).strip() for t in entry.get("tags", []) if t]
+                    }
+        return results
+    except Exception as e:
+        logger.warning(f"Batch LLM classification failed: {e}")
+        return {}

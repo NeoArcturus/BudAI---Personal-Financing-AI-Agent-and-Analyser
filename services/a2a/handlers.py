@@ -1631,7 +1631,7 @@ async def handle_transaction_intake_agent(msg: A2AMessage) -> A2AResponse:
     bank_uuid = payload.get("bank_uuid")
 
     if intent in ("PROCESS_INCOMING_TRANSACTIONS", "PROCESS_TRANSACTION_BATCH"):
-        from agents.core_financial.TransactionIntake_Agent.TransactionIntakeAgent import process_transaction_lifecycle_item
+        from agents.finance.TransactionIntake_Agent.TransactionIntakeAgent import process_transaction_lifecycle_item
         from services.a2a.bus import get_a2a_bus
         bus = get_a2a_bus()
         processed_items = []
@@ -1724,7 +1724,7 @@ async def handle_vector_maintenance_agent(msg: A2AMessage) -> A2AResponse:
     payload = msg.payload
 
     if intent in ("CASCADE_MERCHANT_RELABELING", "CASCADE_RELABEL"):
-        from agents.infrastructure.VectorMaintenance_Agent.VectorMaintenanceAgent import cascade_merchant_relabeling
+        from agents.storage.VectorMaintenance_Agent.VectorMaintenanceAgent import cascade_merchant_relabeling
         clean_merchant = payload.get("clean_merchant_name") or payload.get("merchant_name")
         new_category = payload.get("new_category") or payload.get("category")
         new_sub = payload.get("new_sub_category") or payload.get("sub_category", "")
@@ -1759,7 +1759,7 @@ async def handle_vector_maintenance_agent(msg: A2AMessage) -> A2AResponse:
         )
 
     elif intent in ("AUDIT_VECTOR_DUPLICATES", "FETCH_DUPLICATES"):
-        from agents.infrastructure.VectorMaintenance_Agent.VectorMaintenanceAgent import fetch_duplicate_candidates
+        from agents.storage.VectorMaintenance_Agent.VectorMaintenanceAgent import fetch_duplicate_candidates
         dupes_json = fetch_duplicate_candidates.invoke({})
         return A2AResponse(
             reply_to_id=msg.message_id,
@@ -1772,7 +1772,7 @@ async def handle_vector_maintenance_agent(msg: A2AMessage) -> A2AResponse:
         )
 
     elif intent in ("MERGE_DUPLICATE_VECTORS", "MERGE_VECTORS"):
-        from agents.infrastructure.VectorMaintenance_Agent.VectorMaintenanceAgent import merge_duplicate_vectors
+        from agents.storage.VectorMaintenance_Agent.VectorMaintenanceAgent import merge_duplicate_vectors
         keep_id = payload.get("keep_id")
         delete_id = payload.get("delete_id")
         res = merge_duplicate_vectors.invoke({"keep_id": keep_id, "delete_id": delete_id})

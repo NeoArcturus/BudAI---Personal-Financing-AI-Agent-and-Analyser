@@ -324,7 +324,7 @@ class TrueLayerSync:
             logger.error(json.dumps({"message": f"Error in trigger_sync", "status_code": 500}), exc_info=True)
         
     def process_and_store_transactions(self, session, tx_data, user_uuid, bank_uuid, account_id):
-        from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+        from agents.finance.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         if not tx_data:
             return
         new_txs = []

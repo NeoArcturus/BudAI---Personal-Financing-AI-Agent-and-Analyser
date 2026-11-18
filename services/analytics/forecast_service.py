@@ -6,7 +6,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from sqlalchemy import text
 from config import SessionLocal
 from services.api_integrator.account_reader import AccountReader
-from agents.core_financial.Forecaster_Agent.mathematics.mathematics import (
+from agents.finance.Forecaster_Agent.mathematics.mathematics import (
     run_hybrid_engine,
     run_converged_expense_engine
 )

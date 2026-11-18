@@ -5,7 +5,7 @@ from fastapi import HTTPException, BackgroundTasks
 from sqlalchemy import text
 from models.database_models import User, Transaction
 from schemas.api_schema import TransactionLabelCorrectionRequest, RetrainCategorizerRequest
-from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+from agents.finance.Categorizer_Agent.CategorizerAgent import CategorizerAgent
 from config import SessionLocal
 from services.logger_setup import get_core_logger
 

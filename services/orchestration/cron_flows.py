@@ -83,7 +83,7 @@ def run_global_hdbscan_clustering_flow():
 
 @task(retries=2, retry_delay_seconds=120)
 def generate_proactive_insights_task():
-    from agents.core_financial.Analyser_Agent.AnalyserAgent import AnalyserAgent
+    from agents.finance.Analyser_Agent.AnalyserAgent import AnalyserAgent
     from langchain_core.messages import SystemMessage, HumanMessage
     from config import SessionLocal
     from models.database_models import User
@@ -133,7 +133,7 @@ def train_global_model_task():
         raise e
         
     try:
-        from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+        from agents.finance.Categorizer_Agent.CategorizerAgent import CategorizerAgent
         agent = CategorizerAgent()
         res = agent.train_global()
         if res.get("trained"):
@@ -217,7 +217,7 @@ def llm_categorization_sweep_task():
     # Step 2: Query unclassified merchant anchors
     from sqlalchemy import text
     from config import SessionLocal
-    from agents.core_financial.Categorizer_Agent.CategorizerAgent import CategorizerAgent
+    from agents.finance.Categorizer_Agent.CategorizerAgent import CategorizerAgent
     from langchain_core.messages import SystemMessage, HumanMessage
     import json
     

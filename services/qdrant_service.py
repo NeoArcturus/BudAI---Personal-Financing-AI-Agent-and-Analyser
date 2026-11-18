@@ -72,6 +72,15 @@ class QdrantService:
                 current_size = getattr(getattr(col_info.config.params, "vectors", None), "size", None)
                 if current_size == vector_size:
                     logger.info(f"Collection {collection_name} already exists with vector size {vector_size}.")
+                    if collection_name == "merchant_knowledge":
+                        self.ensure_payload_indexes(
+                            collection_name,
+                            {
+                                "category": models.PayloadSchemaType.KEYWORD,
+                                "clean_merchant_name": models.PayloadSchemaType.KEYWORD,
+                                "is_human_verified": models.PayloadSchemaType.BOOL
+                            }
+                        )
                     return True
                 elif current_size is not None:
                     logger.warning(f"Collection {collection_name} dimension mismatch (existing={current_size}, target={vector_size}). Recreating collection.")
@@ -97,10 +106,38 @@ class QdrantService:
                 quantization_config=quantization_config
             )
             logger.info(f"Created Qdrant collection {collection_name} (size={vector_size}, distance={distance}).")
+
+            if collection_name == "merchant_knowledge":
+                self.ensure_payload_indexes(
+                    collection_name,
+                    {
+                        "category": models.PayloadSchemaType.KEYWORD,
+                        "clean_merchant_name": models.PayloadSchemaType.KEYWORD,
+                        "is_human_verified": models.PayloadSchemaType.BOOL
+                    }
+                )
             return True
         except Exception as e:
             logger.error(f"Error creating collection {collection_name}: {e}")
             raise
+
+    def ensure_payload_indexes(self, collection_name: str, indexes: Dict[str, models.PayloadSchemaType]) -> None:
+        """
+        Ensures specified payload fields have an index for fast filtering.
+        """
+        try:
+            col_info = self.client.get_collection(collection_name)
+            existing_schemas = col_info.payload_schema or {}
+            for field_name, schema_type in indexes.items():
+                if field_name not in existing_schemas:
+                    self.client.create_payload_index(
+                        collection_name=collection_name,
+                        field_name=field_name,
+                        field_schema=schema_type
+                    )
+                    logger.info(f"Created payload index '{field_name}' ({schema_type}) on collection {collection_name}.")
+        except Exception as e:
+            logger.warning(f"Could not ensure payload indexes on {collection_name}: {e}")
 
     def upsert_vectors(
         self,
