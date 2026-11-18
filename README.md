@@ -83,9 +83,12 @@ A unified dashboard endpoint provides a complete synthesized snapshot in a singl
 
 ```
 ├── agents/                       # Specialized financial agents and analytical engines
-│   └── core_financial/
-│       └── Forecaster_Agent/
-│           └── mathematics/      # C++ simulation library and neural models
+│   ├── finance/                  # Financial intake, categorization, forecasting, and analysis
+│   │   └── Forecaster_Agent/
+│   │       └── mathematics/      # C++ simulation library and neural models
+│   ├── alloc/                    # Virtual bucket execution and capital allocation
+│   ├── analytics/                # Anomaly, health, lifestyle, and market intelligence
+│   └── storage/                  # Ledger reconciliation and vector maintenance
 ├── controllers/                  # Request handling, validation, and response formatting
 ├── middleware/                   # Authentication, CORS, and caching middleware
 ├── models/                       # Database tables, relationships, and status schemas
@@ -163,7 +166,7 @@ pip install -r requirements.txt
 Build the high-performance C++ forecasting library:
 
 ```bash
-cd agents/core_financial/Forecaster_Agent/mathematics/algorithm
+cd agents/finance/Forecaster_Agent/mathematics/algorithm
 g++ -O3 -shared -fPIC -std=c++17 -o ../hybrid_forecaster.so algorithm.cpp hybrid_algorithm.cpp
 cd ../../../../../
 ```

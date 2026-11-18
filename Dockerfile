@@ -41,12 +41,12 @@ RUN mkdir -p /app/model_cache && \
     python -c "from fastembed import TextEmbedding; m = TextEmbedding(model_name='BAAI/bge-small-en-v1.5', cache_dir='/app/model_cache', threads=1); list(m.embed(['warmup']))"
 
 # Pre-copy and compile C++ Forecaster Engine for build-layer caching
-COPY agents/core_financial/Forecaster_Agent/mathematics/algorithm /app/agents/core_financial/Forecaster_Agent/mathematics/algorithm
+COPY agents/finance/Forecaster_Agent/mathematics/algorithm /app/agents/finance/Forecaster_Agent/mathematics/algorithm
 RUN g++ -O3 -shared -fPIC -std=c++17 \
-    -I/app/agents/core_financial/Forecaster_Agent/mathematics/algorithm \
-    -o /app/agents/core_financial/Forecaster_Agent/mathematics/hybrid_forecaster.so \
-    /app/agents/core_financial/Forecaster_Agent/mathematics/algorithm/algorithm.cpp \
-    /app/agents/core_financial/Forecaster_Agent/mathematics/algorithm/hybrid_algorithm.cpp
+    -I/app/agents/finance/Forecaster_Agent/mathematics/algorithm \
+    -o /app/agents/finance/Forecaster_Agent/mathematics/hybrid_forecaster.so \
+    /app/agents/finance/Forecaster_Agent/mathematics/algorithm/algorithm.cpp \
+    /app/agents/finance/Forecaster_Agent/mathematics/algorithm/hybrid_algorithm.cpp
 
 # Copy remaining application code
 COPY . .
