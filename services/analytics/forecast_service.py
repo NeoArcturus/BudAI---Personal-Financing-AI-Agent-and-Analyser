@@ -194,9 +194,6 @@ class ForecasterEngine:
         macro_environment: str = "Stable", current_balance: Optional[float] = None
     ) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
         calendar, timeline = self.detect_upcoming_expenses(user_uuid, account_id, days)
-        if np.all(calendar == 0):
-            df = pd.DataFrame(np.zeros((1, days + 1)))
-            return df, timeline
 
         if discipline_multiplier != 1.0 or drift_adjustment != 0.0 or stress_test_active or macro_environment != "Stable":
             if discipline_multiplier < 1.0:

@@ -1,5 +1,8 @@
 import json
-from datetime import datetime, timedelta
+import math
+import calendar
+import pandas as pd
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 from sqlalchemy import text
 from sqlmodel import Session, select
@@ -42,9 +45,47 @@ class DashboardService:
         self.forecaster_engine = ForecasterEngine()
         self.ons_client = get_ons_client()
 
-    def get_full_snapshot(self, session: Session, user_uuid: str) -> Dict[str, Any]:
+    def get_full_snapshot(
+        self,
+        session: Session,
+        user_uuid: str,
+        days: Optional[int] = 30,
+        time_frame: Optional[str] = None,
+        page: int = 1,
+        limit: int = 50,
+        expense_only: bool = False,
+        currency: Optional[str] = None
+    ) -> Dict[str, Any]:
+        # -------------------------------------------------------------
+        # 0. Resolve Timeframe and Lookback Window
+        # -------------------------------------------------------------
+        resolved_days = 30
+        if time_frame:
+            tf_clean = str(time_frame).lower().strip()
+            if tf_clean in ["30", "30d"]:
+                resolved_days = 30
+            elif tf_clean in ["60", "60d"]:
+                resolved_days = 60
+            elif tf_clean in ["90", "90d"]:
+                resolved_days = 90
+            elif tf_clean in ["180", "180d"]:
+                resolved_days = 180
+            elif tf_clean in ["all", "all_time", "0"]:
+                resolved_days = 0
+            else:
+                try:
+                    resolved_days = int(tf_clean.replace("d", ""))
+                except Exception:
+                    resolved_days = 30
+        elif days is not None:
+            resolved_days = max(0, int(days))
+
+        start_date = None
+        if resolved_days > 0:
+            start_date = (datetime.now(timezone.utc) - timedelta(days=resolved_days)).replace(tzinfo=None)
+
         logger.info(json.dumps({
-            "message": f"Synthesizing complete dashboard snapshot for user {user_uuid}",
+            "message": f"Synthesizing complete dashboard snapshot for user {user_uuid} (lookback: {resolved_days}d, page: {page}, limit: {limit})",
             "status_code": 200
         }))
 
@@ -133,6 +174,7 @@ class DashboardService:
 
         # 3e. Forecaster 30-day stochastic corridors (C++ Bates engine)
         forecast_corridors = {}
+        expense_forecast = {}
         try:
             primary_acc = accounts_data[0].get("account_id") if accounts_data else "PRIMARY"
             live_bal = float(accounts_data[0].get("account_balance") or 0.0) if accounts_data else 0.0
@@ -152,9 +194,28 @@ class DashboardService:
                     "careless_bound": [round(float(v), 2) for v in sim_df["Careless"].tolist()],
                     "optimal_bound": [round(float(v), 2) for v in sim_df["Optimal"].tolist()]
                 }
+
+            # 3e-ii. Dedicated Forward-Looking Expense Forecast Simulation
+            lookback_for_params = resolved_days if resolved_days > 0 else 60
+            E0, mu_E = self.forecaster_engine.fetch_expense_parameters(primary_acc, user_uuid, lookback_days=lookback_for_params)
+            exp_df, _ = self.forecaster_engine.run_expense_simulation(
+                account_id=primary_acc,
+                E0=E0,
+                mu=mu_E,
+                user_uuid=user_uuid,
+                days=30,
+                paths=10000
+            )
+            if not exp_df.empty:
+                raw_exp_trajectory = exp_df.iloc[0].tolist()
+                expense_forecast = {
+                    "baseline_daily_expense": round(float(E0), 2),
+                    "mean_trajectory": [round(float(v), 2) for v in raw_exp_trajectory]
+                }
         except Exception as fe:
             logger.warning(f"Forecaster corridor fallback engaged: {fe}")
             forecast_corridors = {"starting_balance": total_physical_cash, "mean_trajectory": []}
+            expense_forecast = {"baseline_daily_expense": 0.0, "mean_trajectory": []}
 
         # 3f. Macroeconomic ONS benchmark
         macro_benchmark = {}
@@ -215,15 +276,40 @@ class DashboardService:
         ]
 
         # -------------------------------------------------------------
-        # 5. Recent Transactions Sample (Last 20)
+        # 5. Transactions (Time-Filtered, Paginated, and Daily Expense Points)
         # -------------------------------------------------------------
-        recent_txs = []
+        tx_items = []
+        daily_expense_points = []
+        total_count = 0
+        total_pages = 1
+        page_size = max(1, min(limit, 250))
+        current_page = max(1, page)
+        total_lookback_expense = 0.0
+        month_to_date_total = 0.0
+
         try:
             reader = AccountReader(user_id=user_uuid)
-            tx_df = reader.get_transactions(account_id=None, user_uuid=user_uuid)
+            tx_df = reader.get_transactions(
+                account_id=None,
+                user_uuid=user_uuid,
+                start_date=start_date,
+                expense_only=expense_only
+            )
             if tx_df is not None and not tx_df.empty:
-                for _, r in tx_df.head(20).iterrows():
-                    recent_txs.append({
+                tx_df['date_dt'] = pd.to_datetime(
+                    tx_df.get('date', tx_df.get('timestamp')),
+                    format='ISO8601',
+                    utc=True
+                )
+                tx_df = tx_df.sort_values('date_dt', ascending=False)
+                total_count = len(tx_df)
+                total_pages = max(1, math.ceil(total_count / page_size))
+
+                # Paginate items for the current page
+                offset = (current_page - 1) * page_size
+                page_df = tx_df.iloc[offset : offset + page_size]
+                for _, r in page_df.iterrows():
+                    tx_items.append({
                         "id": str(r.get("transaction_uuid", "")),
                         "description": str(r.get("semi_cleaned_description") or r.get("description", "")),
                         "amount": float(r.get("amount", 0.0)),
@@ -231,8 +317,63 @@ class DashboardService:
                         "date": str(r.get("date", "")),
                         "account_id": str(r.get("account_id", ""))
                     })
+
+                # Compute Daily Expense Points for the Lookback Window
+                debit_df = tx_df[tx_df['amount'] < 0].copy()
+                if not debit_df.empty:
+                    debit_df['date_str'] = debit_df['date_dt'].dt.strftime('%Y-%m-%d')
+                    debit_df['abs_amount'] = debit_df['amount'].abs()
+                    daily_map = debit_df.groupby('date_str')['abs_amount'].sum().to_dict()
+                else:
+                    daily_map = {}
+
+                # Continuous daily timeline
+                num_days_timeline = resolved_days if resolved_days > 0 else 60
+                today = datetime.now(timezone.utc).date()
+                now_year_month = today.strftime('%Y-%m')
+
+                for i in range(num_days_timeline - 1, -1, -1):
+                    d_day = today - timedelta(days=i)
+                    d_str = d_day.strftime('%Y-%m-%d')
+                    val = float(daily_map.get(d_str, 0.0))
+                    daily_expense_points.append({
+                        "date": d_str,
+                        "amount": round(val, 2)
+                    })
+                    total_lookback_expense += val
+                    if d_str.startswith(now_year_month):
+                        month_to_date_total += val
+
         except Exception as te:
-            logger.warning(f"Error fetching recent transactions sample: {te}")
+            logger.warning(f"Error fetching paginated snapshot transactions: {te}")
+
+        avg_daily = round(total_lookback_expense / max(1, len(daily_expense_points)), 2) if daily_expense_points else 0.0
+        today_date = datetime.now(timezone.utc).date()
+        days_in_month = calendar.monthrange(today_date.year, today_date.month)[1]
+        remaining_days = max(0, days_in_month - today_date.day)
+        projected_month = round(month_to_date_total + (avg_daily * remaining_days), 2)
+
+        transactions_payload = {
+            "items": tx_items,
+            "pagination": {
+                "total_count": total_count,
+                "page": current_page,
+                "limit": page_size,
+                "total_pages": total_pages,
+                "has_more": current_page < total_pages
+            },
+            "filter": {
+                "days": resolved_days,
+                "time_frame": time_frame or (f"{resolved_days}d" if resolved_days > 0 else "all"),
+                "expense_only": expense_only
+            },
+            "daily_expense_points": daily_expense_points,
+            "summary": {
+                "average_daily_expense": avg_daily,
+                "month_to_date_total": round(month_to_date_total, 2),
+                "projected_month_total": projected_month
+            }
+        }
 
         # -------------------------------------------------------------
         # Consolidated Full Snapshot Payload
@@ -255,11 +396,13 @@ class DashboardService:
                 "surge_status": surge_status,
                 "lifestyle_profile": lifestyle_profile,
                 "forecaster": forecast_corridors,
+                "expense_forecast": expense_forecast,
                 "macro_benchmark": macro_benchmark
             },
             "alerts": alerts_data,
             "transfer_suggestions": suggestions_data,
-            "recent_transactions": recent_txs
+            "transactions": transactions_payload,
+            "recent_transactions": tx_items[:20]
         }
 
         return snapshot
