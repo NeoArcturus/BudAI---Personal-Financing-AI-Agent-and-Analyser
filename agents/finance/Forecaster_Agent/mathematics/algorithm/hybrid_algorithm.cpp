@@ -52,49 +52,4 @@ extern "C"
 
         return 0;
     }
-
-    int run_converged_expense_forecast_v2(
-        double E0, double mu, int buffer_size, int paths, 
-        const char *account_id, const double *deterministic_calendar,
-        double *expected_out
-    ) {
-        HestonParams hp = {E0, 0.04, 2.0, 0.04, 0.1, -0.5};
-        JumpParams jp = {0.1, -0.05, 0.1};
-        double dt = 1.0;
-        int days = buffer_size - 1;
-
-        std::hash<std::string> hasher;
-        int seed = static_cast<int>(hasher(std::string(account_id)));
-
-        std::vector<double> final_paths = heston_jump_mc(hp, jp, mu, dt, days, paths, seed, deterministic_calendar);
-        if (final_paths.empty()) return 1;
-
-        double historical_expected_total = 0.0;
-        for (int t = 1; t <= days; ++t) {
-            historical_expected_total += E0 * exp(mu * t);
-        }
-
-        int best_path_idx = 0;
-        double smallest_difference = 1e18;
-
-        for (int i = 0; i < paths; ++i) {
-            double path_sum = 0.0;
-            const size_t path_offset = static_cast<size_t>(i) * buffer_size;
-            for (int j = 1; j < buffer_size; ++j) {
-                path_sum += final_paths[path_offset + j];
-            }
-            double diff = std::abs(path_sum - historical_expected_total);
-            if (diff < smallest_difference) {
-                smallest_difference = diff;
-                best_path_idx = i;
-            }
-        }
-
-        const size_t best_offset = static_cast<size_t>(best_path_idx) * buffer_size;
-        for (int j = 0; j < buffer_size; ++j) {
-            expected_out[j] = final_paths[best_offset + j];
-        }
-
-        return 0;
-    }
 }

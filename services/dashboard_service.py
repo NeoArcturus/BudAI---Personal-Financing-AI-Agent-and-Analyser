@@ -23,6 +23,7 @@ from services.analytics.detection_pipelines import run_detection_pipelines
 from services.analytics.surge_detector import get_surge_detector
 from services.analytics.lifestyle_clustering import LifestyleClusteringService
 from services.analytics.forecast_service import ForecasterEngine
+from agents.finance.Forecaster_Agent.mathematics.mathematics import generate_expense_forecast_trajectories
 from services.analytics.ons_client import get_ons_client
 
 logger = get_core_logger(__name__)
@@ -188,34 +189,40 @@ class DashboardService:
                 paths=10000
             )
             if not sim_df.empty:
+                exp_vals = sim_df.iloc[0].tolist() if len(sim_df) > 0 else []
+                care_vals = sim_df.iloc[1].tolist() if len(sim_df) > 1 else []
+                opt_vals = sim_df.iloc[2].tolist() if len(sim_df) > 2 else []
                 forecast_corridors = {
                     "starting_balance": round(float(S0), 2),
-                    "mean_trajectory": [round(float(v), 2) for v in sim_df["Mean"].tolist()],
-                    "careless_bound": [round(float(v), 2) for v in sim_df["Careless"].tolist()],
-                    "optimal_bound": [round(float(v), 2) for v in sim_df["Optimal"].tolist()]
+                    "mean_trajectory": [round(float(v), 2) for v in exp_vals],
+                    "careless_bound": [round(float(v), 2) for v in care_vals],
+                    "optimal_bound": [round(float(v), 2) for v in opt_vals]
                 }
 
             # 3e-ii. Dedicated Forward-Looking Expense Forecast Simulation
             lookback_for_params = resolved_days if resolved_days > 0 else 60
             E0, mu_E = self.forecaster_engine.fetch_expense_parameters(primary_acc, user_uuid, lookback_days=lookback_for_params)
-            exp_df, _ = self.forecaster_engine.run_expense_simulation(
+            calendar_arr, _ = self.forecaster_engine.detect_upcoming_expenses(user_uuid, primary_acc, days=30)
+            expense_forecast = generate_expense_forecast_trajectories(
+                user_uuid=user_uuid,
                 account_id=primary_acc,
                 E0=E0,
-                mu=mu_E,
-                user_uuid=user_uuid,
+                mu_E=mu_E,
                 days=30,
-                paths=10000
+                surge_status=surge_status,
+                deterministic_calendar=calendar_arr
             )
-            if not exp_df.empty:
-                raw_exp_trajectory = exp_df.iloc[0].tolist()
-                expense_forecast = {
-                    "baseline_daily_expense": round(float(E0), 2),
-                    "mean_trajectory": [round(float(v), 2) for v in raw_exp_trajectory]
-                }
         except Exception as fe:
             logger.warning(f"Forecaster corridor fallback engaged: {fe}")
             forecast_corridors = {"starting_balance": total_physical_cash, "mean_trajectory": []}
-            expense_forecast = {"baseline_daily_expense": 0.0, "mean_trajectory": []}
+            expense_forecast = {
+                "timeline": [],
+                "last_month_name": "Previous Month",
+                "rates": {"current_daily_rate": 0.0, "optimal_daily_rate": 0.0, "last_month_daily_rate": 0.0},
+                "trajectories": {"expected": [], "optimal": [], "last_month": [], "careless": None},
+                "bounds": {"Mean": [], "Optimal": [], "LastMonth": [], "Careless": None},
+                "surge_status": {"is_active": False, "z_score": 0.0, "driver_merchant": None, "driver_category": None}
+            }
 
         # 3f. Macroeconomic ONS benchmark
         macro_benchmark = {}
