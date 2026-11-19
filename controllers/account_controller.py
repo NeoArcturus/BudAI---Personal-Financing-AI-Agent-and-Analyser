@@ -166,3 +166,28 @@ async def revoke_connection(user_uuid: str, provider_id: str):
             "status_code": 500
         }))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def reconcile_multicurrency_transactions(user_uuid: str):
+    """
+    Reconciles multi-currency split transactions and fees for the user.
+    """
+    try:
+        from services.analytics.multicurrency_reconciliation_service import get_multicurrency_reconciliation_service
+        from utils.cache_utils import clear_user_cache
+
+        reconciler = get_multicurrency_reconciliation_service()
+        res = await asyncio.to_thread(reconciler.reconcile_user_transactions, user_uuid)
+
+        clear_user_cache(str(user_uuid), namespace="accounts")
+        clear_user_cache(str(user_uuid), namespace="transactions")
+        clear_user_cache(str(user_uuid), namespace="categorizer")
+
+        return res
+    except Exception as e:
+        logger.error(json.dumps({
+            "message": f"Error during multi-currency reconciliation for user {user_uuid}: {str(e)}",
+            "status_code": 500
+        }))
+        raise HTTPException(status_code=500, detail=str(e))
+

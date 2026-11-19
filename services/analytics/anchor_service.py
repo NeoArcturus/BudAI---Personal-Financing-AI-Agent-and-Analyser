@@ -48,8 +48,10 @@ def clean_merchant_string(raw_desc: str) -> str:
     text_clean = re.sub(r"(?i)^(?:EUR|GBP|USD|INR)\s+", "", text_clean)
     # Strip phone numbers (e.g. "0161 244 1000")
     text_clean = re.sub(r"\b0\d{2,4}\s?\d{3,4}\s?\d{3,4}\b", "", text_clean)
-    # Strip web URLs like g.co/helppay#, aws.amazon.co
-    text_clean = re.sub(r"(?i)[a-z0-9\.\-]+\.(co|com|org|net|io|me)(/[^\s]*)?", "", text_clean)
+    # Strip web URLs like g.co/helppay#, aws.amazon.co, but preserve domain base name if it is the merchant
+    text_clean = re.sub(r"(?i)\b(?:g\.co|aws\.amazon\.co|help\.[\w\.]+)\S*", "", text_clean)
+    text_clean = re.sub(r"(?i)\.(?:com|org|net|io|me|co\.uk)\b", "", text_clean)
+    text_clean = re.sub(r"\b\d{6,}\b", "", text_clean)
     # Strip card identifiers: "CARD-4274153354", "*G1ai101m"
     text_clean = re.sub(r"(?i)CARD-\d+", "", text_clean)
     text_clean = re.sub(r"\*[A-Za-z0-9]+", "", text_clean)

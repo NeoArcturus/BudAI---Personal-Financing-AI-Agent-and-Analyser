@@ -314,7 +314,7 @@ class CategorizerAgent:
             tx.sub_category = sub_cat
             tx.tags = tags
 
-            # If transaction is linked to a Merchant Anchor, update the anchor directly
+            # If transaction is linked to a Merchant Anchor, update the anchor and all sibling transactions directly
             if tx.merchant_knowledge_uuid:
                 update_query = text("""
                     UPDATE merchant_knowledge
@@ -325,6 +325,15 @@ class CategorizerAgent:
                     "cat": cat,
                     "sub_cat": sub_cat,
                     "tags": json.dumps(tags),
+                    "uuid": tx.merchant_knowledge_uuid
+                })
+                # Cascade sub_category update across all sibling transactions sharing this merchant_knowledge_uuid
+                session.execute(text("""
+                    UPDATE transactions
+                    SET sub_category = :sub_cat
+                    WHERE merchant_knowledge_uuid = :uuid
+                """), {
+                    "sub_cat": sub_cat,
                     "uuid": tx.merchant_knowledge_uuid
                 })
                 try:

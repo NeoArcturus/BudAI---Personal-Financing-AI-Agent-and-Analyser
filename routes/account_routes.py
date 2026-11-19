@@ -13,7 +13,8 @@ from controllers.account_controller import (
     search_user_transactions,
     sync_accounts,
     extend_bank_connection,
-    revoke_connection
+    revoke_connection,
+    reconcile_multicurrency_transactions
 )
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -22,6 +23,11 @@ router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 @router.get("")
 async def get_accounts_route(current_user: User = Depends(get_current_user)):
     return await fetch_user_accounts(current_user.user_uuid)
+
+
+@router.post("/transactions/reconcile")
+async def reconcile_transactions_route(current_user: User = Depends(get_current_user)):
+    return await reconcile_multicurrency_transactions(current_user.user_uuid)
 
 
 @router.get("/transactions/search")

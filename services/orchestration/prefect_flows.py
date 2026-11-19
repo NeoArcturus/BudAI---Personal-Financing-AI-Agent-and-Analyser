@@ -217,6 +217,12 @@ def flow_ingest_account_transactions_1yr(account_id: str, user_uuid: str, bank_u
         except Exception:
             pass
 
+        # Multi-currency split & fee reconciliation check
+        try:
+            task_reconcile_multicurrency_transactions(user_uuid)
+        except Exception as recon_err:
+            logger.warning(f"Multi-currency reconciliation task skipped or failed for user {user_uuid}: {recon_err}")
+
         if sync_result and sync_result.get("status") in ["synced", "aligned"]:
             flow_agent_evaluation_loop(sync_result, user_uuid)
 
@@ -270,6 +276,19 @@ def task_scheduled_maintenance():
 def flow_scheduled_maintenance():
     logger.info("Executing unified Prefect scheduled maintenance flow...")
     task_scheduled_maintenance()
+
+
+@task(retries=2, retry_delay_seconds=10)
+def task_reconcile_multicurrency_transactions(user_uuid: str) -> dict:
+    from services.analytics.multicurrency_reconciliation_service import get_multicurrency_reconciliation_service
+    reconciler = get_multicurrency_reconciliation_service()
+    return reconciler.reconcile_user_transactions(user_uuid)
+
+
+@flow(name="Prefect_Multi_Currency_Reconciliation")
+def flow_reconcile_multicurrency_transactions(user_uuid: str) -> dict:
+    logger.info(f"Starting Prefect multi-currency reconciliation for user {user_uuid}")
+    return task_reconcile_multicurrency_transactions(user_uuid)
 
 
 

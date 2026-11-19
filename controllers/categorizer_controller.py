@@ -120,6 +120,13 @@ async def save_manual_label(payload: TransactionLabelCorrectionRequest, backgrou
         if payload.retrain_model:
             background_tasks.add_task(background_retrain_and_recategorize, current_user.user_uuid, payload.transaction_uuid, normalized_label, task_id)
 
+        # Trigger background multi-currency reconciliation to ensure all sibling legs and fees stay synchronized
+        from services.analytics.multicurrency_reconciliation_service import get_multicurrency_reconciliation_service
+        background_tasks.add_task(
+            get_multicurrency_reconciliation_service().reconcile_user_transactions,
+            current_user.user_uuid
+        )
+
         from utils.cache_utils import clear_user_cache
         clear_user_cache(str(current_user.user_uuid), namespace="transactions")
         clear_user_cache(str(current_user.user_uuid), namespace="categorizer")

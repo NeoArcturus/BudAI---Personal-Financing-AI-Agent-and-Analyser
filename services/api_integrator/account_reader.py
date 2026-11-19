@@ -200,6 +200,7 @@ class AccountReader:
                 
                 transactions = []
                 for tx, mk in results:
+                    combined_tags = sorted(list(set((tx.tags or []) + (mk.tags if mk and mk.tags else []))))
                     transactions.append({
                         "transaction_id": tx.transaction_uuid,
                         "timestamp": tx.date.isoformat() if tx.date else None,
@@ -208,8 +209,10 @@ class AccountReader:
                         "currency": tx.currency,
                         "description": tx.description,
                         "category": mk.category if mk else "Uncategorized",
-                        "sub_category": mk.sub_category if mk else None,
-                        "tags": mk.tags if mk else [],
+                        "sub_category": tx.sub_category or (mk.sub_category if mk else None),
+                        "tags": combined_tags,
+                        "merchant_knowledge_uuid": tx.merchant_knowledge_uuid,
+                        "clean_merchant_name": mk.clean_merchant_name if mk else None,
                         "bank_uuid": tx.bank_uuid,
                         "account_id": tx.account_id
                     })
