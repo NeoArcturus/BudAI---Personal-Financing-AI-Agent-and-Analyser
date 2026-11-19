@@ -29,6 +29,7 @@ import {
   Accordion,
   Chip,
 } from "@heroui/react";
+import type { Key } from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
 import { formatCurrency, getCurrencySymbol } from "@/lib/currency";
 import { apiFetch } from "@/lib/api";
@@ -111,7 +112,7 @@ function cleanMerchantName(raw: string): string {
 function estimateGbp(amount: number, currency: string = "GBP"): number {
   const c = currency.toUpperCase().trim();
   if (c === "GBP") return amount;
-  if (c === "EUR") return amount * 0.845;
+  if (c === "EUR") return amount * 0.83;
   if (c === "USD") return amount * 0.785;
   return amount;
 }
@@ -131,6 +132,9 @@ export default function TransactionsPage() {
   const [amountFilter, setAmountFilter] = useState<AmountFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("date_desc");
+
+  // Controlled Accordion State for Multi-Currency Split Payments
+  const [expandedSplitKeys, setExpandedSplitKeys] = useState<Set<Key>>(new Set());
 
   // Loading States
   const [isSyncing, setIsSyncing] = useState(false);
@@ -277,8 +281,9 @@ export default function TransactionsPage() {
       cleanMerchantName(t.merchant_name || t.description || "");
 
     // Identify split clusters
-    // Clusters exist when transactions share merchant_knowledge_uuid, split tags,
-    // or timestamp cluster with Recharge.com / Wise fee patterns
+    // Clusters exist when transactions share merchant_knowledge_uuid (from backend reconciliation),
+    // or explicit card transactions + fee legs / multi-currency legs.
+    // Ordinary single-currency bank transfers (e.g. to friends, savings, or repeat charges) MUST NEVER be grouped.
     const splitClusters: Map<string, Transaction[]> = new Map();
     const assignedTxIds = new Set<string>();
 
@@ -296,7 +301,16 @@ export default function TransactionsPage() {
         tags.includes("#multi_currency") ||
         tags.includes("#fx_fee");
 
-      // Check for related transactions within temporal cluster
+      // Only attempt clustering if transaction has explicit split indicators:
+      // backend reconciliation UUID, card transaction format, split tags, or fee leg
+      const hasSplitIndicators =
+        Boolean((t as any).merchant_knowledge_uuid) ||
+        isCardTxn ||
+        hasSplitTag ||
+        isFee;
+
+      if (!hasSplitIndicators) continue;
+
       const cluster: Transaction[] = [t];
       const tTime = t.date ? new Date(t.date).getTime() : 0;
       const cleanM = getClean(t);
@@ -308,23 +322,38 @@ export default function TransactionsPage() {
         if (assignedTxIds.has(otherId)) continue;
 
         const otherDesc = other.description || "";
+        const otherIsCardTxn = CARD_TXN_RE.test(otherDesc);
+        const otherIsFee =
+          WISE_FEE_RE.test(otherDesc) || GENERIC_FEE_RE.test(otherDesc);
+        const otherTags = other.tags || [];
+        const otherHasSplitTag =
+          otherTags.includes("#split_payment") ||
+          otherTags.includes("#multi_currency") ||
+          otherTags.includes("#fx_fee");
+
         const otherTime = other.date ? new Date(other.date).getTime() : 0;
         const timeDiffSec = Math.abs(tTime - otherTime) / 1000;
 
+        // Condition 1: Shared backend reconciliation UUID
         const sameKnowledge =
-          (t as any).merchant_knowledge_uuid &&
+          Boolean((t as any).merchant_knowledge_uuid) &&
           (t as any).merchant_knowledge_uuid ===
             (other as any).merchant_knowledge_uuid;
 
+        // Condition 2: Card transaction / split tag paired with an associated fee leg
         const isRelatedFee =
-          timeDiffSec <= 60 &&
-          (isCardTxn || hasSplitTag) &&
-          (WISE_FEE_RE.test(otherDesc) || GENERIC_FEE_RE.test(otherDesc));
+          timeDiffSec <= 300 &&
+          (((isCardTxn || hasSplitTag) && otherIsFee) ||
+            ((otherIsCardTxn || otherHasSplitTag) && isFee));
 
+        // Condition 3: Card transaction split across different currencies or different accounts
         const isRelatedCardLeg =
-          timeDiffSec <= 60 &&
+          timeDiffSec <= 300 &&
+          (isCardTxn || hasSplitTag) &&
+          (otherIsCardTxn || otherHasSplitTag) &&
           cleanM.toLowerCase() === getClean(other).toLowerCase() &&
-          cleanM.length > 3;
+          cleanM.length > 3 &&
+          (t.currency !== other.currency || t.account_id !== other.account_id);
 
         if (sameKnowledge || isRelatedFee || isRelatedCardLeg) {
           cluster.push(other);
@@ -334,7 +363,9 @@ export default function TransactionsPage() {
 
       if (cluster.length > 1) {
         assignedTxIds.add(tid);
-        const groupKey = `split_${cleanM.toLowerCase().replace(/\s+/g, "_")}_${t.date?.slice(0, 10)}`;
+        const groupKey =
+          (t as any).merchant_knowledge_uuid ||
+          `split_${cleanM.toLowerCase().replace(/[^a-z0-9]/g, "_")}_${t.date?.slice(0, 10)}`;
         splitClusters.set(groupKey, cluster);
       }
     }
@@ -368,7 +399,12 @@ export default function TransactionsPage() {
             addedClusterKeys.add(foundClusterKey);
             const cluster = splitClusters.get(foundClusterKey)!;
             const primaryLeg =
-              cluster.find((c) => (c.amount || 0) < -1) || cluster[0];
+              cluster.find(
+                (c) =>
+                  (c.amount || 0) < -1 &&
+                  !WISE_FEE_RE.test(c.description || "") &&
+                  !GENERIC_FEE_RE.test(c.description || "")
+              ) || cluster[0];
             const cleanName = getClean(primaryLeg);
 
             // Compute converted total in GBP
@@ -1035,34 +1071,34 @@ export default function TransactionsPage() {
             <table className="w-full text-left text-xs">
               <thead className="bg-foreground/5 text-muted-foreground font-semibold border-b border-border text-[11px] uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-4 w-[14%]">Date</th>
-                  <th className="py-3 px-4 w-[38%]">Description / Merchant</th>
+                  <th className="py-3 px-4 w-[13%]">Date</th>
+                  <th className="py-3 px-4 w-[35%]">Description / Merchant</th>
                   <th className="py-3 px-4 w-[18%]">Category</th>
                   <th className="py-3 px-4 w-[10%]">Status</th>
                   <th className="py-3 px-4 w-[12%] text-right">Amount</th>
-                  <th className="py-3 px-4 w-[8%] text-center">Action</th>
+                  <th className="py-3 px-4 w-[12%] text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
                 {isLoading ? (
                   [1, 2, 3, 4, 5, 6].map((i) => (
                     <tr key={i} className="animate-pulse">
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 w-[13%]">
                         <Skeleton className="h-3 w-16 rounded" />
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 w-[35%]">
                         <Skeleton className="h-3 w-40 rounded" />
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 w-[18%]">
                         <Skeleton className="h-3 w-24 rounded" />
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 w-[10%]">
                         <Skeleton className="h-3 w-16 rounded" />
                       </td>
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3 px-4 w-[12%] text-right">
                         <Skeleton className="h-3 w-16 rounded ml-auto" />
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-3 px-4 w-[12%] text-center">
                         <Skeleton className="h-3 w-10 rounded mx-auto" />
                       </td>
                     </tr>
@@ -1087,6 +1123,7 @@ export default function TransactionsPage() {
                   displayItems.map((item) => {
                     // Check if this item is a Parent Split Card (Only in ALL accounts view)
                     if (item.is_split_parent) {
+                      const isExpanded = expandedSplitKeys.has(item.group_id);
                       const formattedDate = item.date
                         ? new Date(item.date).toLocaleDateString("en-GB", {
                             year: "numeric",
@@ -1114,16 +1151,52 @@ export default function TransactionsPage() {
                           className="hover:bg-foreground/[0.02] transition-colors border-b border-border/40"
                         >
                           <td colSpan={6} className="p-0">
-                            <Accordion className="w-full">
-                              <Accordion.Item className="border-none">
-                                <div className="grid grid-cols-12 items-center w-full py-3.5 px-4 gap-2 text-xs">
+                            <Accordion
+                              allowsMultipleExpanded
+                              expandedKeys={isExpanded ? new Set([item.group_id]) : new Set()}
+                              onExpandedChange={(keys) => {
+                                setExpandedSplitKeys((prev) => {
+                                  const next = new Set(prev);
+                                  if (keys.has(item.group_id)) {
+                                    next.add(item.group_id);
+                                  } else {
+                                    next.delete(item.group_id);
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="w-full"
+                            >
+                              <Accordion.Item id={item.group_id} className="border-none">
+                                <div
+                                  onClick={(e) => {
+                                    const target = e.target as HTMLElement;
+                                    if (
+                                      target.closest(
+                                        "button, [role='button'], a, input, [data-slot='dropdown-trigger']"
+                                      )
+                                    ) {
+                                      return;
+                                    }
+                                    setExpandedSplitKeys((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(item.group_id)) {
+                                        next.delete(item.group_id);
+                                      } else {
+                                        next.add(item.group_id);
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                  className="flex items-center w-full py-3.5 px-4 text-xs cursor-pointer select-none"
+                                >
                                   {/* Date */}
-                                  <div className="col-span-2 font-mono text-muted-foreground whitespace-nowrap">
+                                  <div className="w-[13%] font-mono text-muted-foreground whitespace-nowrap">
                                     {formattedDate}
                                   </div>
 
                                   {/* Merchant + Split Payment Badge */}
-                                  <div className="col-span-4 flex items-center gap-2 min-w-0 pr-2">
+                                  <div className="w-[35%] flex items-center gap-2 min-w-0 pr-2">
                                     <Tooltip delay={100}>
                                       <Tooltip.Trigger className="truncate max-w-full block cursor-pointer text-left outline-none">
                                         <span className="font-bold text-foreground hover:text-primary transition-colors truncate">
@@ -1204,7 +1277,7 @@ export default function TransactionsPage() {
                                   </div>
 
                                   {/* Category */}
-                                  <div className="col-span-2 whitespace-nowrap">
+                                  <div className="w-[18%] whitespace-nowrap">
                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-foreground/5 border border-border">
                                       <Tag size={10} className="text-muted-foreground" />
                                       <span>{item.category}</span>
@@ -1212,7 +1285,7 @@ export default function TransactionsPage() {
                                   </div>
 
                                   {/* Status */}
-                                  <div className="col-span-1 whitespace-nowrap">
+                                  <div className="w-[10%] whitespace-nowrap">
                                     {isPending ? (
                                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20">
                                         <Clock size={10} />
@@ -1227,7 +1300,7 @@ export default function TransactionsPage() {
                                   </div>
 
                                   {/* Converted Total Amount */}
-                                  <div className="col-span-2 text-right font-mono font-bold whitespace-nowrap">
+                                  <div className="w-[12%] text-right font-mono font-bold whitespace-nowrap">
                                     <span
                                       className={
                                         isCredit
@@ -1240,8 +1313,8 @@ export default function TransactionsPage() {
                                     </span>
                                   </div>
 
-                                  {/* Action & Accordion Indicator */}
-                                  <div className="col-span-1 flex items-center justify-end gap-2 whitespace-nowrap">
+                                  {/* Action & Accordion Trigger */}
+                                  <div className="w-[12%] flex items-center justify-end gap-2.5 whitespace-nowrap">
                                     <Dropdown>
                                       <Button
                                         variant="ghost"
@@ -1272,11 +1345,16 @@ export default function TransactionsPage() {
                                     </Dropdown>
 
                                     <Accordion.Heading>
-                                      <Accordion.Trigger className="p-1 rounded-md hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none">
+                                      <Accordion.Trigger
+                                        aria-label="Toggle split payment details"
+                                        className="flex items-center justify-center size-7 rounded-lg hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none border border-border/40 hover:border-border shrink-0"
+                                      >
                                         <Accordion.Indicator>
                                           <ChevronDown
                                             size={14}
-                                            className="transition-transform duration-200"
+                                            className={`transition-transform duration-200 ${
+                                              isExpanded ? "rotate-180" : ""
+                                            }`}
                                           />
                                         </Accordion.Indicator>
                                       </Accordion.Trigger>
@@ -1399,10 +1477,10 @@ export default function TransactionsPage() {
                             : ""
                         }`}
                       >
-                        <td className="py-3 px-4 font-mono text-muted-foreground whitespace-nowrap">
+                        <td className="py-3 px-4 w-[13%] font-mono text-muted-foreground whitespace-nowrap">
                           {formattedDate}
                         </td>
-                        <td className="py-3 px-4 max-w-[280px]">
+                        <td className="py-3 px-4 w-[35%] max-w-[280px]">
                           <div className="flex items-center gap-2">
                             <Tooltip delay={100}>
                               <Tooltip.Trigger className="truncate max-w-full block cursor-pointer text-left outline-none">
@@ -1521,13 +1599,13 @@ export default function TransactionsPage() {
                             )}
                           </div>
                         </td>
-                        <td className="py-3 px-4 whitespace-nowrap">
+                        <td className="py-3 px-4 w-[18%] whitespace-nowrap">
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-foreground/5 border border-border">
                             <Tag size={10} className="text-muted-foreground" />
                             <span>{cat}</span>
                           </span>
                         </td>
-                        <td className="py-3 px-4 whitespace-nowrap">
+                        <td className="py-3 px-4 w-[10%] whitespace-nowrap">
                           {isPending ? (
                             <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20">
                               <Clock size={10} />
@@ -1540,7 +1618,7 @@ export default function TransactionsPage() {
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-bold whitespace-nowrap">
+                        <td className="py-3 px-4 w-[12%] text-right font-mono font-bold whitespace-nowrap">
                           <span
                             className={
                               isCredit
@@ -1552,7 +1630,7 @@ export default function TransactionsPage() {
                             {formatCurrency(amt, tx.currency || activeCurrency)}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <td className="py-3 px-4 w-[12%] text-center whitespace-nowrap">
                           <Dropdown>
                             <Button
                               variant="ghost"

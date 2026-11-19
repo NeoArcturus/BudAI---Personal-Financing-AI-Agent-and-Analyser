@@ -13,7 +13,19 @@ import { DefaultChatTransport } from "ai";
 
 import { AdvisorSidebar, BudAIChatSession } from "./components/AdvisorSidebar";
 import { MemoizedChatMessage } from "./components/MemoizedChatMessage";
-import { ChatInputArea, VerbosityMode } from "./components/ChatInputArea";
+import {
+  MessageScrollerProvider,
+  MessageScroller,
+  MessageScrollerViewport,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerButton,
+  ContextMeter,
+  PromptInput,
+  DetailLevel,
+} from "@/components/ai-elements";
+
+export type VerbosityMode = DetailLevel;
 
 interface BudAIChatMessage {
   role: "user" | "assistant" | "system" | "data";
@@ -307,6 +319,19 @@ export default function AdvisorPage() {
     lastMessage?.annotations?.some((ann) => ann.type === "htil_interrupt"),
   );
 
+  const currentTokens = React.useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      const tel = msg.annotations?.find((a) => a.type === "telemetry") as
+        | { tokens?: number }
+        | undefined;
+      if (tel?.tokens) return tel.tokens;
+      if (msg.usage?.totalTokens) return msg.usage.totalTokens;
+      if (msg.usage?.completionTokens) return msg.usage.completionTokens;
+    }
+    return 0;
+  }, [messages]);
+
   return (
     <div className="flex h-full w-full bg-background text-foreground font-sans overflow-hidden transition-colors duration-500">
       <AdvisorSidebar
@@ -323,7 +348,6 @@ export default function AdvisorPage() {
         <header className="h-16 flex items-center justify-between py-4 px-6 border-b border-white/10 shrink-0 bg-black/20 backdrop-blur-xl z-20">
           <div className="flex flex-col">
             <div className="flex items-center gap-3 mt-1">
-
               <Text className="text-foreground font-black text-[13px] uppercase tracking-tight">
                 {activeSessionId ? "Advisory Session" : "New Session"}
               </Text>
@@ -347,81 +371,93 @@ export default function AdvisorPage() {
               )}
             </div>
             {activeSessionId && (
-              <span className="text-foreground/30 text-[10px] font-medium tracking-widest uppercase ml-8">
+              <span className="text-foreground/30 text-[10px] font-medium tracking-widest uppercase ml-1">
                 ID: {activeSessionId.split("-")[0]}
               </span>
             )}
           </div>
+
+          <div className="flex items-center gap-2">
+            <ContextMeter tokens={currentTokens} limit={128000} />
+          </div>
         </header>
 
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto px-4 sm:px-10 py-10 scroll-smooth relative z-10 custom-scrollbar"
-        >
-          {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-foreground/30">
-
-              <Text className="text-lg font-bold tracking-tighter uppercase mb-2">
-                New Session
-              </Text>
-              <Text className="text-xs tracking-widest font-medium uppercase opacity-50 text-center max-w-sm leading-relaxed">
-                How can I assist with your finances today?
-              </Text>
-              <div className="grid grid-cols-2 gap-4 w-full max-w-2xl mt-12">
-                {[
-                  "Analyze my latest spending trends",
-                  "What's my cash flow looking like?",
-                  "Review my high-value transactions",
-                  "Review my account summary",
-                ].map((hint, idx) => (
-                  <Button
-                    key={idx}
-                    onPress={() => handleSend(hint)}
-                    className="h-16 bg-white/2 border border-white/5 hover:bg-white/5 hover:border-primary/30 flex items-center justify-start px-6 rounded-xl transition-all group cursor-pointer"
-                  >
-                    <span className="text-[10px] font-black text-foreground/50 group-hover:text-primary uppercase tracking-widest text-left whitespace-normal leading-tight">
-                      {hint}
-                    </span>
-                  </Button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-8 max-w-4xl mx-auto w-full">
-              {messages.map((message, i) => (
-                <MemoizedChatMessage
-                  key={message.id || i}
-                  message={message}
-                  status={status}
-                  isLastMessage={i === messages.length - 1}
-                  sendMessage={sendMessage}
-                  activeSessionId={activeSessionId}
-                  showReasoning={showReasoning}
-                />
-              ))}
-
-              {error && (
-                <div className="flex justify-center my-4">
-                  <div className="bg-danger/20 text-danger text-xs font-black uppercase tracking-widest px-4 py-2 rounded-full border border-danger/30">
-                    Connection Error. Retrying...
+        <MessageScrollerProvider autoScroll>
+          <MessageScroller>
+            <MessageScrollerViewport>
+              <MessageScrollerContent>
+                {messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-foreground/30">
+                    <Text className="text-lg font-bold tracking-tighter uppercase mb-2">
+                      New Session
+                    </Text>
+                    <Text className="text-xs tracking-widest font-medium uppercase opacity-50 text-center max-w-sm leading-relaxed">
+                      How can I assist with your finances today?
+                    </Text>
+                    <div className="grid grid-cols-2 gap-4 w-full max-w-2xl mt-12">
+                      {[
+                        "Analyze my latest spending trends",
+                        "What's my cash flow looking like?",
+                        "Review my high-value transactions",
+                        "Review my account summary",
+                      ].map((hint, idx) => (
+                        <Button
+                          key={idx}
+                          onPress={() => handleSend(hint)}
+                          className="h-16 bg-white/2 border border-white/5 hover:bg-white/5 hover:border-primary/30 flex items-center justify-start px-6 rounded-xl transition-all group cursor-pointer"
+                        >
+                          <span className="text-[10px] font-black text-foreground/50 group-hover:text-primary uppercase tracking-widest text-left whitespace-normal leading-tight">
+                            {hint}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+                ) : (
+                  <>
+                    {messages.map((message, i) => (
+                      <MessageScrollerItem
+                        key={message.id || i}
+                        messageId={message.id}
+                        scrollAnchor={message.role === "user"}
+                      >
+                        <MemoizedChatMessage
+                          message={message}
+                          status={status}
+                          isLastMessage={i === messages.length - 1}
+                          sendMessage={sendMessage}
+                          activeSessionId={activeSessionId}
+                          showReasoning={showReasoning}
+                        />
+                      </MessageScrollerItem>
+                    ))}
 
-        <div className="p-4 pb-12 sm:p-10 sm:pb-24 shrink-0 relative z-20">
+                    {error && (
+                      <div className="flex justify-center my-4">
+                        <div className="bg-danger/20 text-danger text-xs font-black uppercase tracking-widest px-4 py-2 rounded-full border border-danger/30">
+                          Connection Error. Retrying...
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </MessageScrollerContent>
+            </MessageScrollerViewport>
+            <MessageScrollerButton />
+          </MessageScroller>
+        </MessageScrollerProvider>
+
+        <div className="p-4 pb-8 sm:p-8 sm:pb-16 shrink-0 relative z-20">
           <div className="max-w-4xl mx-auto w-full relative">
-            <ChatInputArea
-              status={status}
-              stop={stop}
+            <PromptInput
               onSend={handleSend}
+              isGenerating={status === "streaming" || status === "submitted"}
+              onStop={stop}
               isLocked={isLocked}
-              verbosity={verbosity}
-              onVerbosityChange={handleVerbosityChange}
+              detailLevel={verbosity}
+              onDetailLevelChange={handleVerbosityChange}
             />
-            <div className="text-center mt-4">
+            <div className="text-center mt-3">
               <p className="text-[8px] text-foreground/30 uppercase tracking-[0.3em] font-black">
                 AI can make mistakes. Please verify important information.
               </p>
