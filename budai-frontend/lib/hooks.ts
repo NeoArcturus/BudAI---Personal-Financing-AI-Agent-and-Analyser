@@ -58,6 +58,30 @@ export function useAccounts(initialData?: Account[]) {
   });
 }
 
+export interface ConnectionMetadataItem {
+  bank_uuid: string;
+  bank_name: string;
+  consent_status: string;
+  needs_reauth: boolean;
+  reauth_link: string | null;
+  metadata?: Record<string, any>;
+}
+
+export function useConnectionMetadata() {
+  return useQuery({
+    queryKey: ["connections-metadata"],
+    queryFn: async (): Promise<ConnectionMetadataItem[]> => {
+      const res = await apiFetch("/api/auth/connections/metadata", {}, true);
+      if (!res.ok) return [];
+      const data = (await res.json()) as { results?: ConnectionMetadataItem[] };
+      return data.results || [];
+    },
+    staleTime: 1000 * 60 * 5,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useTransactions(
   accountId: string,
   from?: string,
@@ -95,15 +119,25 @@ export function useTransactions(
   });
 }
 
-export function useDashboardSnapshot(initialData?: any) {
+export function useDashboardSnapshot(
+  days: number = 30,
+  page: number = 1,
+  limit: number = 50,
+  initialData?: any,
+) {
   return useQuery({
-    queryKey: ["dashboard-snapshot"],
+    queryKey: ["dashboard-snapshot", days, page, limit],
     queryFn: async () => {
-      const res = await apiFetch("/api/dashboard/snapshot");
+      const res = await apiFetch(
+        `/api/dashboard/snapshot?days=${days}&page=${page}&limit=${limit}`,
+        {},
+        true,
+      );
       if (!res.ok) throw new Error("Failed to fetch dashboard snapshot");
       return res.json();
     },
     initialData,
+    placeholderData: (previousData) => previousData,
     staleTime: 1000 * 60 * 5,
     refetchInterval: false,
     refetchOnWindowFocus: false,

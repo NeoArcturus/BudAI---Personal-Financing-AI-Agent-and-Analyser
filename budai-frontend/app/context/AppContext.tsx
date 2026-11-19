@@ -118,6 +118,11 @@ interface BudAIContextType {
   selectedAccountIds: Key[];
   setSelectedAccountIds: (ids: Key[]) => void;
   snapshot: any | null;
+  snapshotDays: number;
+  setSnapshotDays: (days: number) => void;
+  snapshotPage: number;
+  setSnapshotPage: (page: number) => void;
+  isSnapshotFetching: boolean;
 }
 
 const BudAIContext = createContext<BudAIContextType | undefined>(undefined);
@@ -165,7 +170,20 @@ export const BudAIProvider = ({
     return () => window.removeEventListener("budai-unauthorized", handleUnauthorized);
   }, [router]);
 
-  const { data: snapshot = initialSnapshot } = useDashboardSnapshot(initialSnapshot);
+  const [snapshotDays, setSnapshotDays] = useState<number>(30);
+  const [snapshotPage, setSnapshotPage] = useState<number>(1);
+
+  const handleSetSnapshotDays = (days: number) => {
+    setSnapshotDays(days);
+    setSnapshotPage(1);
+  };
+
+  const { data: snapshot = initialSnapshot, isFetching: isSnapshotFetching } = useDashboardSnapshot(
+    snapshotDays,
+    snapshotPage,
+    50,
+    initialSnapshot,
+  );
   const accountsFromSnapshot: Account[] =
     snapshot?.financial_anchor?.connected_accounts ||
     initialSnapshot?.financial_anchor?.connected_accounts ||
@@ -529,6 +547,11 @@ export const BudAIProvider = ({
         selectedAccountIds,
         setSelectedAccountIds,
         snapshot,
+        snapshotDays,
+        setSnapshotDays: handleSetSnapshotDays,
+        snapshotPage,
+        setSnapshotPage,
+        isSnapshotFetching,
       }}
     >
       {children}

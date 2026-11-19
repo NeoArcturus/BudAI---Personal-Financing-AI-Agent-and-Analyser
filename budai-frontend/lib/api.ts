@@ -233,10 +233,21 @@ export async function apiFetch(
       }
 
       const errorData = error.response.data || {};
-      throw new Error(
-        (errorData as { message?: string }).message ||
+      const detailMsg =
+        typeof errorData.detail === "string"
+          ? errorData.detail
+          : Array.isArray(errorData.detail) && errorData.detail.length > 0
+          ? errorData.detail[0]?.msg || JSON.stringify(errorData.detail)
+          : (errorData as { message?: string }).message ||
+            (errorData as { error?: string }).error;
+
+      const apiError = new Error(
+        detailMsg ||
           `API Error: ${error.response.status} ${error.response.statusText}`,
-      );
+      ) as Error & { status?: number; data?: unknown };
+      apiError.status = error.response.status;
+      apiError.data = errorData;
+      throw apiError;
     }
     if (error instanceof Error) {
       throw new Error(error.message || "Network Error");

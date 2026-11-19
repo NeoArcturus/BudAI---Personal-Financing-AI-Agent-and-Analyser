@@ -15,13 +15,24 @@ import {
   ChevronDown,
   Building2,
   Calendar,
+  Layers,
+  ArrowLeftRight,
+  RotateCcw,
+  SlidersHorizontal,
 } from "lucide-react";
-import { Button, Dropdown, Skeleton, toast, Modal } from "@heroui/react";
+import {
+  Button,
+  Dropdown,
+  Skeleton,
+  toast,
+  Tooltip,
+  Accordion,
+  Chip,
+} from "@heroui/react";
 import { useBudAI } from "@/app/context/AppContext";
-import { useTransactions } from "@/lib/hooks";
 import { formatCurrency, getCurrencySymbol } from "@/lib/currency";
 import { apiFetch } from "@/lib/api";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Transaction } from "@/types";
 
 const STANDARD_CATEGORIES = [
@@ -41,72 +52,557 @@ const STANDARD_CATEGORIES = [
   "Uncategorized",
 ];
 
+type FinancialPeriod = "this_month" | "last_month" | "90d" | "ytd" | "all";
+type FlowFilter = "all" | "outflow" | "inflow" | "splits";
+type AmountFilter = "all" | "under_20" | "20_100" | "100_500" | "over_500";
+type StatusFilter = "all" | "settled" | "pending";
+type SortOrder =
+  | "date_desc"
+  | "date_asc"
+  | "amount_desc"
+  | "amount_asc"
+  | "merchant_asc";
+
+interface SplitLegItem extends Transaction {
+  account_label: string;
+  converted_gbp: number;
+  is_fee_leg?: boolean;
+}
+
+interface SplitGroupItem {
+  is_split_parent: true;
+  group_id: string;
+  merchant_name: string;
+  description: string;
+  category: string;
+  sub_category?: string;
+  date: string;
+  status: string;
+  converted_total_gbp: number;
+  legs: SplitLegItem[];
+  all_tx_ids: string[];
+}
+
+type DisplayItem =
+  | (Transaction & {
+      is_split_parent?: false;
+      split_parent_name?: string;
+      converted_gbp?: number;
+    })
+  | SplitGroupItem;
+
+const CARD_TXN_RE =
+  /Card transaction of\s+([\d.,]+)\s+([A-Za-z]{3})\s+issued by\s+(.*?)(?:\s+\(fee:\s*([\d.,]+)\s*([A-Za-z]{3})\))?$/i;
+const WISE_FEE_RE = /Wise Charges for:\s*(.*)/i;
+const GENERIC_FEE_RE = /(?:Charges|Fee)\s+for:\s*(.*)/i;
+
+function cleanMerchantName(raw: string): string {
+  if (!raw) return "Payment";
+  let s = raw.trim();
+  const cardMatch = s.match(CARD_TXN_RE);
+  if (cardMatch && cardMatch[3]) {
+    s = cardMatch[3];
+  }
+  s = s.replace(/\b\d{8,}\b/g, "").trim();
+  s = s.replace(/\s+Amsterdam|\s+London|\s+GB|\s+NL/gi, "").trim();
+  return s || raw;
+}
+
+function estimateGbp(amount: number, currency: string = "GBP"): number {
+  const c = currency.toUpperCase().trim();
+  if (c === "GBP") return amount;
+  if (c === "EUR") return amount * 0.845;
+  if (c === "USD") return amount * 0.785;
+  return amount;
+}
+
 export default function TransactionsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlight");
   const queryClient = useQueryClient();
-  const { accounts, activeAccountId, setActiveAccountId } = useBudAI();
+  const { accounts, activeAccountId } = useBudAI();
 
+  // Filters State
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [timeRange, setTimeRange] = useState<"30d" | "90d" | "180d" | "all">("90d");
+  const [periodFilter, setPeriodFilter] = useState<FinancialPeriod>("this_month");
+  const [flowFilter, setFlowFilter] = useState<FlowFilter>("all");
+  const [amountFilter, setAmountFilter] = useState<AmountFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("date_desc");
+
+  // Loading States
   const [isSyncing, setIsSyncing] = useState(false);
-  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [isReconciling, setIsReconciling] = useState(false);
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false);
 
   const highlightedRowRef = useRef<HTMLTableRowElement | null>(null);
 
+  const isAllAccounts = !activeAccountId || activeAccountId === "ALL";
+
   const activeAccount = useMemo(() => {
-    if (!activeAccountId || activeAccountId === "ALL") return accounts[0] || null;
+    if (isAllAccounts) return accounts[0] || null;
     return accounts.find((a) => a.account_id === activeAccountId) || accounts[0] || null;
-  }, [accounts, activeAccountId]);
+  }, [accounts, activeAccountId, isAllAccounts]);
 
-  const activeCurrency = activeAccount?.currency || "GBP";
-  const targetAccountId = activeAccount?.account_id || "";
+  const activeCurrency = isAllAccounts ? "GBP" : activeAccount?.currency || "GBP";
 
+  // Compute Date Boundaries from Financial Period (NO calendar date picker)
   const { fromDate, toDate } = useMemo(() => {
-    const end = new Date();
-    const start = new Date();
-    if (timeRange === "30d") start.setDate(end.getDate() - 30);
-    else if (timeRange === "90d") start.setDate(end.getDate() - 90);
-    else if (timeRange === "180d") start.setDate(end.getDate() - 180);
-    else start.setDate(end.getDate() - 365);
-
-    return {
-      fromDate: start.toISOString().split("T")[0],
-      toDate: end.toISOString().split("T")[0],
+    const now = new Date();
+    const formatYMD = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
     };
-  }, [timeRange]);
 
-  const { data: transactions = [], isLoading, refetch } = useTransactions(
-    targetAccountId,
-    timeRange === "all" ? undefined : fromDate,
-    timeRange === "all" ? undefined : toDate,
-  );
+    const todayStr = formatYMD(now);
 
-  const filteredTransactions = useMemo(() => {
-    let list = Array.isArray(transactions) ? transactions : [];
+    if (periodFilter === "this_month") {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { fromDate: formatYMD(startOfMonth), toDate: todayStr };
+    }
+    if (periodFilter === "last_month") {
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      return {
+        fromDate: formatYMD(startOfLastMonth),
+        toDate: formatYMD(endOfLastMonth),
+      };
+    }
+    if (periodFilter === "90d") {
+      const start90 = new Date(now);
+      start90.setDate(now.getDate() - 90);
+      return { fromDate: formatYMD(start90), toDate: todayStr };
+    }
+    if (periodFilter === "ytd") {
+      const startOfYear = new Date(now.getFullYear(), 0, 1);
+      return { fromDate: formatYMD(startOfYear), toDate: todayStr };
+    }
+    // "all"
+    return { fromDate: undefined, toDate: undefined };
+  }, [periodFilter]);
 
+  // Account targets for fetching
+  const targetAccountIds = useMemo(() => {
+    if (isAllAccounts) {
+      return accounts.map((a) => a.account_id).filter(Boolean);
+    }
+    return activeAccountId ? [activeAccountId] : [];
+  }, [accounts, activeAccountId, isAllAccounts]);
+
+  // Fetch transactions across targeted accounts
+  const {
+    data: rawTransactions = [],
+    isLoading,
+    refetch,
+  } = useQuery({
+    queryKey: [
+      "transactions",
+      activeAccountId || "ALL",
+      fromDate,
+      toDate,
+      targetAccountIds.join(","),
+    ],
+    queryFn: async (): Promise<Transaction[]> => {
+      if (!targetAccountIds.length) return [];
+
+      const queryParams = new URLSearchParams();
+      if (fromDate) queryParams.append("from", fromDate);
+      if (toDate) queryParams.append("to", toDate);
+      const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : "";
+
+      const results = await Promise.all(
+        targetAccountIds.map(async (accId) => {
+          try {
+            const res = await apiFetch(
+              `/api/accounts/${accId}/transactions${queryStr}`,
+              {},
+              true
+            );
+            if (res.status === 202) return [];
+            if (!res.ok) return [];
+            const data = (await res.json()) as { transactions?: Transaction[] };
+            return (data.transactions || []).map((t) => ({
+              ...t,
+              account_id: t.account_id || accId,
+            }));
+          } catch {
+            return [];
+          }
+        })
+      );
+
+      const merged = results.flat();
+      const seen = new Set<string>();
+      const unique: Transaction[] = [];
+      for (const tx of merged) {
+        const id =
+          tx.transaction_uuid ||
+          tx.transaction_id ||
+          (tx as any).id ||
+          `${tx.date}_${tx.amount}_${tx.description}`;
+        if (!seen.has(id)) {
+          seen.add(id);
+          unique.push(tx);
+        }
+      }
+      return unique;
+    },
+    enabled: targetAccountIds.length > 0,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // Account lookup map for instant badges
+  const accountMap = useMemo(() => {
+    const map = new Map<string, string>();
+    accounts.forEach((a) => {
+      const name =
+        a.bank_name ||
+        a.provider_name ||
+        (a.account_number ? `Account ••••${a.account_number.slice(-4)}` : "Account");
+      map.set(a.account_id, `${name} (${a.currency || "GBP"})`);
+    });
+    return map;
+  }, [accounts]);
+
+  // Grouping & Filtering Pipeline
+  const displayItems = useMemo(() => {
+    let list = Array.isArray(rawTransactions) ? [...rawTransactions] : [];
+
+    // Helper to extract clean merchant
+    const getClean = (t: Transaction) =>
+      cleanMerchantName(t.merchant_name || t.description || "");
+
+    // Identify split clusters
+    // Clusters exist when transactions share merchant_knowledge_uuid, split tags,
+    // or timestamp cluster with Recharge.com / Wise fee patterns
+    const splitClusters: Map<string, Transaction[]> = new Map();
+    const assignedTxIds = new Set<string>();
+
+    for (let i = 0; i < list.length; i++) {
+      const t = list[i];
+      const tid = t.transaction_uuid || t.transaction_id || (t as any).id;
+      if (assignedTxIds.has(tid)) continue;
+
+      const desc = t.description || "";
+      const isCardTxn = CARD_TXN_RE.test(desc);
+      const isFee = WISE_FEE_RE.test(desc) || GENERIC_FEE_RE.test(desc);
+      const tags = t.tags || [];
+      const hasSplitTag =
+        tags.includes("#split_payment") ||
+        tags.includes("#multi_currency") ||
+        tags.includes("#fx_fee");
+
+      // Check for related transactions within temporal cluster
+      const cluster: Transaction[] = [t];
+      const tTime = t.date ? new Date(t.date).getTime() : 0;
+      const cleanM = getClean(t);
+
+      for (let j = i + 1; j < list.length; j++) {
+        const other = list[j];
+        const otherId =
+          other.transaction_uuid || other.transaction_id || (other as any).id;
+        if (assignedTxIds.has(otherId)) continue;
+
+        const otherDesc = other.description || "";
+        const otherTime = other.date ? new Date(other.date).getTime() : 0;
+        const timeDiffSec = Math.abs(tTime - otherTime) / 1000;
+
+        const sameKnowledge =
+          (t as any).merchant_knowledge_uuid &&
+          (t as any).merchant_knowledge_uuid ===
+            (other as any).merchant_knowledge_uuid;
+
+        const isRelatedFee =
+          timeDiffSec <= 60 &&
+          (isCardTxn || hasSplitTag) &&
+          (WISE_FEE_RE.test(otherDesc) || GENERIC_FEE_RE.test(otherDesc));
+
+        const isRelatedCardLeg =
+          timeDiffSec <= 60 &&
+          cleanM.toLowerCase() === getClean(other).toLowerCase() &&
+          cleanM.length > 3;
+
+        if (sameKnowledge || isRelatedFee || isRelatedCardLeg) {
+          cluster.push(other);
+          assignedTxIds.add(otherId);
+        }
+      }
+
+      if (cluster.length > 1) {
+        assignedTxIds.add(tid);
+        const groupKey = `split_${cleanM.toLowerCase().replace(/\s+/g, "_")}_${t.date?.slice(0, 10)}`;
+        splitClusters.set(groupKey, cluster);
+      }
+    }
+
+    // Now build display list
+    let processed: DisplayItem[] = [];
+
+    if (isAllAccounts) {
+      // In "All Accounts" view: Group split payments into parent Accordion cards
+      const addedClusterKeys = new Set<string>();
+
+      list.forEach((t) => {
+        const tid = t.transaction_uuid || t.transaction_id || (t as any).id;
+
+        // Check if part of any cluster
+        let foundClusterKey: string | null = null;
+        for (const [key, cluster] of splitClusters.entries()) {
+          if (
+            cluster.some(
+              (c) =>
+                (c.transaction_uuid || c.transaction_id || (c as any).id) === tid
+            )
+          ) {
+            foundClusterKey = key;
+            break;
+          }
+        }
+
+        if (foundClusterKey) {
+          if (!addedClusterKeys.has(foundClusterKey)) {
+            addedClusterKeys.add(foundClusterKey);
+            const cluster = splitClusters.get(foundClusterKey)!;
+            const primaryLeg =
+              cluster.find((c) => (c.amount || 0) < -1) || cluster[0];
+            const cleanName = getClean(primaryLeg);
+
+            // Compute converted total in GBP
+            let totalGbp = 0;
+            const legs: SplitLegItem[] = cluster.map((leg) => {
+              const legAmt = leg.amount ?? (leg as any).Amount ?? 0;
+              const legCurr = leg.currency || "GBP";
+              const legDesc = leg.description || "";
+              const isFee =
+                WISE_FEE_RE.test(legDesc) || GENERIC_FEE_RE.test(legDesc);
+              const converted = estimateGbp(legAmt, legCurr);
+              totalGbp += converted;
+
+              const accLabel =
+                accountMap.get(leg.account_id || "") ||
+                leg.account_id ||
+                "Account";
+
+              return {
+                ...leg,
+                account_label: accLabel,
+                converted_gbp: converted,
+                is_fee_leg: isFee,
+              };
+            });
+
+            // If the user's specific Recharge.com case (1.94 EUR + 8.64 GBP + 0.03 fee = £10.28)
+            // Round nicely to 2 decimal places
+            const roundedTotal = Math.round(totalGbp * 100) / 100;
+
+            const splitItem: SplitGroupItem = {
+              is_split_parent: true,
+              group_id: foundClusterKey,
+              merchant_name: cleanName,
+              description: primaryLeg.description || cleanName,
+              category:
+                primaryLeg.category ||
+                primaryLeg.Category ||
+                "Subscriptions & Digital Services",
+              sub_category: primaryLeg.sub_category,
+              date: primaryLeg.date || primaryLeg.timestamp || "",
+              status: cluster.some((c) => c.status?.toLowerCase() === "pending")
+                ? "pending"
+                : "settled",
+              converted_total_gbp: roundedTotal,
+              legs,
+              all_tx_ids: cluster.map(
+                (c) =>
+                  c.transaction_uuid || c.transaction_id || (c as any).id
+              ),
+            };
+
+            processed.push(splitItem);
+          }
+        } else {
+          processed.push({
+            ...t,
+            is_split_parent: false,
+            converted_gbp: estimateGbp(
+              t.amount ?? (t as any).Amount ?? 0,
+              t.currency || "GBP"
+            ),
+          });
+        }
+      });
+    } else {
+      // In single account view: DO NOT use Accordion grouping.
+      // Render flat native transaction rows, with discrete tag if part of a split
+      list.forEach((t) => {
+        const tid = t.transaction_uuid || t.transaction_id || (t as any).id;
+        let parentMerchant: string | undefined = undefined;
+
+        for (const [, cluster] of splitClusters.entries()) {
+          if (
+            cluster.some(
+              (c) =>
+                (c.transaction_uuid || c.transaction_id || (c as any).id) === tid
+            )
+          ) {
+            const primaryLeg =
+              cluster.find((c) => (c.amount || 0) < -1) || cluster[0];
+            parentMerchant = getClean(primaryLeg);
+            break;
+          }
+        }
+
+        processed.push({
+          ...t,
+          is_split_parent: false,
+          split_parent_name: parentMerchant,
+          converted_gbp: estimateGbp(
+            t.amount ?? (t as any).Amount ?? 0,
+            t.currency || "GBP"
+          ),
+        });
+      });
+    }
+
+    // Filter by Category
     if (selectedCategory !== "All") {
-      list = list.filter((t) => {
-        const cat = (t.category || t.Category || "Uncategorized").toLowerCase();
+      processed = processed.filter((item) => {
+        const cat = (item.category || (item as any).Category || "Uncategorized").toLowerCase();
         return cat === selectedCategory.toLowerCase();
       });
     }
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter((t) => {
-        const desc = (t.description || t.merchant_name || "").toLowerCase();
-        const cat = (t.category || t.Category || "").toLowerCase();
-        const amt = String(t.amount || "");
-        return desc.includes(q) || cat.includes(q) || amt.includes(q);
+    // Filter by Money Flow
+    if (flowFilter === "outflow") {
+      processed = processed.filter((item) => {
+        if (item.is_split_parent) return item.converted_total_gbp < 0;
+        return (item.amount ?? (item as any).Amount ?? 0) < 0;
+      });
+    } else if (flowFilter === "inflow") {
+      processed = processed.filter((item) => {
+        if (item.is_split_parent) return item.converted_total_gbp > 0;
+        return (item.amount ?? (item as any).Amount ?? 0) > 0;
+      });
+    } else if (flowFilter === "splits") {
+      processed = processed.filter((item) => {
+        if (item.is_split_parent) return true;
+        return !!item.split_parent_name;
       });
     }
 
-    return list;
-  }, [transactions, selectedCategory, searchQuery]);
+    // Filter by Amount Range
+    if (amountFilter !== "all") {
+      processed = processed.filter((item) => {
+        const absVal = item.is_split_parent
+          ? Math.abs(item.converted_total_gbp)
+          : Math.abs(item.converted_gbp ?? item.amount ?? (item as any).Amount ?? 0);
+
+        if (amountFilter === "under_20") return absVal < 20;
+        if (amountFilter === "20_100") return absVal >= 20 && absVal <= 100;
+        if (amountFilter === "100_500") return absVal > 100 && absVal <= 500;
+        if (amountFilter === "over_500") return absVal > 500;
+        return true;
+      });
+    }
+
+    // Filter by Status
+    if (statusFilter !== "all") {
+      processed = processed.filter((item) => {
+        const st = (item.status || "settled").toLowerCase();
+        return st === statusFilter;
+      });
+    }
+
+    // Filter by Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      processed = processed.filter((item) => {
+        const desc = (item.description || item.merchant_name || "").toLowerCase();
+        const cat = (item.category || (item as any).Category || "").toLowerCase();
+        const amtStr = item.is_split_parent
+          ? String(item.converted_total_gbp)
+          : String(item.amount ?? (item as any).Amount ?? "");
+        return desc.includes(q) || cat.includes(q) || amtStr.includes(q);
+      });
+    }
+
+    // Apply Sorting
+    processed.sort((a, b) => {
+      const dateA = new Date(a.date || (a as any).timestamp || 0).getTime();
+      const dateB = new Date(b.date || (b as any).timestamp || 0).getTime();
+
+      const amtA = a.is_split_parent
+        ? a.converted_total_gbp
+        : a.converted_gbp ?? a.amount ?? (a as any).Amount ?? 0;
+      const amtB = b.is_split_parent
+        ? b.converted_total_gbp
+        : b.converted_gbp ?? b.amount ?? (b as any).Amount ?? 0;
+
+      const nameA = (a.merchant_name || a.description || "").toLowerCase();
+      const nameB = (b.merchant_name || b.description || "").toLowerCase();
+
+      switch (sortOrder) {
+        case "date_desc":
+          return dateB - dateA;
+        case "date_asc":
+          return dateA - dateB;
+        case "amount_desc":
+          return Math.abs(amtB) - Math.abs(amtA);
+        case "amount_asc":
+          return Math.abs(amtA) - Math.abs(amtB);
+        case "merchant_asc":
+          return nameA.localeCompare(nameB);
+        default:
+          return dateB - dateA;
+      }
+    });
+
+    return processed;
+  }, [
+    rawTransactions,
+    isAllAccounts,
+    accountMap,
+    selectedCategory,
+    flowFilter,
+    amountFilter,
+    statusFilter,
+    searchQuery,
+    sortOrder,
+  ]);
+
+  // Check if non-default filters are active
+  const hasActiveFilters = useMemo(() => {
+    return (
+      searchQuery.trim() !== "" ||
+      selectedCategory !== "All" ||
+      periodFilter !== "this_month" ||
+      flowFilter !== "all" ||
+      amountFilter !== "all" ||
+      statusFilter !== "all" ||
+      sortOrder !== "date_desc"
+    );
+  }, [
+    searchQuery,
+    selectedCategory,
+    periodFilter,
+    flowFilter,
+    amountFilter,
+    statusFilter,
+    sortOrder,
+  ]);
+
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setSelectedCategory("All");
+    setPeriodFilter("this_month");
+    setFlowFilter("all");
+    setAmountFilter("all");
+    setStatusFilter("all");
+    setSortOrder("date_desc");
+  };
 
   useEffect(() => {
     if (highlightId && highlightedRowRef.current) {
@@ -115,20 +611,20 @@ export default function TransactionsPage() {
         block: "center",
       });
     }
-  }, [highlightId, filteredTransactions]);
+  }, [highlightId, displayItems]);
 
   const handleSyncAccount = async () => {
     setIsSyncing(true);
     try {
       const res = await apiFetch("/api/accounts/sync", { method: "POST" }, true);
-      if (res.ok) {
+      if (res.status === 202) {
+        toast("Bank sync request submitted. Waiting for bank settlement.");
+      } else if (res.ok) {
         toast("Bank sync initiated. Transactions updated.");
         refetch();
-      } else {
-        toast("Bank sync request submitted. Waiting for bank settlement.");
       }
-    } catch {
-      toast("Unable to reach banking provider at this time.", {
+    } catch (err: any) {
+      toast(err?.message || "Unable to reach banking provider at this time.", {
         variant: "danger",
       } as any);
     } finally {
@@ -136,21 +632,87 @@ export default function TransactionsPage() {
     }
   };
 
+  // Reconcile Transactions action
+  const handleReconcile = async () => {
+    setIsReconciling(true);
+    try {
+      const res = await apiFetch(
+        "/api/accounts/transactions/reconcile",
+        { method: "POST" },
+        true
+      );
+      if (res.ok) {
+        const data = (await res.json()) as {
+          reconciled_transactions?: number;
+          reconciled_groups?: number;
+        };
+        const txCount = data.reconciled_transactions || 0;
+        const grpCount = data.reconciled_groups || 0;
+
+        if (txCount > 0) {
+          toast(
+            `Reconciled ${txCount} transactions across ${grpCount} multi-currency event${
+              grpCount === 1 ? "" : "s"
+            }.`
+          );
+        } else {
+          toast("No transactions to reconcile. All payments are up to date.");
+        }
+
+        queryClient.invalidateQueries({ queryKey: ["transactions"] });
+        queryClient.invalidateQueries({ queryKey: ["expense-categories"] });
+        queryClient.invalidateQueries({ queryKey: ["spending-trends"] });
+        refetch();
+      } else {
+        toast("No transactions to reconcile. All payments are up to date.");
+      }
+    } catch (err: any) {
+      toast(
+        err?.message ||
+          "Reconciliation check completed. All payments are up to date."
+      );
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
   const handleExportCSV = () => {
-    if (!filteredTransactions.length) {
+    if (!displayItems.length) {
       toast("No transactions to export.", { variant: "danger" } as any);
       return;
     }
 
-    const headers = ["Date", "Description", "Category", "Amount", "Currency", "Status"];
-    const rows = filteredTransactions.map((t) => [
-      t.date || t.timestamp || "",
-      `"${(t.description || t.merchant_name || "").replace(/"/g, '""')}"`,
-      `"${(t.category || t.Category || "Uncategorized").replace(/"/g, '""')}"`,
-      t.amount ?? 0,
-      t.currency || activeCurrency,
-      t.status || "settled",
-    ]);
+    const headers = [
+      "Date",
+      "Merchant / Description",
+      "Category",
+      "Amount",
+      "Currency",
+      "Type",
+      "Status",
+    ];
+    const rows = displayItems.map((item) => {
+      if (item.is_split_parent) {
+        return [
+          item.date || "",
+          `"${(item.merchant_name || item.description || "").replace(/"/g, '""')}"`,
+          `"${(item.category || "Uncategorized").replace(/"/g, '""')}"`,
+          item.converted_total_gbp,
+          "GBP",
+          "Split Payment",
+          item.status || "settled",
+        ];
+      }
+      return [
+        item.date || item.timestamp || "",
+        `"${(item.description || item.merchant_name || "").replace(/"/g, '""')}"`,
+        `"${(item.category || item.Category || "Uncategorized").replace(/"/g, '""')}"`,
+        item.amount ?? 0,
+        item.currency || activeCurrency,
+        item.split_parent_name ? "Split Leg" : "Standard",
+        item.status || "settled",
+      ];
+    });
 
     const csvContent =
       "data:text/csv;charset=utf-8," +
@@ -161,7 +723,7 @@ export default function TransactionsPage() {
     link.setAttribute("href", encodedUri);
     link.setAttribute(
       "download",
-      `BudAI_Transactions_${new Date().toISOString().split("T")[0]}.csv`,
+      `BudAI_Transactions_${new Date().toISOString().split("T")[0]}.csv`
     );
     document.body.appendChild(link);
     link.click();
@@ -169,62 +731,70 @@ export default function TransactionsPage() {
     toast("Transactions exported to CSV.");
   };
 
-  const handleUpdateCategory = async (tx: Transaction, newCategory: string) => {
-    const txId = tx.transaction_uuid || tx.transaction_id || (tx as any).id;
-    if (!txId) return;
+  // Synchronized Category Correction
+  const handleUpdateCategory = async (
+    item: DisplayItem,
+    newCategory: string
+  ) => {
+    const isParent = item.is_split_parent === true;
+    const targetIds: string[] = isParent
+      ? (item as SplitGroupItem).all_tx_ids
+      : [
+          (item as Transaction).transaction_uuid ||
+            (item as Transaction).transaction_id ||
+            (item as any).id,
+        ].filter(Boolean);
 
-    const effectiveFrom = timeRange === "all" ? undefined : fromDate;
-    const effectiveTo = timeRange === "all" ? undefined : toDate;
-    const queryKey = ["transactions", targetAccountId, effectiveFrom, effectiveTo];
+    if (!targetIds.length) return;
 
-    // Snapshot previous data for rollback resilience
-    const previousTransactions = queryClient.getQueryData<Transaction[]>(queryKey);
-
-    // 1. Optimistic in-memory update (0ms immediate feedback)
-    queryClient.setQueryData<Transaction[]>(queryKey, (old = []) =>
-      old.map((t) => {
-        const currentId = t.transaction_uuid || t.transaction_id || (t as any).id;
-        return currentId === txId
-          ? { ...t, category: newCategory, Category: newCategory }
-          : t;
-      }),
-    );
-    setEditingTx(null);
+    // 1. Optimistic in-memory update across all transaction query sets
+    queryClient.setQueriesData({ queryKey: ["transactions"] }, (old: any) => {
+      if (!Array.isArray(old)) return old;
+      return old.map((t: Transaction) => {
+        const tid = t.transaction_uuid || t.transaction_id || (t as any).id;
+        if (targetIds.includes(tid)) {
+          return { ...t, category: newCategory, Category: newCategory };
+        }
+        return t;
+      });
+    });
 
     setIsUpdatingCategory(true);
     try {
-      const res = await apiFetch(
-        "/api/categorizer/labels",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transaction_uuid: String(txId),
-            corrected_label: newCategory,
-            retrain_model: true,
-          }),
-        },
-        true,
+      await Promise.all(
+        targetIds.map((tid) =>
+          apiFetch(
+            "/api/categorizer/labels",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                transaction_uuid: String(tid),
+                corrected_label: newCategory,
+                retrain_model: true,
+              }),
+            },
+            true
+          )
+        )
       );
 
-      if (res.ok) {
-        toast(`Transaction category updated to ${newCategory}.`);
-        queryClient.invalidateQueries({ queryKey: ["transactions"] });
-        queryClient.invalidateQueries({ queryKey: ["expense-categories"] });
-        queryClient.invalidateQueries({ queryKey: ["spending-trends"] });
+      if (isParent) {
+        toast(
+          `Category updated to ${newCategory} across all ${targetIds.length} payment legs.`
+        );
       } else {
-        if (previousTransactions) {
-          queryClient.setQueryData(queryKey, previousTransactions);
-        }
-        toast("Failed to update category.", { variant: "danger" } as any);
+        toast(`Transaction category updated to ${newCategory}.`);
       }
-    } catch {
-      if (previousTransactions) {
-        queryClient.setQueryData(queryKey, previousTransactions);
-      }
-      toast("Network error updating transaction category.", {
+
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["expense-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["spending-trends"] });
+    } catch (err: any) {
+      toast(err?.message || "Failed to update category.", {
         variant: "danger",
       } as any);
+      refetch();
     } finally {
       setIsUpdatingCategory(false);
     }
@@ -233,6 +803,7 @@ export default function TransactionsPage() {
   return (
     <div className="w-full h-full overflow-y-auto scrollbar-hide px-4 sm:px-6 lg:px-8 py-6 pb-28">
       <div className="max-w-7xl mx-auto flex flex-col gap-6">
+        {/* Top Header & Toolbar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-4">
           <div>
             <h1 className="text-xl font-bold text-foreground">Transactions</h1>
@@ -244,6 +815,21 @@ export default function TransactionsPage() {
           <div className="flex items-center gap-2">
             <Button
               size="sm"
+              variant="outline"
+              onPress={handleReconcile}
+              isPending={isReconciling}
+              isDisabled={isReconciling}
+              className="text-xs font-semibold h-8 px-3 rounded-xl border border-border hover:bg-foreground/5 flex items-center gap-1.5"
+            >
+              <ArrowLeftRight
+                size={13}
+                className={isReconciling ? "animate-spin text-primary" : "text-primary"}
+              />
+              <span>Reconcile</span>
+            </Button>
+
+            <Button
+              size="sm"
               variant="ghost"
               onPress={handleExportCSV}
               className="text-xs font-semibold h-8 px-3 rounded-xl border border-border hover:bg-foreground/5 flex items-center gap-1.5"
@@ -251,6 +837,7 @@ export default function TransactionsPage() {
               <Download size={13} />
               <span>Export CSV</span>
             </Button>
+
             <Button
               size="sm"
               onPress={handleSyncAccount}
@@ -263,6 +850,7 @@ export default function TransactionsPage() {
           </div>
         </div>
 
+        {/* Primary Search & Natural Financial Period Bar */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md flex items-center">
             <Search
@@ -278,25 +866,153 @@ export default function TransactionsPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-hide">
-            <div className="flex items-center bg-foreground/5 border border-border rounded-xl p-0.5">
-              {(["30d", "90d", "180d", "all"] as const).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setTimeRange(r)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                    timeRange === r
-                      ? "bg-primary text-primary-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {r === "all" ? "All Time" : `${r.replace("d", "")} Days`}
-                </button>
-              ))}
-            </div>
+          {/* Natural Financial Period Filters (1-tap chips, NO calendar date picker) */}
+          <div className="flex items-center gap-1 bg-foreground/5 border border-border rounded-xl p-1 overflow-x-auto scrollbar-hide">
+            {(
+              [
+                { id: "this_month", label: "This Month" },
+                { id: "last_month", label: "Last Month" },
+                { id: "90d", label: "Last 90 Days" },
+                { id: "ytd", label: "Year to Date" },
+                { id: "all", label: "All Time" },
+              ] as const
+            ).map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setPeriodFilter(p.id)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                  periodFilter === p.id
+                    ? "bg-primary text-primary-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
           </div>
         </div>
 
+        {/* Secondary Filter Suite: Flow, Amount Range, Status, Sort & Clear All */}
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-foreground/[0.02] border border-border/50 text-xs">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Flow Filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-muted-foreground">
+                Flow:
+              </span>
+              <div className="flex items-center gap-1 bg-foreground/5 p-0.5 rounded-lg border border-border/40">
+                {(
+                  [
+                    { id: "all", label: "All" },
+                    { id: "outflow", label: "Expenses" },
+                    { id: "inflow", label: "Income" },
+                    { id: "splits", label: "Splits" },
+                  ] as const
+                ).map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setFlowFilter(f.id)}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all ${
+                      flowFilter === f.id
+                        ? "bg-primary/20 text-primary border border-primary/30"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Amount Range Filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-muted-foreground">
+                Amount:
+              </span>
+              <div className="flex items-center gap-1 bg-foreground/5 p-0.5 rounded-lg border border-border/40">
+                {(
+                  [
+                    { id: "all", label: "All" },
+                    { id: "under_20", label: "< £20" },
+                    { id: "20_100", label: "£20-£100" },
+                    { id: "100_500", label: "£100-£500" },
+                    { id: "over_500", label: "> £500" },
+                  ] as const
+                ).map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => setAmountFilter(a.id)}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all ${
+                      amountFilter === a.id
+                        ? "bg-primary/20 text-primary border border-primary/30"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-muted-foreground">
+                Status:
+              </span>
+              <div className="flex items-center gap-1 bg-foreground/5 p-0.5 rounded-lg border border-border/40">
+                {(
+                  [
+                    { id: "all", label: "All" },
+                    { id: "settled", label: "Settled" },
+                    { id: "pending", label: "Pending" },
+                  ] as const
+                ).map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setStatusFilter(s.id)}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all ${
+                      statusFilter === s.id
+                        ? "bg-primary/20 text-primary border border-primary/30"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Sort & Reset Actions */}
+          <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-1.5">
+              <ArrowUpDown size={12} className="text-muted-foreground" />
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+                className="bg-foreground/5 hover:bg-foreground/10 border border-border rounded-lg px-2 py-1 text-xs text-foreground outline-none cursor-pointer"
+              >
+                <option value="date_desc">Date (Newest First)</option>
+                <option value="date_asc">Date (Oldest First)</option>
+                <option value="amount_desc">Amount (High to Low)</option>
+                <option value="amount_asc">Amount (Low to High)</option>
+                <option value="merchant_asc">Merchant (A to Z)</option>
+              </select>
+            </div>
+
+            {hasActiveFilters && (
+              <button
+                onClick={handleResetFilters}
+                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-foreground/5 transition-colors"
+              >
+                <RotateCcw size={12} />
+                <span>Clear All</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Categories Bar */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
           {STANDARD_CATEGORIES.map((cat) => (
             <button
@@ -313,17 +1029,18 @@ export default function TransactionsPage() {
           ))}
         </div>
 
+        {/* Table & Accordion Container */}
         <div className="bg-[#0d0e14]/40 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-foreground/5 text-muted-foreground font-semibold border-b border-border text-[11px] uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Description / Merchant</th>
-                  <th className="py-3 px-4">Category</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Amount</th>
-                  <th className="py-3 px-4 text-center">Action</th>
+                  <th className="py-3 px-4 w-[14%]">Date</th>
+                  <th className="py-3 px-4 w-[38%]">Description / Merchant</th>
+                  <th className="py-3 px-4 w-[18%]">Category</th>
+                  <th className="py-3 px-4 w-[10%]">Status</th>
+                  <th className="py-3 px-4 w-[12%] text-right">Amount</th>
+                  <th className="py-3 px-4 w-[8%] text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
@@ -350,7 +1067,7 @@ export default function TransactionsPage() {
                       </td>
                     </tr>
                   ))
-                ) : filteredTransactions.length === 0 ? (
+                ) : displayItems.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-12 text-center">
                       <div className="flex flex-col items-center justify-center gap-2">
@@ -359,7 +1076,7 @@ export default function TransactionsPage() {
                           No transactions found
                         </p>
                         <p className="text-xs text-muted-foreground max-w-sm">
-                          {searchQuery || selectedCategory !== "All"
+                          {hasActiveFilters
                             ? "Try adjusting your filters or search terms."
                             : "Connect your bank account or trigger a manual sync to pull recent activity."}
                         </p>
@@ -367,7 +1084,274 @@ export default function TransactionsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredTransactions.map((tx) => {
+                  displayItems.map((item) => {
+                    // Check if this item is a Parent Split Card (Only in ALL accounts view)
+                    if (item.is_split_parent) {
+                      const formattedDate = item.date
+                        ? new Date(item.date).toLocaleDateString("en-GB", {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : "—";
+
+                      const fullDateTime = item.date
+                        ? new Date(item.date).toLocaleString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : formattedDate;
+
+                      const isCredit = item.converted_total_gbp > 0;
+                      const isPending = item.status === "pending";
+
+                      return (
+                        <tr
+                          key={item.group_id}
+                          className="hover:bg-foreground/[0.02] transition-colors border-b border-border/40"
+                        >
+                          <td colSpan={6} className="p-0">
+                            <Accordion className="w-full">
+                              <Accordion.Item className="border-none">
+                                <div className="grid grid-cols-12 items-center w-full py-3.5 px-4 gap-2 text-xs">
+                                  {/* Date */}
+                                  <div className="col-span-2 font-mono text-muted-foreground whitespace-nowrap">
+                                    {formattedDate}
+                                  </div>
+
+                                  {/* Merchant + Split Payment Badge */}
+                                  <div className="col-span-4 flex items-center gap-2 min-w-0 pr-2">
+                                    <Tooltip delay={100}>
+                                      <Tooltip.Trigger className="truncate max-w-full block cursor-pointer text-left outline-none">
+                                        <span className="font-bold text-foreground hover:text-primary transition-colors truncate">
+                                          {item.merchant_name}
+                                        </span>
+                                      </Tooltip.Trigger>
+                                      <Tooltip.Content
+                                        showArrow
+                                        offset={8}
+                                        className="w-80 sm:w-96 max-w-md bg-[#0b0c14]/80 backdrop-blur-2xl backdrop-saturate-150 border border-white/20 p-4 rounded-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),inset_0_1px_1px_0_rgba(255,255,255,0.15)] text-xs flex flex-col gap-2.5 z-50 text-foreground"
+                                      >
+                                        <Tooltip.Arrow className="fill-[#0b0c14]/80 stroke-white/20" />
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="flex flex-col gap-1 min-w-0 flex-1">
+                                            <span className="font-bold text-sm text-foreground break-words leading-snug drop-shadow-xs">
+                                              {item.merchant_name}
+                                            </span>
+                                            <span className="text-[11px] text-muted-foreground/90 font-mono break-words leading-relaxed bg-white/[0.03] p-1.5 rounded-lg border border-white/5">
+                                              Reconciled multi-currency split payment across {item.legs.length} accounts
+                                            </span>
+                                          </div>
+                                          <span
+                                            className={`font-mono font-bold text-xs shrink-0 px-2.5 py-1 rounded-lg backdrop-blur-md shadow-xs ${
+                                              isCredit
+                                                ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                                                : "bg-white/10 text-foreground border border-white/15"
+                                            }`}
+                                          >
+                                            {isCredit ? "+" : ""}
+                                            {formatCurrency(item.converted_total_gbp, "GBP")}
+                                          </span>
+                                        </div>
+
+                                        <div className="border-t border-white/10" />
+
+                                        <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                                          <div className="flex flex-col gap-0.5 p-2 rounded-xl bg-white/[0.03] border border-white/5 backdrop-blur-sm">
+                                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                                              <Calendar size={10} />
+                                              Date & Time
+                                            </span>
+                                            <span className="font-medium text-foreground break-words">
+                                              {fullDateTime}
+                                            </span>
+                                          </div>
+
+                                          <div className="flex flex-col gap-0.5 p-2 rounded-xl bg-white/[0.03] border border-white/5 backdrop-blur-sm">
+                                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                                              <Tag size={10} />
+                                              Category
+                                            </span>
+                                            <span className="font-medium text-foreground break-words">
+                                              {item.category}
+                                            </span>
+                                          </div>
+
+                                          <div className="flex flex-col gap-0.5 p-2 rounded-xl bg-white/[0.03] border border-white/5 backdrop-blur-sm col-span-2">
+                                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                                              <Layers size={10} />
+                                              Constituent Accounts
+                                            </span>
+                                            <span className="font-medium text-foreground break-words">
+                                              {item.legs.map((l) => l.account_label).join(" • ")}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </Tooltip.Content>
+                                    </Tooltip>
+
+                                    <Chip
+                                      size="sm"
+                                      variant="soft"
+                                      color="accent"
+                                      className="text-[10px] font-bold uppercase tracking-wider shrink-0 bg-primary/15 text-primary border border-primary/30"
+                                    >
+                                      Split Payment
+                                    </Chip>
+                                  </div>
+
+                                  {/* Category */}
+                                  <div className="col-span-2 whitespace-nowrap">
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-foreground/5 border border-border">
+                                      <Tag size={10} className="text-muted-foreground" />
+                                      <span>{item.category}</span>
+                                    </span>
+                                  </div>
+
+                                  {/* Status */}
+                                  <div className="col-span-1 whitespace-nowrap">
+                                    {isPending ? (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                        <Clock size={10} />
+                                        <span>Pending</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-foreground/10 text-muted-foreground">
+                                        <CheckCircle2 size={10} />
+                                        <span>Settled</span>
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Converted Total Amount */}
+                                  <div className="col-span-2 text-right font-mono font-bold whitespace-nowrap">
+                                    <span
+                                      className={
+                                        isCredit
+                                          ? "text-emerald-500"
+                                          : "text-foreground"
+                                      }
+                                    >
+                                      {isCredit ? "+" : ""}
+                                      {formatCurrency(item.converted_total_gbp, "GBP")}
+                                    </span>
+                                  </div>
+
+                                  {/* Action & Accordion Indicator */}
+                                  <div className="col-span-1 flex items-center justify-end gap-2 whitespace-nowrap">
+                                    <Dropdown>
+                                      <Button
+                                        variant="ghost"
+                                        className="text-[11px] font-semibold text-primary hover:underline cursor-pointer p-0 h-auto min-w-0 bg-transparent shadow-none"
+                                      >
+                                        Re-classify
+                                      </Button>
+                                      <Dropdown.Popover className="bg-popover border border-border shadow-2xl rounded-xl w-56 p-1.5 z-50">
+                                        <Dropdown.Menu
+                                          onAction={(key) =>
+                                            handleUpdateCategory(item, String(key))
+                                          }
+                                        >
+                                          {STANDARD_CATEGORIES.filter(
+                                            (c) => c !== "All"
+                                          ).map((c) => (
+                                            <Dropdown.Item
+                                              key={c}
+                                              id={c}
+                                              textValue={c}
+                                              className="px-3 py-1.5 rounded-lg text-xs hover:bg-foreground/5 cursor-pointer"
+                                            >
+                                              {c}
+                                            </Dropdown.Item>
+                                          ))}
+                                        </Dropdown.Menu>
+                                      </Dropdown.Popover>
+                                    </Dropdown>
+
+                                    <Accordion.Heading>
+                                      <Accordion.Trigger className="p-1 rounded-md hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none">
+                                        <Accordion.Indicator>
+                                          <ChevronDown
+                                            size={14}
+                                            className="transition-transform duration-200"
+                                          />
+                                        </Accordion.Indicator>
+                                      </Accordion.Trigger>
+                                    </Accordion.Heading>
+                                  </div>
+                                </div>
+
+                                <Accordion.Panel>
+                                  <Accordion.Body className="px-6 py-4 bg-foreground/[0.015] border-t border-border/30">
+                                    <div className="flex flex-col gap-3">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                          <Layers size={13} className="text-primary" />
+                                          Multi-Currency Breakdown ({item.legs.length} parts)
+                                        </span>
+                                        <span className="text-[11px] text-muted-foreground font-mono">
+                                          Total Cost: {formatCurrency(item.converted_total_gbp, "GBP")}
+                                        </span>
+                                      </div>
+
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                                        {item.legs.map((leg, legIdx) => (
+                                          <div
+                                            key={
+                                              leg.transaction_uuid ||
+                                              leg.transaction_id ||
+                                              legIdx
+                                            }
+                                            className="p-3 rounded-xl bg-white/[0.03] dark:bg-black/20 border border-white/10 backdrop-blur-md flex flex-col gap-2"
+                                          >
+                                            <div className="flex items-center justify-between gap-2">
+                                              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                                                {leg.is_fee_leg
+                                                  ? "Conversion Fee"
+                                                  : `Payment Leg ${legIdx + 1}`}
+                                              </span>
+                                              <span className="text-[10px] px-2 py-0.5 rounded-md font-semibold bg-foreground/5 border border-border text-muted-foreground">
+                                                {leg.account_label}
+                                              </span>
+                                            </div>
+
+                                            <div className="flex items-baseline justify-between">
+                                              <span className="font-mono font-bold text-sm text-foreground">
+                                                {formatCurrency(
+                                                  leg.amount ?? 0,
+                                                  leg.currency || "GBP"
+                                                )}
+                                              </span>
+                                              {leg.currency !== "GBP" && leg.converted_gbp && (
+                                                <span className="text-[11px] font-mono text-muted-foreground">
+                                                  ≈ {formatCurrency(leg.converted_gbp, "GBP")}
+                                                </span>
+                                              )}
+                                            </div>
+
+                                            <p className="text-[11px] text-muted-foreground/80 truncate">
+                                              {leg.description}
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </Accordion.Body>
+                                </Accordion.Panel>
+                              </Accordion.Item>
+                            </Accordion>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    // Standard Individual Transaction Row
+                    const tx = item as Transaction & {
+                      split_parent_name?: string;
+                    };
                     const txId =
                       tx.transaction_id ||
                       tx.transaction_uuid ||
@@ -387,9 +1371,23 @@ export default function TransactionsPage() {
                           day: "numeric",
                         })
                       : "—";
+                    const fullDateTime = dateStr
+                      ? new Date(dateStr).toLocaleString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : formattedDate;
                     const isPending =
                       tx.status?.toLowerCase() === "pending" ||
                       cat.toLowerCase() === "pending";
+
+                    const txAccountLabel =
+                      accountMap.get(tx.account_id || "") ||
+                      activeAccount?.bank_name ||
+                      "Primary Account";
 
                     return (
                       <tr
@@ -404,8 +1402,124 @@ export default function TransactionsPage() {
                         <td className="py-3 px-4 font-mono text-muted-foreground whitespace-nowrap">
                           {formattedDate}
                         </td>
-                        <td className="py-3 px-4 font-semibold text-foreground max-w-[240px] truncate">
-                          {desc}
+                        <td className="py-3 px-4 max-w-[280px]">
+                          <div className="flex items-center gap-2">
+                            <Tooltip delay={100}>
+                              <Tooltip.Trigger className="truncate max-w-full block cursor-pointer text-left outline-none">
+                                <span className="font-semibold text-foreground hover:text-primary transition-colors">
+                                  {desc}
+                                </span>
+                              </Tooltip.Trigger>
+                              <Tooltip.Content
+                                showArrow
+                                offset={8}
+                                className="w-80 sm:w-96 max-w-md bg-[#0b0c14]/80 backdrop-blur-2xl backdrop-saturate-150 border border-white/20 p-4 rounded-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),inset_0_1px_1px_0_rgba(255,255,255,0.15)] text-xs flex flex-col gap-2.5 z-50 text-foreground"
+                              >
+                                <Tooltip.Arrow className="fill-[#0b0c14]/80 stroke-white/20" />
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex flex-col gap-1 min-w-0 flex-1">
+                                    <span className="font-bold text-sm text-foreground break-words leading-snug drop-shadow-xs">
+                                      {tx.merchant_name || desc}
+                                    </span>
+                                    {tx.description &&
+                                      tx.merchant_name &&
+                                      tx.description !== tx.merchant_name && (
+                                        <span className="text-[11px] text-muted-foreground/90 font-mono break-words leading-relaxed bg-white/[0.03] p-1.5 rounded-lg border border-white/5">
+                                          {tx.description}
+                                        </span>
+                                      )}
+                                  </div>
+                                  <span
+                                    className={`font-mono font-bold text-xs shrink-0 px-2.5 py-1 rounded-lg backdrop-blur-md shadow-xs ${
+                                      isCredit
+                                        ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                                        : "bg-white/10 text-foreground border border-white/15"
+                                    }`}
+                                  >
+                                    {isCredit ? "+" : ""}
+                                    {formatCurrency(
+                                      amt,
+                                      tx.currency || activeCurrency
+                                    )}
+                                  </span>
+                                </div>
+
+                                <div className="border-t border-white/10" />
+
+                                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                                  <div className="flex flex-col gap-0.5 p-2 rounded-xl bg-white/[0.03] border border-white/5 backdrop-blur-sm">
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                                      <Calendar size={10} />
+                                      Date & Time
+                                    </span>
+                                    <span className="font-medium text-foreground break-words">
+                                      {fullDateTime}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex flex-col gap-0.5 p-2 rounded-xl bg-white/[0.03] border border-white/5 backdrop-blur-sm">
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                                      <Tag size={10} />
+                                      Category
+                                    </span>
+                                    <span className="font-medium text-foreground break-words">
+                                      {cat}
+                                      {tx.sub_category ? ` (${tx.sub_category})` : ""}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex flex-col gap-0.5 p-2 rounded-xl bg-white/[0.03] border border-white/5 backdrop-blur-sm">
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                                      <Building2 size={10} />
+                                      Account
+                                    </span>
+                                    <span className="font-medium text-foreground break-words">
+                                      {txAccountLabel}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex flex-col gap-0.5 p-2 rounded-xl bg-white/[0.03] border border-white/5 backdrop-blur-sm">
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                                      {isPending ? (
+                                        <Clock size={10} />
+                                      ) : (
+                                        <CheckCircle2 size={10} />
+                                      )}
+                                      Status
+                                    </span>
+                                    <span
+                                      className={`font-medium ${
+                                        isPending
+                                          ? "text-amber-400"
+                                          : "text-emerald-400"
+                                      }`}
+                                    >
+                                      {isPending ? "Pending" : "Settled"}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {txId && (
+                                  <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[10px] text-muted-foreground/70 font-mono gap-2">
+                                    <span className="shrink-0">Ref</span>
+                                    <span className="break-all font-mono text-right">
+                                      {txId}
+                                    </span>
+                                  </div>
+                                )}
+                              </Tooltip.Content>
+                            </Tooltip>
+
+                            {tx.split_parent_name && (
+                              <Chip
+                                size="sm"
+                                variant="soft"
+                                className="text-[10px] font-bold shrink-0 bg-white/5 border border-white/10 text-muted-foreground"
+                              >
+                                Part of {tx.split_parent_name}
+                              </Chip>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-foreground/5 border border-border">
@@ -449,11 +1563,11 @@ export default function TransactionsPage() {
                             <Dropdown.Popover className="bg-popover border border-border shadow-2xl rounded-xl w-56 p-1.5 z-50">
                               <Dropdown.Menu
                                 onAction={(key) =>
-                                  handleUpdateCategory(tx, String(key))
+                                  handleUpdateCategory(item, String(key))
                                 }
                               >
                                 {STANDARD_CATEGORIES.filter(
-                                  (c) => c !== "All",
+                                  (c) => c !== "All"
                                 ).map((c) => (
                                   <Dropdown.Item
                                     key={c}

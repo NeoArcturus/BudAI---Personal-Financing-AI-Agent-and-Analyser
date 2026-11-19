@@ -7,6 +7,7 @@ import { VirtualBucketsPanel } from "./_components/VirtualBucketsPanel";
 import { FinancialAnalysisCard } from "./_components/FinancialAnalysisCard";
 import { RecentTransactionsCard } from "./_components/RecentTransactionsCard";
 import { AutomatedActivityPanel } from "./_components/AutomatedActivityPanel";
+import { SafetyCushionCard } from "./_components/SafetyCushionCard";
 
 export interface WidgetContextType {
   onRemove?: () => void;
@@ -124,8 +125,9 @@ export default function DashboardClient({
             />
           </div>
 
-          {/* Right Column (Activity & Safety Safeguards) */}
-          <div className="w-full lg:w-[320px] xl:w-[360px] 2xl:w-[400px] shrink-0">
+          {/* Right Column (Safety Cushion & Activity Feed) */}
+          <div className="w-full lg:w-[320px] xl:w-[360px] 2xl:w-[400px] shrink-0 flex flex-col gap-6">
+            <SafetyCushionCard currency={activeCurrency} />
             <AutomatedActivityPanel
               currency={activeCurrency}
               initialData={resolvedAlerts}

@@ -86,11 +86,9 @@ export const EditBucketModal = ({ isOpen, onOpenChange, bucket }: EditBucketModa
         setTargetAmount("");
         setTargetDate(null);
         onOpenChange(false);
-      } else {
-        toast("Failed to update bucket.", { variant: "danger" } as any);
       }
-    } catch (err) {
-      toast("Network error while updating bucket.", { variant: "danger" } as any);
+    } catch (err: any) {
+      toast(err?.message || "Failed to update bucket.", { variant: "danger" } as any);
     } finally {
       setIsSubmitting(false);
     }

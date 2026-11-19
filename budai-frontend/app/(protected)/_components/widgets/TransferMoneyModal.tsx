@@ -166,17 +166,12 @@ export const TransferMoneyModal = ({
         queryClient.invalidateQueries({ queryKey: ["buckets"] });
         setAmount("");
         onOpenChange(false);
-      } else {
-        const errJson = (await res.json().catch(() => null)) as { detail?: string } | null;
-        toast(
-          errJson?.detail || "Transfer was not processed. Please check your balances.",
-          { variant: "danger" } as any,
-        );
       }
-    } catch {
-      toast("Network connection failed during transfer.", {
-        variant: "danger",
-      } as any);
+    } catch (err: any) {
+      toast(
+        err?.message || "Transfer was not processed. Please check your balances.",
+        { variant: "danger" } as any,
+      );
     } finally {
       setIsSubmitting(false);
     }

@@ -7,7 +7,7 @@ import { ChartConfiguration, ChartOptions, Plugin } from "chart.js";
 import { useTheme } from "next-themes";
 
 interface CoreChartEngineProps {
-  config: ChartConfiguration | null;
+  config: ChartConfiguration | any | null;
 }
 
 const customGlowPlugin: Plugin = {
@@ -100,7 +100,7 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
     };
 
     const enhancedDatasets =
-      config.data?.datasets.map((dataset) => {
+      config.data?.datasets.map((dataset: any) => {
         const isLine = dataset.type === "line" || config.type === "line";
         const isBar = dataset.type === "bar" || config.type === "bar";
 
@@ -125,7 +125,7 @@ export default function CoreChartEngine({ config }: CoreChartEngineProps) {
       config.type === "radar" ||
       (config.data?.datasets &&
         config.data.datasets.some(
-          (d) =>
+          (d: any) =>
             d.type === "pie" || d.type === "doughnut" || d.type === "radar",
         ));
 

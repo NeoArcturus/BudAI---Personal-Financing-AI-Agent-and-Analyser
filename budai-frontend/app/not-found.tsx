@@ -24,7 +24,7 @@ export default function NotFound() {
           </h2>
           <p className="text-muted-foreground font-medium leading-relaxed">
             The financial record you are looking for has been archived or does
-            not exist in the current ledger.
+            not exist in the current database.
           </p>
         </div>
 

@@ -109,6 +109,8 @@ export const WebSocketProvider = ({ children }: { children: React.ReactNode }) =
                 actionProps: action
                   ? {
                       children: "Resolve",
+                      variant: "primary" as any,
+                      className: "bg-primary text-primary-foreground font-bold text-xs px-3 py-1.5 rounded-xl shadow-sm hover:opacity-90 transition-opacity",
                       onPress: () => {
                         if (action === "REAUTH_TRUELAYER") {
                           window.location.href = "/connections";

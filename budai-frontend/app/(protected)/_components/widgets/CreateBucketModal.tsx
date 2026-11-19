@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { toast, Dropdown, DatePicker, DateField, Calendar, Modal } from "@heroui/react";
+import { toast, Dropdown, DatePicker, DateField, Calendar, Modal, Button } from "@heroui/react";
 import { DateValue } from "@internationalized/date";
 import { ChevronDown, Calendar as CalendarIcon } from "lucide-react";
 
@@ -27,7 +27,8 @@ export const CreateBucketModal = ({ isOpen, onOpenChange }: CreateBucketModalPro
     { key: "LIABILITY", label: "Debt" },
   ];
 
-  const handleCreate = async () => {
+  const handleCreate = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!name || !bucketType) {
       toast("Please fill out the bucket name and type.", { variant: "danger" } as any);
       return;
@@ -62,11 +63,9 @@ export const CreateBucketModal = ({ isOpen, onOpenChange }: CreateBucketModalPro
         setTargetAmount("");
         setTargetDate(null);
         onOpenChange(false);
-      } else {
-        toast("Failed to create bucket.", { variant: "danger" } as any);
       }
-    } catch (err) {
-      toast("Network error while creating bucket.", { variant: "danger" } as any);
+    } catch (err: any) {
+      toast(err?.message || "Failed to create bucket.", { variant: "danger" } as any);
     } finally {
       setIsSubmitting(false);
     }
@@ -75,164 +74,192 @@ export const CreateBucketModal = ({ isOpen, onOpenChange }: CreateBucketModalPro
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange} variant="blur">
       <Modal.Container placement="center">
-
-      <Modal.Dialog className="modal relative w-full max-w-md flex flex-col overflow-hidden pointer-events-auto bg-black/90 border border-white/5 shadow-2xl rounded-2xl">
-        <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
-          <h2 className="text-foreground font-black uppercase tracking-widest text-sm">Create Money Bucket</h2>
-          <button onClick={() => onOpenChange(false)} className="text-foreground/50 hover:text-white">&times;</button>
-        </div>
-
-        <div className="p-6 flex flex-col gap-6">
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold uppercase tracking-widest text-foreground/70">Bucket Name</label>
-            <input
-              type="text"
-              placeholder="e.g. Japan Trip 2027"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-lg p-3 text-sm text-foreground focus:outline-none focus:border-primary transition-all"
-            />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold uppercase tracking-widest text-foreground/70">Bucket Type</label>
-            <Dropdown>
-              <Dropdown.Trigger className="bg-white/5 border border-white/10 hover:bg-white/10 hover:border-primary/50 rounded-lg p-3 text-sm text-foreground focus:outline-none transition-all flex items-center justify-between cursor-pointer outline-none w-full">
-                <div className="flex items-center w-full justify-between">
-                  <span>{bucketTypes.find(t => t.key === bucketType)?.label || "Select Type"}</span>
-                  <ChevronDown size={16} className="text-foreground/50" />
-                </div>
-              </Dropdown.Trigger>
-              <Dropdown.Popover className="bg-black/90 backdrop-blur-3xl border-[0.5px] border-white/10 rounded-xl shadow-2xl p-2 min-w-[250px]">
-                <Dropdown.Menu
-                  selectedKeys={new Set([bucketType])}
-                  onAction={(key) => setBucketType(key as string)}
-                  selectionMode="single"
-                  className="flex flex-col gap-1 w-full"
-                >
-                  {bucketTypes.map((t) => (
-                    <Dropdown.Item
-                      key={t.key}
-                      id={t.key}
-                      textValue={t.label}
-                      className="rounded-lg data-[hovered=true]:bg-primary/20 data-[hovered=true]:text-primary transition-all px-3 py-2 cursor-pointer outline-none w-full"
-                    >
-                      <div className="flex flex-col gap-1 w-full">
-                        <span className="font-bold text-sm tracking-wide">{t.label}</span>
-                      </div>
-                    </Dropdown.Item>
-                  ))}
-                </Dropdown.Menu>
-              </Dropdown.Popover>
-            </Dropdown>
-          </div>
-
-          {(bucketType === "TARGET_DATE" || bucketType === "ACCUMULATING" || bucketType === "LIABILITY") && (
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-foreground/70">Target Amount (£)</label>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={targetAmount}
-                onChange={(e) => setTargetAmount(e.target.value)}
-                className="bg-white/5 border border-white/10 rounded-lg p-3 text-sm text-foreground focus:outline-none focus:border-primary transition-all"
-              />
+        <Modal.Dialog className="modal relative w-full max-w-md flex flex-col overflow-hidden pointer-events-auto bg-popover border border-border shadow-2xl rounded-2xl p-6">
+          <div className="flex items-center justify-between border-b border-border/50 pb-4 mb-4">
+            <div>
+              <h2 className="text-base font-bold text-foreground">Create Money Bucket</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Define a new virtual financial allocation
+              </p>
             </div>
-          )}
+          </div>
 
-          {bucketType === "TARGET_DATE" && (
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-foreground/70">Target Date</label>
-              <DatePicker
-                className="w-full"
-                value={targetDate}
-                onChange={setTargetDate}
-              >
-                <DateField.Group
-                  fullWidth
-                  className="bg-white/5 border border-white/10 rounded-lg p-3 h-auto flex items-center transition-all focus-within:border-primary/50"
+          <form onSubmit={handleCreate} className="flex flex-col gap-4">
+            <div>
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                Bucket Name
+              </label>
+              <div className="relative flex items-center bg-foreground/5 border border-border rounded-xl focus-within:border-primary/50 transition-colors">
+                <input
+                  type="text"
+                  placeholder="e.g. Japan Trip 2027"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full bg-transparent text-foreground font-bold text-sm py-2.5 px-3 outline-none"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                Bucket Type
+              </label>
+              <Dropdown>
+                <Button
+                  variant="secondary"
+                  className="w-full flex items-center justify-between px-3 py-2 h-auto rounded-xl bg-foreground/5 hover:bg-foreground/10 border border-border text-xs font-semibold transition-all text-left shadow-none"
                 >
-                  <DateField.Input className="flex-1  text-foreground text-sm font-sans ">
-                    {(segment) => (
-                      <DateField.Segment
-                        segment={segment}
-                        className="focus:bg-primary/20 rounded-md px-1 outline-none"
-                      />
-                    )}
-                  </DateField.Input>
-                  <DateField.Suffix className="ml-2 flex items-center">
-                    <DatePicker.Trigger className="text-foreground/50 hover:text-primary cursor-pointer transition-colors outline-none">
-                      <CalendarIcon size={16} />
-                    </DatePicker.Trigger>
-                  </DateField.Suffix>
-                </DateField.Group>
-                <DatePicker.Popover className="popover min-w-max p-6">
-                  <Calendar aria-label="Target date" className="w-full min-w-[250px]">
-                    <Calendar.Header className="flex items-center gap-3 mb-6">
-                      <Calendar.YearPickerTrigger className="flex items-center gap-2 mr-auto cursor-pointer hover:opacity-70 transition-opacity outline-none">
-                        <Calendar.YearPickerTriggerHeading className="text-sm font-black uppercase tracking-widest text-primary italic" />
-                        <Calendar.YearPickerTriggerIndicator className="text-foreground/30 w-4 h-4" />
-                      </Calendar.YearPickerTrigger>
-                      <Calendar.NavButton
-                        slot="previous"
-                        className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors outline-none"
-                      />
-                      <Calendar.NavButton
-                        slot="next"
-                        className="text-primary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 cursor-pointer transition-colors outline-none"
-                      />
-                    </Calendar.Header>
-                    <Calendar.Grid className="w-full border-collapse">
-                      <Calendar.GridHeader>
-                        {(day) => (
-                          <Calendar.HeaderCell className="text-[9px] font-black text-foreground/20 pb-4 text-center uppercase tracking-widest">
-                            {day}
-                          </Calendar.HeaderCell>
-                        )}
-                      </Calendar.GridHeader>
-                      <Calendar.GridBody>
-                        {(date) => (
-                          <Calendar.Cell
-                            date={date}
-                            className="w-8 h-8 flex items-center justify-center mx-auto text-xs font-mono text-foreground rounded-lg hover:bg-white/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-all"
-                          />
-                        )}
-                      </Calendar.GridBody>
-                    </Calendar.Grid>
-                    <Calendar.YearPickerGrid>
-                      <Calendar.YearPickerGridBody>
-                        {({year}) => (
-                          <Calendar.YearPickerCell
-                            year={year}
-                            className="h-8 px-2 w-full flex items-center justify-center mx-auto text-xs font-mono text-foreground rounded-lg hover:bg-white/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-all"
-                          />
-                        )}
-                      </Calendar.YearPickerGridBody>
-                    </Calendar.YearPickerGrid>
-                  </Calendar>
-                </DatePicker.Popover>
+                  <div className="flex flex-col truncate">
+                    <span className="truncate text-foreground">
+                      {bucketTypes.find((t) => t.key === bucketType)?.label || "Select Type"}
+                    </span>
+                  </div>
+                  <ChevronDown size={14} className="text-muted-foreground shrink-0" />
+                </Button>
+                <Dropdown.Popover className="bg-popover border border-border shadow-xl rounded-xl w-56 p-1.5 z-50">
+                  <Dropdown.Menu
+                    selectedKeys={new Set([bucketType])}
+                    onAction={(key) => setBucketType(key as string)}
+                    selectionMode="single"
+                    className="flex flex-col gap-1 w-full"
+                  >
+                    {bucketTypes.map((t) => (
+                      <Dropdown.Item
+                        key={t.key}
+                        id={t.key}
+                        textValue={t.label}
+                        className="px-3 py-2 rounded-lg text-xs hover:bg-foreground/5 cursor-pointer"
+                      >
+                        <span className="font-medium text-foreground">{t.label}</span>
+                      </Dropdown.Item>
+                    ))}
+                  </Dropdown.Menu>
+                </Dropdown.Popover>
+              </Dropdown>
+            </div>
+
+            {(bucketType === "TARGET_DATE" ||
+              bucketType === "ACCUMULATING" ||
+              bucketType === "LIABILITY") && (
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                  Target Amount (£)
+                </label>
+                <div className="relative flex items-center bg-foreground/5 border border-border rounded-xl focus-within:border-primary/50 transition-colors">
+                  <span className="text-foreground/50 font-bold text-sm pl-3 absolute left-0">
+                    £
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="0.00"
+                    value={targetAmount}
+                    onChange={(e) => setTargetAmount(e.target.value)}
+                    className="w-full bg-transparent text-foreground font-bold text-sm py-2.5 pl-8 pr-3 outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {bucketType === "TARGET_DATE" && (
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                  Target Date
+                </label>
+                <DatePicker
+                  className="w-full"
+                  value={targetDate}
+                  onChange={setTargetDate}
+                >
+                  <DateField.Group
+                    fullWidth
+                    className="relative flex items-center bg-foreground/5 border border-border rounded-xl px-3 py-2 h-auto transition-colors focus-within:border-primary/50"
+                  >
+                    <DateField.Input className="flex-1 text-foreground text-sm font-sans">
+                      {(segment) => (
+                        <DateField.Segment
+                          segment={segment}
+                          className="focus:bg-primary/20 rounded px-1 outline-none"
+                        />
+                      )}
+                    </DateField.Input>
+                    <DateField.Suffix className="ml-2 flex items-center">
+                      <DatePicker.Trigger className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors outline-none">
+                        <CalendarIcon size={16} />
+                      </DatePicker.Trigger>
+                    </DateField.Suffix>
+                  </DateField.Group>
+                  <DatePicker.Popover className="bg-popover border border-border shadow-2xl rounded-2xl p-4 min-w-max z-50">
+                    <Calendar aria-label="Target date" className="w-full min-w-[250px]">
+                      <Calendar.Header className="flex items-center gap-3 mb-4">
+                        <Calendar.YearPickerTrigger className="flex items-center gap-2 mr-auto cursor-pointer hover:opacity-70 transition-opacity outline-none">
+                          <Calendar.YearPickerTriggerHeading className="text-xs font-bold text-foreground" />
+                          <Calendar.YearPickerTriggerIndicator className="text-muted-foreground w-3.5 h-3.5" />
+                        </Calendar.YearPickerTrigger>
+                        <Calendar.NavButton
+                          slot="previous"
+                          className="text-muted-foreground hover:text-foreground w-7 h-7 flex items-center justify-center rounded-lg hover:bg-foreground/5 cursor-pointer transition-colors outline-none"
+                        />
+                        <Calendar.NavButton
+                          slot="next"
+                          className="text-muted-foreground hover:text-foreground w-7 h-7 flex items-center justify-center rounded-lg hover:bg-foreground/5 cursor-pointer transition-colors outline-none"
+                        />
+                      </Calendar.Header>
+                      <Calendar.Grid className="w-full border-collapse">
+                        <Calendar.GridHeader>
+                          {(day) => (
+                            <Calendar.HeaderCell className="text-[10px] font-semibold text-muted-foreground pb-2 text-center uppercase tracking-wider">
+                              {day}
+                            </Calendar.HeaderCell>
+                          )}
+                        </Calendar.GridHeader>
+                        <Calendar.GridBody>
+                          {(date) => (
+                            <Calendar.Cell
+                              date={date}
+                              className="w-8 h-8 flex items-center justify-center mx-auto text-xs font-mono text-foreground rounded-lg hover:bg-foreground/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-all"
+                            />
+                          )}
+                        </Calendar.GridBody>
+                      </Calendar.Grid>
+                      <Calendar.YearPickerGrid>
+                        <Calendar.YearPickerGridBody>
+                          {({year}) => (
+                            <Calendar.YearPickerCell
+                              year={year}
+                              className="h-8 px-2 w-full flex items-center justify-center mx-auto text-xs font-mono text-foreground rounded-lg hover:bg-foreground/10 data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground cursor-pointer outline-none transition-all"
+                            />
+                          )}
+                        </Calendar.YearPickerGridBody>
+                      </Calendar.YearPickerGrid>
+                    </Calendar>
+                  </DatePicker.Popover>
               </DatePicker>
             </div>
           )}
-        </div>
 
-        <div className="p-6 border-t border-white/10 flex justify-end gap-3 bg-white/5">
-          <button
-            onClick={() => onOpenChange(false)}
-            className="px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest text-foreground/70 hover:bg-white/10 transition-all"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleCreate}
-            disabled={isSubmitting}
-            className="px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest bg-primary text-black hover:bg-primary/80 transition-all disabled:opacity-50"
-          >
-            {isSubmitting ? "Creating..." : "Create"}
-          </button>
-        </div>
-    </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
-  );
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/50">
+            <Button
+              variant="ghost"
+              onPress={() => onOpenChange(false)}
+              className="text-xs font-semibold px-4 py-2 rounded-xl"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              isDisabled={isSubmitting}
+              isPending={isSubmitting}
+              className="bg-primary text-primary-foreground text-xs font-bold px-5 py-2 rounded-xl shadow-sm hover:opacity-90 transition-opacity"
+            >
+              {isSubmitting ? "Creating..." : "Create Bucket"}
+            </Button>
+          </div>
+        </form>
+      </Modal.Dialog>
+    </Modal.Container>
+  </Modal.Backdrop>
+);
 };

@@ -23,6 +23,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { ChartConfiguration } from "chart.js";
 import CoreChartEngine from "@/app/(protected)/_components/internal/ChartEngine";
@@ -57,31 +58,59 @@ export const FinancialAnalysisCard = ({
   currency = "GBP",
   intelligence = null,
 }: FinancialAnalysisCardProps) => {
-  const { accounts, activeAccountId } = useBudAI();
+  const {
+    accounts,
+    activeAccountId,
+    snapshot,
+    snapshotDays,
+    setSnapshotDays,
+  } = useBudAI();
 
   // Active View State
   const [activeView, setActiveView] = useState<CardViewMode>("forecast");
 
   // Trend & Forecast Horizons
-  const [pastLookbackDays, setPastLookbackDays] = useState<30 | 60 | 90>(30);
+  const pastLookbackDays = snapshotDays;
   const horizonDays = 30;
   const [isForecastExtended, setIsForecastExtended] = useState<boolean>(false);
   const [backendForecastSeries, setBackendForecastSeries] = useState<any[] | null>(null);
   const [safetyCushion, setSafetyCushion] = useState<number>(500);
 
+  // Canonical Expense Forecast Trajectories from Snapshot Intelligence
+  const expenseForecast = useMemo(() => {
+    const intel = intelligence || snapshot?.intelligence;
+    return intel?.expense_forecast || null;
+  }, [intelligence, snapshot]);
+
+  const trajectories = expenseForecast?.trajectories || null;
+  const forecastRates = expenseForecast?.rates || null;
+  const surgeStatus = expenseForecast?.surge_status || null;
+  const forecastTimeline: string[] = useMemo(() => {
+    return expenseForecast?.timeline || [];
+  }, [expenseForecast]);
+  const lastMonthName: string = expenseForecast?.last_month_name || "Last Month";
+  const hasCareless = Array.isArray(trajectories?.careless) && trajectories.careless.length > 0;
+
   // Seed initial 30-day forecast series directly from snapshot intelligence if available
   useEffect(() => {
-    if (intelligence) {
-      const forecastData = intelligence.forecaster || intelligence.stochastic_forecast;
+    const intel = intelligence || snapshot?.intelligence;
+    if (intel) {
+      const forecastData =
+        intel.expense_forecast ||
+        intel.expense_trend?.forecast ||
+        intel.forecaster ||
+        intel.stochastic_forecast;
       const trajectory =
+        forecastData?.trajectories?.expected ||
         forecastData?.mean_trajectory ||
+        forecastData?.mean ||
         forecastData?.corridors?.Mean ||
         forecastData?.corridors?.mean;
       if (trajectory && Array.isArray(trajectory) && trajectory.length > 0) {
         setBackendForecastSeries(trajectory);
       }
     }
-  }, [intelligence]);
+  }, [intelligence, snapshot]);
 
   // Calendar State (Spanning -50 Years to +5 Years)
   const todayDate = useMemo(() => today(getLocalTimeZone()), []);
@@ -157,104 +186,152 @@ export const FinancialAnalysisCard = ({
     setIsForecastExtended(!isForecastExtended);
   };
 
-  // In-memory daily spend calculation from transactions (Option A)
-  const dailyPoints = useMemo(() => {
-    const map: Record<string, number> = {};
-    if (Array.isArray(transactions)) {
-      transactions.forEach((tx) => {
-        const amt = Number(tx.amount) || 0;
-        if (amt < 0) {
-          const dateStr = tx.timestamp ? tx.timestamp.split("T")[0] : "";
-          if (dateStr) {
-            map[dateStr] = (map[dateStr] || 0) + Math.abs(amt);
-          }
+  // Map of exact daily spending: Date ("YYYY-MM-DD") -> exact total amount spent on that particular date
+  const exactDailySpendingMap = useMemo(() => {
+    const map = new Map<string, number>();
+
+    // 1. If backend snapshot provided canonical daily points, populate map
+    if (snapshot?.transactions?.daily_expense_points?.length) {
+      snapshot.transactions.daily_expense_points.forEach((p: any) => {
+        if (p.date) {
+          map.set(p.date, Math.max(0, Number(p.amount) || 0));
         }
       });
+      return map;
     }
-    return Object.entries(map).map(([Date, Amount]) => ({ Date, Amount }));
-  }, [transactions]);
+
+    // 2. Aggregate from snapshot items or useTransactions
+    const sourceTxs =
+      snapshot?.transactions?.items?.length
+        ? snapshot.transactions.items
+        : Array.isArray(transactions)
+        ? transactions
+        : [];
+
+    sourceTxs.forEach((tx: any) => {
+      const amt = Number(tx.amount ?? tx.Amount ?? 0);
+      if (amt < 0) {
+        const rawDate = tx.date || tx.timestamp || "";
+        const dateKey = rawDate.includes("T")
+          ? rawDate.split("T")[0]
+          : rawDate.split(" ")[0];
+        if (dateKey && dateKey.length === 10) {
+          const currentTotal = map.get(dateKey) || 0;
+          map.set(dateKey, currentTotal + Math.abs(amt));
+        }
+      }
+    });
+
+    return map;
+  }, [snapshot?.transactions?.daily_expense_points, snapshot?.transactions?.items, transactions]);
+
+  // Backward-compatible dailyPoints array for other secondary views
+  const dailyPoints = useMemo(() => {
+    return Array.from(exactDailySpendingMap.entries()).map(([Date, Amount]) => ({
+      Date,
+      Amount,
+    }));
+  }, [exactDailySpendingMap]);
 
   // ---------------------------------------------------------------------------
   // 1. DATA COMPUTATION FOR ALL VIEWS
   // ---------------------------------------------------------------------------
 
-  // A. Forecast & Past Daily Balances
-  const { labels, pastBalances, avgDailySpend, projectedBalance } = useMemo(() => {
+  // A. Expense Trend: Past Daily Outflow & Summary Metrics
+  const {
+    labels,
+    pastExpenses,
+    avgDailySpend,
+    monthToDateTotal,
+    projectedMonthTotal,
+    projectedBalance,
+  } = useMemo(() => {
     const totalDays = pastLookbackDays;
     const computedLabels: string[] = [];
-    const balances: number[] = [];
-    let runningBalance = currentBalance;
+    const expenses: number[] = [];
+
+    const todayObj = new Date();
+    const currentMonthKey = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}`;
 
     let totalRecentSpend = 0;
-    dailyPoints.forEach((p) => {
-      if (p.Amount > 0) totalRecentSpend += p.Amount;
-    });
-
-    const calculatedDailyBurn =
-      dailyPoints.length > 0
-        ? totalRecentSpend / dailyPoints.length
-        : currentBalance > 0
-        ? Math.max(15, currentBalance * 0.015)
-        : 25;
+    let mtdSpend = 0;
 
     for (let i = totalDays - 1; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const dateKey = `${year}-${month}-${day}`;
+
       computedLabels.push(
         d.toLocaleDateString("en-GB", { month: "short", day: "numeric" }),
       );
 
-      const matchingPoint = dailyPoints.find((p) => {
-        return p.Date.endsWith(
-          `-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-            d.getDate(),
-          ).padStart(2, "0")}`,
-        );
-      });
+      // Exact total amount spent on that particular date (0 if no spend on that day)
+      const daySpend = exactDailySpendingMap.get(dateKey) ?? 0;
+      const roundedSpend = Math.round(daySpend * 100) / 100;
+      expenses.push(roundedSpend);
 
-      const daySpend = matchingPoint
-        ? matchingPoint.Amount
-        : calculatedDailyBurn;
-
-      balances.push(Math.round(runningBalance));
-      runningBalance = Math.max(0, runningBalance - daySpend);
+      totalRecentSpend += roundedSpend;
+      if (dateKey.startsWith(currentMonthKey)) {
+        mtdSpend += roundedSpend;
+      }
     }
 
-    const projected = Math.max(
-      0,
-      currentBalance - calculatedDailyBurn * horizonDays,
-    );
+    const calculatedAvg =
+      expenses.length > 0
+        ? Math.round((totalRecentSpend / expenses.length) * 100) / 100
+        : 0;
+
+    const summary = snapshot?.transactions?.summary;
+    const finalAvgDaily = summary?.average_daily_expense ?? calculatedAvg;
+    const finalMtd = summary?.month_to_date_total ?? Math.round(mtdSpend * 100) / 100;
+
+    const daysInMonth = new Date(todayObj.getFullYear(), todayObj.getMonth() + 1, 0).getDate();
+    const remainingDays = Math.max(0, daysInMonth - todayObj.getDate());
+    const finalProjectedMonth =
+      summary?.projected_month_total ?? Math.round((finalMtd + finalAvgDaily * remainingDays) * 100) / 100;
 
     return {
       labels: computedLabels,
-      pastBalances: balances,
-      avgDailySpend: Math.round(calculatedDailyBurn),
-      projectedBalance: Math.round(projected),
+      pastExpenses: expenses,
+      avgDailySpend: finalAvgDaily,
+      monthToDateTotal: finalMtd,
+      projectedMonthTotal: finalProjectedMonth,
+      projectedBalance: Math.max(0, currentBalance - finalAvgDaily * horizonDays),
     };
-  }, [dailyPoints, pastLookbackDays, currentBalance, horizonDays]);
+  }, [
+    exactDailySpendingMap,
+    pastLookbackDays,
+    snapshot?.transactions?.summary,
+    currentBalance,
+    horizonDays,
+  ]);
 
-  const forecastBalances = useMemo(() => {
+  const forecastExpenses = useMemo(() => {
+    if (trajectories?.expected && Array.isArray(trajectories.expected) && trajectories.expected.length > 0) {
+      return trajectories.expected.slice(0, horizonDays).map((v: number) => Math.round(Number(v) * 100) / 100);
+    }
     if (backendForecastSeries && backendForecastSeries.length > 0) {
       return backendForecastSeries.slice(0, horizonDays).map((p: any) => {
-        if (typeof p === "number") return Math.round(p);
+        if (typeof p === "number") return Math.round(p * 100) / 100;
         const val =
-          p["Expected Balance"] ??
-          p["expected_balance"] ??
-          p.balance ??
+          p["Projected Spend"] ??
+          p["projected_spend"] ??
+          p.spend ??
+          p.amount ??
           p.y ??
-          p.Amount ??
           0;
-        return Math.round(val);
+        return Math.round(val * 100) / 100;
       });
     }
     const series = [];
-    let cur = currentBalance;
     for (let i = 1; i <= horizonDays; i++) {
-      cur = Math.max(0, cur - avgDailySpend);
-      series.push(Math.round(cur));
+      series.push(Math.round(avgDailySpend * 100) / 100);
     }
     return series;
-  }, [backendForecastSeries, currentBalance, avgDailySpend, horizonDays]);
+  }, [trajectories?.expected, backendForecastSeries, avgDailySpend, horizonDays]);
 
   // B. Calendar Events (Bills, Subscriptions, Paydays)
   const calendarEvents = useMemo(() => {
@@ -746,78 +823,205 @@ export const FinancialAnalysisCard = ({
   // 2. CHART CONFIGURATIONS
   // ---------------------------------------------------------------------------
 
-  // Chart 1: Balance Trend & Forecast Line Chart
+  // Chart 1: Expense Trend & Forecast Line Chart
   const forecastChartConfig: ChartConfiguration = useMemo(() => {
-    const combinedLabels = [...labels];
-    if (isForecastExtended) {
+    const futureTimelineLabels = forecastTimeline.length > 0
+      ? forecastTimeline.map((dateStr) => {
+          try {
+            const parts = dateStr.split("-");
+            if (parts.length === 3) {
+              const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+              return d.toLocaleDateString("en-GB", { month: "short", day: "numeric" });
+            }
+          } catch {}
+          return dateStr;
+        })
+      : [];
+
+    const fallbackFutureLabels: string[] = [];
+    if (futureTimelineLabels.length === 0 && isForecastExtended) {
       for (let i = 1; i <= horizonDays; i++) {
         const d = new Date();
         d.setDate(d.getDate() + i);
-        combinedLabels.push(
+        fallbackFutureLabels.push(
           d.toLocaleDateString("en-GB", { month: "short", day: "numeric" }),
         );
       }
     }
 
-    const pastSeriesPadded = [
-      ...pastBalances,
-      ...(isForecastExtended ? new Array(horizonDays).fill(null) : []),
+    const futureLabels = futureTimelineLabels.length > 0 ? futureTimelineLabels : fallbackFutureLabels;
+    const futureCount = futureLabels.length;
+
+    const combinedLabels = [
+      ...labels,
+      ...(isForecastExtended ? futureLabels : []),
     ];
 
-    const forecastSeriesPadded = isForecastExtended
-      ? [
-          ...new Array(pastBalances.length - 1).fill(null),
-          pastBalances[pastBalances.length - 1] ?? currentBalance,
-          ...forecastBalances,
-        ]
-      : [];
+    const pastSeriesPadded = [
+      ...pastExpenses,
+      ...(isForecastExtended ? new Array(futureCount).fill(null) : []),
+    ];
+
+    const anchorValue = pastExpenses.length > 0
+      ? pastExpenses[pastExpenses.length - 1]
+      : avgDailySpend;
+    const padding = new Array(Math.max(0, pastExpenses.length - 1)).fill(null);
+
+    const buildTrajectorySeries = (
+      dataPoints?: number[] | null,
+      fallbackGenerator?: () => number[]
+    ) => {
+      if (!isForecastExtended) return [];
+      const points =
+        dataPoints && Array.isArray(dataPoints) && dataPoints.length > 0
+          ? dataPoints
+          : fallbackGenerator
+            ? fallbackGenerator()
+            : forecastExpenses;
+      return [
+        ...padding,
+        anchorValue,
+        ...points.map((v: any) => Math.round(Number(v) * 100) / 100),
+      ];
+    };
+
+    const expectedSeriesPadded = buildTrajectorySeries(trajectories?.expected || forecastExpenses);
+    const optimalSeriesPadded = buildTrajectorySeries(
+      trajectories?.optimal,
+      () => forecastExpenses.map((v: any) => Math.max(0, Math.round(Number(v) * 0.75 * 100) / 100))
+    );
+    const lastMonthSeriesPadded = buildTrajectorySeries(
+      trajectories?.last_month,
+      () => new Array(futureCount).fill(Math.max(0, Math.round(avgDailySpend * 0.9 * 100) / 100))
+    );
+    const carelessSeriesPadded = hasCareless ? buildTrajectorySeries(trajectories?.careless) : [];
+
+    const datasets: any[] = [
+      {
+        label: `Daily Expenses (${pastLookbackDays}d)`,
+        data: pastSeriesPadded,
+        borderColor: "rgba(0, 242, 255, 1)",
+        backgroundColor: "rgba(0, 242, 255, 0.08)",
+        fill: true,
+        tension: 0.1,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        pointBackgroundColor: "rgba(0, 242, 255, 1)",
+        pointBorderColor: "#0c131d",
+        pointBorderWidth: 1.5,
+        borderWidth: 2,
+      },
+    ];
+
+    if (isForecastExtended) {
+      // 1. Expected Spend Trajectory
+      datasets.push({
+        label: "Expected Spend",
+        data: expectedSeriesPadded,
+        borderColor: "rgba(168, 85, 247, 1)",
+        backgroundColor: "rgba(168, 85, 247, 0.04)",
+        borderDash: [5, 5],
+        fill: false,
+        tension: 0.2,
+        pointRadius: 2,
+        pointHoverRadius: 5,
+        pointBackgroundColor: "rgba(168, 85, 247, 1)",
+        borderWidth: 2,
+      });
+
+      // 2. Optimal Target Trajectory
+      datasets.push({
+        label: "Optimal Target",
+        data: optimalSeriesPadded,
+        borderColor: "rgba(16, 185, 129, 1)",
+        backgroundColor: "transparent",
+        borderDash: [3, 3],
+        fill: false,
+        tension: 0.15,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointBackgroundColor: "rgba(16, 185, 129, 1)",
+        borderWidth: 2,
+      });
+
+      // 3. Last Month Benchmark Trajectory
+      datasets.push({
+        label: `${lastMonthName} Benchmark`,
+        data: lastMonthSeriesPadded,
+        borderColor: "rgba(148, 163, 184, 0.85)",
+        backgroundColor: "transparent",
+        borderDash: [2, 2],
+        fill: false,
+        tension: 0.1,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointBackgroundColor: "rgba(148, 163, 184, 1)",
+        borderWidth: 1.5,
+      });
+
+      // 4. Careless / High-Spend Trajectory (Conditional)
+      if (hasCareless) {
+        datasets.push({
+          label: "High-Spend Trajectory",
+          data: carelessSeriesPadded,
+          borderColor: "rgba(245, 158, 11, 1)",
+          backgroundColor: "transparent",
+          borderDash: [5, 5],
+          fill: false,
+          tension: 0.2,
+          pointRadius: 2,
+          pointHoverRadius: 5,
+          pointBackgroundColor: "rgba(245, 158, 11, 1)",
+          borderWidth: 2,
+        });
+      }
+    } else {
+      // Benchmark line when forecast is not extended
+      datasets.push({
+        label: "Daily Spend Benchmark",
+        data: new Array(combinedLabels.length).fill(avgDailySpend),
+        borderColor: "rgba(255, 255, 255, 0.25)",
+        borderDash: [4, 4],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false,
+      });
+    }
 
     return {
       type: "line",
       data: {
         labels: combinedLabels,
-        datasets: [
-          {
-            label: `Past Balance (${pastLookbackDays}d)`,
-            data: pastSeriesPadded as any,
-            borderColor: "rgba(59, 130, 246, 1)",
-            backgroundColor: "rgba(59, 130, 246, 0.08)",
-            fill: true,
-            tension: 0.35,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-            borderWidth: 2,
-          },
-          ...(isForecastExtended
-            ? [
-                {
-                  label: `Forecast Trajectory (${horizonDays}d)`,
-                  data: forecastSeriesPadded as any,
-                  borderColor: "rgba(168, 85, 247, 1)",
-                  backgroundColor: "rgba(168, 85, 247, 0.05)",
-                  borderDash: [5, 5],
-                  fill: true,
-                  tension: 0.35,
-                  pointRadius: 0,
-                  pointHoverRadius: 4,
-                  borderWidth: 2,
-                },
-              ]
-            : []),
-          {
-            label: "Safety Floor Cushion",
-            data: new Array(combinedLabels.length).fill(safetyCushion),
-            borderColor: "rgba(239, 68, 68, 0.7)",
-            borderDash: [4, 4],
-            borderWidth: 1.5,
-            pointRadius: 0,
-            fill: false,
-          },
-        ],
+        datasets,
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            min: 0,
+            grid: {
+              color: "rgba(255, 255, 255, 0.05)",
+            },
+            ticks: {
+              callback: (value) =>
+                `${getCurrencySymbol(activeCurrency)}${Number(value).toLocaleString()}`,
+              color: "rgba(255, 255, 255, 0.4)",
+              font: { size: 10, family: "monospace" },
+            },
+          },
+          x: {
+            grid: {
+              display: false,
+            },
+            ticks: {
+              maxTicksLimit: 10,
+              color: "rgba(255, 255, 255, 0.4)",
+              font: { size: 10 },
+            },
+          },
+        },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -827,8 +1031,8 @@ export const FinancialAnalysisCard = ({
                 return `${context.dataset.label}: ${getCurrencySymbol(
                   activeCurrency,
                 )}${val.toLocaleString(undefined, {
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0,
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
                 })}`;
               },
             },
@@ -838,14 +1042,17 @@ export const FinancialAnalysisCard = ({
     };
   }, [
     labels,
-    pastBalances,
-    forecastBalances,
+    pastExpenses,
+    forecastExpenses,
     isForecastExtended,
     horizonDays,
     pastLookbackDays,
-    safetyCushion,
+    avgDailySpend,
     activeCurrency,
-    currentBalance,
+    forecastTimeline,
+    trajectories,
+    lastMonthName,
+    hasCareless,
   ]);
 
   // Chart 2: Expenses Donut / Pie Chart
@@ -1047,8 +1254,8 @@ export const FinancialAnalysisCard = ({
     switch (activeView) {
       case "forecast":
         return {
-          title: "Balance Trend & Forecast",
-          subtitle: `Past ${pastLookbackDays}d trend and forward projection`,
+          title: "Expense Trend & Forecast",
+          subtitle: `Past ${pastLookbackDays}d daily outflows and forward projection`,
           badge: `${pastLookbackDays}-Day Base`,
         };
       case "calendar":
@@ -1120,7 +1327,7 @@ export const FinancialAnalysisCard = ({
         <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-2xl border border-white/10 shadow-xs">
           {(
             [
-              { id: "forecast", label: "Balance Trend" },
+              { id: "forecast", label: "Expense Trend" },
               { id: "calendar", label: "Payments Calendar" },
               { id: "expenses", label: "Expense Breakdown" },
               { id: "cashflow", label: "Cash Flow" },
@@ -1202,12 +1409,12 @@ export const FinancialAnalysisCard = ({
               <span className="text-[10px] text-muted-foreground font-semibold px-1.5">
                 Past:
               </span>
-              {([30, 60, 90] as const).map((days) => (
+              {([30, 60, 90, 180] as const).map((days) => (
                 <Button
                   key={days}
                   size="sm"
                   variant="tertiary"
-                  onPress={() => setPastLookbackDays(days)}
+                  onPress={() => setSnapshotDays(days)}
                   className={`px-2 py-0.5 h-6 min-w-0 rounded-lg text-[10px] font-bold transition-all cursor-pointer shadow-none ${
                     pastLookbackDays === days
                       ? "bg-blue-600 text-white"
@@ -1232,6 +1439,17 @@ export const FinancialAnalysisCard = ({
                 >
                   30d
                 </Button>
+              </div>
+            )}
+
+            {/* Contextual Surge Alert Badge */}
+            {isForecastExtended && (surgeStatus?.is_active || hasCareless) && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 text-xs font-semibold">
+                <AlertTriangle size={13} className="shrink-0" />
+                <span>
+                  Surge Alert: {surgeStatus?.driver_merchant || surgeStatus?.driver_category || "Elevated Outflow"}
+                  {surgeStatus?.z_score ? ` (+${surgeStatus.z_score.toFixed(1)}σ)` : ""}
+                </span>
               </div>
             )}
 
@@ -1262,37 +1480,36 @@ export const FinancialAnalysisCard = ({
           <>
             <div className="p-3 rounded-xl bg-white/40 dark:bg-neutral-800/40 border border-white/10 dark:border-white/5">
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-0.5">
-                Current Balance
+                Average Daily Outflow
               </span>
               <span className="text-base font-bold text-foreground font-mono">
-                {formatCurrency(currentBalance, activeCurrency)}
+                {formatCurrency(avgDailySpend, activeCurrency)} / day
               </span>
             </div>
             <div className="p-3 rounded-xl bg-white/40 dark:bg-neutral-800/40 border border-white/10 dark:border-white/5">
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-0.5">
-                Safety Floor Cushion
+                Month-to-Date Outflow
               </span>
               <span className="text-base font-bold text-foreground font-mono">
-                {formatCurrency(safetyCushion, activeCurrency)}
+                {formatCurrency(monthToDateTotal, activeCurrency)}
               </span>
             </div>
             <div className="col-span-2 sm:col-span-1 p-3 rounded-xl bg-white/40 dark:bg-neutral-800/40 border border-white/10 dark:border-white/5">
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-0.5">
                 {isForecastExtended
-                  ? `Projected (${horizonDays}d)`
-                  : "Daily Average Spend"}
+                  ? `Projected (${horizonDays}d Outflow)`
+                  : "Projected Month Outflow"}
               </span>
-              <span
-                className={`text-base font-bold font-mono ${
-                  isForecastExtended && isBelowCushion
-                    ? "text-red-500"
-                    : "text-foreground"
-                }`}
-              >
-                {isForecastExtended
-                  ? formatCurrency(projectedBalance, activeCurrency)
-                  : `${formatCurrency(avgDailySpend, activeCurrency)} / day`}
-              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-base font-bold font-mono text-foreground">
+                  {formatCurrency(projectedMonthTotal, activeCurrency)}
+                </span>
+                {isForecastExtended && forecastRates?.optimal_daily_rate ? (
+                  <span className="text-[10px] text-emerald-500 font-semibold font-mono">
+                    Target: {formatCurrency(forecastRates.optimal_daily_rate, activeCurrency)}/d
+                  </span>
+                ) : null}
+              </div>
             </div>
           </>
         )}
@@ -1424,10 +1641,10 @@ export const FinancialAnalysisCard = ({
       {/* Main Visual Display (Expanded min-h-[350px] container) */}
       {/* --------------------------------------------------------------------- */}
       <div className="w-full min-h-[350px] h-auto md:h-[350px] relative mt-1">
-        {/* VIEW 1: BALANCE TREND & FORECAST */}
+        {/* VIEW 1: EXPENSE TREND & FORECAST */}
         {activeView === "forecast" && (
           <>
-            {isTxLoading ? (
+            {pastExpenses.length === 0 && isTxLoading ? (
               <div className="w-full h-full flex flex-col justify-end gap-2 p-2">
                 <Skeleton className="h-4/5 w-full rounded-xl" />
               </div>
@@ -1901,31 +2118,51 @@ export const FinancialAnalysisCard = ({
       <div className="flex items-center justify-between text-xs text-muted-foreground pt-2.5 border-t border-white/10 dark:border-white/5 font-sans">
         {activeView === "forecast" && (
           <>
-            <div className="flex items-center gap-3.5">
+            <div className="flex flex-wrap items-center gap-3.5">
               <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-0.5 bg-blue-500 rounded-full" />
-                <span>Past Balance</span>
+                <div className="w-2.5 h-0.5 bg-cyan-400 rounded-full" />
+                <span>Daily Expenses</span>
               </div>
-              {isForecastExtended && (
+              {isForecastExtended ? (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-0.5 bg-purple-500 border-dashed rounded-full" />
+                    <span>Expected Spend</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-0.5 bg-emerald-500 border-dashed rounded-full" />
+                    <span>Optimal Target</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-0.5 bg-slate-400 border-dotted rounded-full" />
+                    <span>{lastMonthName} Benchmark</span>
+                  </div>
+                  {hasCareless && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-0.5 bg-amber-500 border-dashed rounded-full" />
+                      <span>High-Spend Trajectory</span>
+                    </div>
+                  )}
+                </>
+              ) : (
                 <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-0.5 bg-purple-500 border-dashed rounded-full" />
-                  <span>Projected</span>
+                  <div className="w-2.5 h-0.5 bg-white/40 border-dashed rounded-full" />
+                  <span>Daily Average ({formatCurrency(avgDailySpend, activeCurrency)})</span>
                 </div>
               )}
-              <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-0.5 bg-red-500/70 rounded-full" />
-                <span>Floor ({formatCurrency(safetyCushion, activeCurrency)})</span>
-              </div>
             </div>
 
             {isForecastExtended && (
               <div className="flex items-center gap-1 text-xs font-semibold text-foreground/80">
-                <ShieldCheck size={13} className="text-emerald-500" />
-                <span>
-                  {isBelowCushion
-                    ? "Projected Below Safety Floor"
-                    : "Projected Above Safety Floor"}
-                </span>
+                {surgeStatus?.is_active || hasCareless ? (
+                  <span className="text-amber-500 font-medium">
+                    Surge spending trajectory active
+                  </span>
+                ) : (
+                  <span className="text-emerald-500 font-medium">
+                    Forecast active
+                  </span>
+                )}
               </div>
             )}
           </>

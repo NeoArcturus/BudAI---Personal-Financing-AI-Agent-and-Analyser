@@ -87,8 +87,8 @@
   --secondary-foreground: #00ffff;
   --muted: #1f2d40;
   --muted-foreground: oklch(0.85 0 0);
-  --accent: #8a2be2;
-  --accent-foreground: #ffffff;
+  --accent: #00ffff;
+  --accent-foreground: #0c131d;
   --destructive: oklch(0.704 0.191 22.216);
   --border: #2a3b52;
   --input: #2a3b52;
@@ -122,8 +122,8 @@
   --secondary-foreground: #00f2ff;
   --muted: #1a2535;
   --muted-foreground: oklch(0.708 0 0);
-  --accent: #7000ff;
-  --accent-foreground: #ffffff;
+  --accent: #00f2ff;
+  --accent-foreground: #0c131d;
   --destructive: oklch(0.704 0.191 22.216);
   --border: #1a2535;
   --input: #1a2535;
@@ -455,6 +455,63 @@
     transform: translateZ(0);
   }
 
+  /* Toast Region - Ensure toasts render above all modal dialogs, drawers, and backdrops */
+  .toast-region {
+    z-index: 99999 !important;
+  }
+
+  /* Scheme C: Two-Tone Compound Toast Styling */
+  .toast {
+    @apply bg-popover border border-border shadow-2xl rounded-2xl p-4 gap-3 text-xs font-sans text-foreground backdrop-blur-md;
+  }
+
+  .toast__title {
+    @apply text-xs font-semibold tracking-normal text-foreground;
+  }
+
+  .toast__description {
+    @apply text-[11px] font-normal text-muted-foreground mt-0.5 leading-relaxed;
+  }
+
+  .toast__indicator {
+    @apply text-foreground/70 shrink-0 p-0.5;
+  }
+
+  /* Two-tone semantic text and indicator coloration */
+  .toast--accent .toast__title,
+  .toast--accent .toast__indicator {
+    @apply text-primary;
+  }
+
+  .toast--success .toast__title,
+  .toast--success .toast__indicator {
+    @apply text-emerald-400;
+  }
+
+  .toast--warning .toast__title,
+  .toast--warning .toast__indicator {
+    @apply text-amber-400;
+  }
+
+  .toast--danger .toast__title,
+  .toast--danger .toast__indicator {
+    @apply text-rose-400;
+  }
+
+  /* Close button styling */
+  .toast__close-button {
+    @apply rounded-lg text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors;
+  }
+
+  /* Action button styling */
+  .toast__action {
+    @apply ml-auto shrink-0 self-center;
+  }
+
+  .toast__action button {
+    @apply text-xs font-semibold px-3 py-1.5 rounded-xl transition-all shadow-sm;
+  }
+
   /* HeroUI Global Animation Overrides */
   
   /* Popover & Modal entrance/exit */
@@ -470,10 +527,32 @@
     @apply animate-out zoom-out-95 fade-out duration-200;
   }
 
-  /* Universal Button interaction physics */
+  /* Universal Button styling & font colors */
   .button {
+    --button-fg: var(--foreground);
+    color: var(--foreground);
     @apply transition-all duration-200 ease-out;
     will-change: transform;
+  }
+
+  .button--secondary {
+    --button-fg: var(--foreground);
+    color: var(--foreground);
+  }
+
+  .button--ghost,
+  .button--outline,
+  .button--tertiary {
+    --button-fg: var(--foreground);
+    color: var(--foreground);
+  }
+
+  .button--primary {
+    --button-bg: var(--primary);
+    --button-bg-hover: color-mix(in oklab, var(--primary) 90%, white 10%);
+    --button-bg-pressed: color-mix(in oklab, var(--primary) 80%, black 20%);
+    --button-fg: var(--primary-foreground);
+    color: var(--primary-foreground);
   }
   
   .button:not(:hover) {

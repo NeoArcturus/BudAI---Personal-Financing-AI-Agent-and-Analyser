@@ -172,9 +172,9 @@ export default function OnboardingPage() {
       }
 
       router.push("/home");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Onboarding submission error:", error);
-      toast.danger("Unable to save profile. Please try again.");
+      toast.danger(error?.message || "Unable to save profile. Please try again.");
       setCurrentStep(5);
       setProcessingState("idle");
     }

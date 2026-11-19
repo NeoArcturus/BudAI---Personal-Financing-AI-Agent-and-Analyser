@@ -27,7 +27,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <QueryClientProvider client={queryClient}>
-        <ToastProvider placement="top end" width={300} />
+        <ToastProvider placement="top end" width={380} />
         <WebSocketProvider>
           {children}
         </WebSocketProvider>

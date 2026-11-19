@@ -27,11 +27,9 @@ export function DeleteBucketModal({ isOpen, onOpenChange, bucket }: DeleteBucket
         toast("Bucket deleted and funds swept to Unallocated.");
         queryClient.invalidateQueries({ queryKey: ["buckets"] });
         onOpenChange(false);
-      } else {
-        toast("Failed to delete bucket.", { variant: "danger" } as any);
       }
-    } catch (err) {
-      toast("Network error while deleting bucket.", { variant: "danger" } as any);
+    } catch (err: any) {
+      toast(err?.message || "Failed to delete bucket.", { variant: "danger" } as any);
     } finally {
       setIsDeleting(false);
     }

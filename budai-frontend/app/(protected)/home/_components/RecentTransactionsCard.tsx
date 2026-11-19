@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   Clock,
   Receipt,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useBudAI } from "@/app/context/AppContext";
@@ -28,7 +30,14 @@ export const RecentTransactionsCard = ({
   initialTransactions = [],
 }: RecentTransactionsCardProps) => {
   const router = useRouter();
-  const { accounts, activeAccountId } = useBudAI();
+  const {
+    accounts,
+    activeAccountId,
+    snapshot,
+    snapshotPage,
+    setSnapshotPage,
+    isSnapshotFetching,
+  } = useBudAI();
   const [searchQuery, setSearchQuery] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -37,25 +46,24 @@ export const RecentTransactionsCard = ({
     return accounts.find((a) => a.account_id === activeAccountId) || accounts[0] || null;
   }, [accounts, activeAccountId]);
 
-  const targetAccountId = activeAccount?.account_id || "";
   const activeCurrency = activeAccount?.currency || currency;
 
-  const { sixMonthsAgoStr, todayStr } = useMemo(() => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - 180);
-    return {
-      sixMonthsAgoStr: start.toISOString().split("T")[0],
-      todayStr: end.toISOString().split("T")[0],
-    };
-  }, []);
+  const snapshotItems = snapshot?.transactions?.items;
+  const pagination = snapshot?.transactions?.pagination || {
+    page: snapshotPage || 1,
+    total_pages: 1,
+    has_more: false,
+    total_count: (snapshotItems || initialTransactions || []).length,
+  };
 
-  const { data: allTransactions = initialTransactions, isLoading, refetch } = useTransactions(
-    targetAccountId,
-    sixMonthsAgoStr,
-    todayStr,
-    initialTransactions && initialTransactions.length > 0 ? initialTransactions : undefined,
-  );
+  const allTransactions = useMemo(() => {
+    if (snapshotItems && Array.isArray(snapshotItems) && snapshotItems.length > 0) {
+      return snapshotItems;
+    }
+    return initialTransactions;
+  }, [snapshotItems, initialTransactions]);
+
+  const isLoading = isSnapshotFetching && allTransactions.length === 0;
 
   const isSyncingActive = useMemo(() => {
     if (!activeAccount) return false;
@@ -68,31 +76,30 @@ export const RecentTransactionsCard = ({
 
   const filteredTransactions = useMemo(() => {
     if (!allTransactions) return [];
-    if (!searchQuery.trim()) return allTransactions.slice(0, 8);
+    if (!searchQuery.trim()) return allTransactions.slice(0, 10);
 
     const q = searchQuery.toLowerCase();
     return allTransactions
-      .filter((t) => {
+      .filter((t: any) => {
         const desc = (t.description || t.merchant_name || "").toLowerCase();
         const cat = (t.category || "").toLowerCase();
         const amt = String(t.amount || "");
         return desc.includes(q) || cat.includes(q) || amt.includes(q);
       })
-      .slice(0, 8);
+      .slice(0, 10);
   }, [allTransactions, searchQuery]);
 
   const handleSyncAccount = async () => {
     setIsSyncing(true);
     try {
       const res = await apiFetch("/api/accounts/sync", { method: "POST" }, true);
-      if (res.ok) {
-        toast("Bank sync initiated. Transactions updated.");
-        refetch();
-      } else {
+      if (res.status === 202) {
         toast("Bank sync request submitted. Waiting for bank settlement.");
+      } else if (res.ok) {
+        toast("Bank sync initiated. Transactions updated.");
       }
-    } catch {
-      toast("Unable to reach banking provider at this time.", {
+    } catch (err: any) {
+      toast(err?.message || "Unable to reach banking provider at this time.", {
         variant: "danger",
       } as any);
     } finally {
@@ -271,6 +278,36 @@ export const RecentTransactionsCard = ({
           })
         )}
       </div>
+
+      {pagination.total_pages > 1 && (
+        <div className="flex items-center justify-between pt-3 border-t border-white/10 dark:border-white/5 text-xs">
+          <span className="text-muted-foreground text-[11px] font-medium">
+            Page {pagination.page} of {pagination.total_pages} ({pagination.total_count} transactions)
+          </span>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="ghost"
+              isDisabled={pagination.page <= 1 || isSnapshotFetching}
+              onPress={() => setSnapshotPage(pagination.page - 1)}
+              className="h-7 px-2.5 text-xs rounded-lg border border-white/10 hover:bg-white/10 disabled:opacity-40 cursor-pointer"
+            >
+              <ChevronLeft size={13} className="mr-0.5" />
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              isDisabled={!pagination.has_more || isSnapshotFetching}
+              onPress={() => setSnapshotPage(pagination.page + 1)}
+              className="h-7 px-2.5 text-xs rounded-lg border border-white/10 hover:bg-white/10 disabled:opacity-40 cursor-pointer"
+            >
+              Next
+              <ChevronRight size={13} className="ml-0.5" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
