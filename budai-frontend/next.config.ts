@@ -9,9 +9,13 @@ if (!process.env.NODE_PATH) {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  turbopack: {
-    root: path.resolve("."),
-  },
+  ...(process.env.VERCEL
+    ? {}
+    : {
+        turbopack: {
+          root: path.resolve("."),
+        },
+      }),
   images: {
     remotePatterns: [
       {

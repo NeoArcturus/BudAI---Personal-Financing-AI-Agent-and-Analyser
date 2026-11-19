@@ -1,19 +1,18 @@
 import "./globals.css";
-import { Plus_Jakarta_Sans, JetBrains_Mono, Inter } from "next/font/google";
+import localFont from "next/font/local";
 import { cn } from "@/lib/utils";
 import { Providers } from "./providers";
 
-const inter = Inter({subsets:['latin'],variable:'--font-inter'});
-
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
+const jakarta = localFont({
+  src: "../public/fonts/plus-jakarta-sans.woff2",
   variable: "--font-jakarta",
-  weight: ["400", "500", "600", "700", "800"],
+  display: "swap",
 });
 
-const jetbrains = JetBrains_Mono({
-  subsets: ["latin"],
+const jetbrains = localFont({
+  src: "../public/fonts/jetbrains-mono.woff2",
   variable: "--font-jetbrains",
+  display: "swap",
 });
 
 export default function RootLayout({
@@ -22,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={cn(jakarta.variable, jetbrains.variable, "font-sans", inter.variable)} suppressHydrationWarning>
+    <html lang="en" className={cn(jakarta.variable, jetbrains.variable, "font-sans")} suppressHydrationWarning>
       <body
         className="antialiased selection:bg-primary/30 selection:text-primary bg-background text-foreground"
       >
