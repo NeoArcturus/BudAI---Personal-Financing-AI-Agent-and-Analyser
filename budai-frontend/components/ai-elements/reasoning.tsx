@@ -61,18 +61,17 @@ export function Reasoning({
       >
         <TraceCollapsibleTrigger>
           <TraceLine status={isStreaming ? "running" : "completed"}>
-            <TraceIcon>
-              <Brain size={14} className={isStreaming ? "text-primary animate-pulse" : "text-primary/70"} />
-            </TraceIcon>
-            <TraceTitle className="font-semibold text-foreground/90">{title}</TraceTitle>
+            <TraceTitle className="font-normal text-muted-foreground group-hover:text-foreground text-xs">
+              {title}
+            </TraceTitle>
             {secondsDisplay && (
-              <TraceDescription className="text-muted-foreground font-mono text-[10px] bg-white/5 px-2 py-0.5 rounded-full border border-white/10">
+              <TraceDescription className="text-muted-foreground/60 text-[10px] ml-1">
                 {secondsDisplay}
               </TraceDescription>
             )}
           </TraceLine>
         </TraceCollapsibleTrigger>
-        <TraceCollapsibleContent className="whitespace-pre-wrap font-sans text-xs text-muted-foreground/90 leading-relaxed max-h-64 overflow-y-auto scrollbar-hide border-l-2 border-primary/30 pl-3 py-1 my-1 bg-white/[0.01] rounded-r-lg">
+        <TraceCollapsibleContent className="whitespace-pre-wrap font-sans text-xs text-muted-foreground/85 leading-relaxed max-h-64 overflow-y-auto scrollbar-hide py-1">
           {reasoningText}
         </TraceCollapsibleContent>
       </TraceCollapsible>

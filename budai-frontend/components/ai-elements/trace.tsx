@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState } from "react";
-import { ChevronDown, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { ChevronRight, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TraceContextValue {
@@ -19,7 +19,7 @@ export interface TraceProps extends React.HTMLAttributes<HTMLDivElement> {
 export function Trace({ className, children, ...props }: TraceProps) {
   return (
     <div
-      className={cn("flex flex-col gap-1.5 w-full my-1.5 text-xs select-none", className)}
+      className={cn("flex flex-col gap-1 w-full my-1 text-xs select-none", className)}
       {...props}
     >
       {children}
@@ -57,8 +57,7 @@ export function TraceCollapsible({
     <TraceContext.Provider value={{ isCollapsible: true, isOpen, toggle }}>
       <div
         className={cn(
-          "rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden transition-all duration-200",
-          isOpen ? "bg-white/[0.03] shadow-xs" : "hover:border-white/20 hover:bg-white/[0.03]",
+          "w-fit max-w-full my-0.5 transition-all duration-200",
           className
         )}
         {...props}
@@ -86,17 +85,17 @@ export function TraceCollapsibleTrigger({
       type="button"
       onClick={toggle}
       className={cn(
-        "w-full flex items-center justify-between py-2 px-3 text-left transition-colors cursor-pointer group outline-none",
+        "inline-flex items-center gap-1.5 py-1 px-2 rounded-lg text-left text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-colors cursor-pointer group outline-none text-xs",
         className
       )}
       {...props}
     >
-      <div className="flex items-center gap-2 min-w-0 flex-1">{children}</div>
-      <ChevronDown
-        size={14}
+      <div className="flex items-center gap-1.5 min-w-0">{children}</div>
+      <ChevronRight
+        size={12}
         className={cn(
-          "text-muted-foreground/70 transition-transform duration-200 shrink-0 ml-2 group-hover:text-foreground",
-          isOpen && "rotate-180 text-foreground"
+          "text-muted-foreground/60 transition-transform duration-200 shrink-0 group-hover:text-foreground",
+          isOpen && "rotate-90 text-foreground"
         )}
       />
     </button>
@@ -122,7 +121,7 @@ export function TraceCollapsibleContent({
   return (
     <div
       className={cn(
-        "px-3 pb-3 pt-1 border-t border-white/5 text-muted-foreground leading-relaxed text-[11px]",
+        "mt-1.5 pl-4 ml-1.5 border-l border-white/10 text-muted-foreground/90 leading-relaxed text-xs",
         !isOpen && keepMounted && "hidden",
         className
       )}
@@ -143,17 +142,17 @@ export interface TraceLineProps extends React.HTMLAttributes<HTMLDivElement> {
 export function TraceLine({ status, className, children, ...props }: TraceLineProps) {
   return (
     <div
-      className={cn("flex items-center gap-2 min-w-0 text-foreground text-xs", className)}
+      className={cn("inline-flex items-center gap-1.5 min-w-0 text-foreground text-xs", className)}
       {...props}
     >
       {status === "running" && (
-        <Loader2 size={13} className="animate-spin text-primary shrink-0" />
+        <Loader2 size={12} className="animate-spin text-primary shrink-0" />
       )}
       {status === "error" && (
-        <AlertCircle size={13} className="text-danger shrink-0" />
+        <AlertCircle size={12} className="text-danger shrink-0" />
       )}
       {status === "completed" && (
-        <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+        <CheckCircle2 size={12} className="text-muted-foreground/80 group-hover:text-foreground shrink-0" />
       )}
       {children}
     </div>

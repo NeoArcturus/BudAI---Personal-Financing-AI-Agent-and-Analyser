@@ -50,15 +50,14 @@ export function Task({
 
   return (
     <Trace className={className}>
-      <TraceCollapsible defaultOpen={defaultOpen || hasRunning}>
+      <TraceCollapsible defaultOpen={defaultOpen}>
         <TraceCollapsibleTrigger>
           <TraceLine
             status={hasRunning ? "running" : hasFailed ? "error" : "completed"}
           >
-            <TraceIcon>
-              <Layers size={13} className="text-primary" />
-            </TraceIcon>
-            <TraceTitle>{headerTitle}</TraceTitle>
+            <TraceTitle className="font-normal text-muted-foreground group-hover:text-foreground text-xs">
+              {headerTitle}
+            </TraceTitle>
           </TraceLine>
         </TraceCollapsibleTrigger>
         <TraceCollapsibleContent keepMounted>
@@ -76,16 +75,7 @@ export function Task({
                   status={isRunning ? "running" : isFailed ? "error" : "completed"}
                   className="pl-2"
                 >
-                  <TraceIcon>
-                    {isRunning ? (
-                      <CircleDashed size={11} className="animate-spin text-primary" />
-                    ) : isFailed ? (
-                      <AlertCircle size={11} className="text-danger" />
-                    ) : (
-                      <CheckCircle2 size={11} className="text-emerald-400" />
-                    )}
-                  </TraceIcon>
-                  <TraceTitle className="text-[11px]">
+                  <TraceTitle className="text-[11px] text-muted-foreground">
                     {step.action || step.name}
                   </TraceTitle>
                   {duration && <TraceDescription>{duration}</TraceDescription>}

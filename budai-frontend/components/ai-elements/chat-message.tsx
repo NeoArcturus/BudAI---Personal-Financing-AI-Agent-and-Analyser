@@ -3,6 +3,7 @@
 import React, { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Message,
@@ -214,7 +215,7 @@ export const ChatMessage = React.memo(
           <MessageContent>
             <Bubble
               align="end"
-              className="bg-primary/15 border border-primary/25 text-foreground rounded-2xl px-4 py-3 text-sm shadow-sm"
+              className="bg-[#27272a] hover:bg-[#2f2f35] border border-white/10 text-zinc-100 rounded-2xl px-4 py-2.5 text-sm shadow-sm transition-colors"
             >
               <BubbleContent className="whitespace-pre-wrap leading-relaxed">
                 {userText}
@@ -225,28 +226,10 @@ export const ChatMessage = React.memo(
       );
     }
 
-    // Assistant Turn
+    // Assistant Turn (Clean, minimal, no avatars, no chat bubbles)
     return (
-      <Message align="start" className="gap-3">
-        {/* Advisor Avatar */}
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border border-primary/30 bg-primary/10 text-primary shadow-[0_0_15px_rgba(0,242,255,0.15)] mt-1">
-          <span className="font-mono font-bold text-xs">B</span>
-        </div>
-
-        <MessageContent className="space-y-3 max-w-full">
-          {/* Header Bar */}
-          <div className="flex items-center gap-2 select-none">
-            <span className="text-xs font-semibold text-foreground/80">
-              BudAI Advisor
-            </span>
-            {isStreamingMessage && (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 border border-primary/25 text-primary">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
-                Active Analysis
-              </span>
-            )}
-          </div>
-
+      <Message align="start" className="w-full">
+        <MessageContent className="space-y-2.5 w-full max-w-full">
           {/* Tool Invocations & Interactive Cards */}
           {message.toolInvocations && message.toolInvocations.length > 0 && (
             <div className="w-full space-y-2">
@@ -369,84 +352,109 @@ export const ChatMessage = React.memo(
             />
           )}
 
-          {/* Advisor Message Response Body */}
+          {/* Assistant Response Text (Direct canvas typography, no card/bubble border) */}
           {cleanText ? (
-            <div className="w-full rounded-2xl bg-[#0d0e14]/50 border border-white/10 p-5 shadow-lg backdrop-blur-xl">
-              <div
-                className={cn(
-                  "prose prose-invert max-w-none text-sm leading-relaxed font-sans text-foreground/90",
-                  isStreamingMessage && "streaming-cursor"
-                )}
-              >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    p: ({ children, ...props }) => (
-                      <p className="mb-3.5 last:mb-0 leading-relaxed" {...props}>
-                        {formatFinancialEntities(children)}
-                      </p>
-                    ),
-                    h1: ({ children, ...props }) => (
-                      <h1 className="text-base font-bold text-foreground mt-4 mb-2" {...props}>
+            <div
+              className={cn(
+                "w-full prose prose-invert max-w-none text-sm leading-relaxed font-sans text-foreground/90 my-1",
+                isStreamingMessage && "streaming-cursor"
+              )}
+            >
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  p: ({ children, ...props }) => (
+                    <p className="mb-3.5 last:mb-0 leading-relaxed text-sm text-foreground/90" {...props}>
+                      {formatFinancialEntities(children)}
+                    </p>
+                  ),
+                  h1: ({ children, ...props }) => (
+                    <h1 className="text-base font-bold text-foreground mt-4 mb-2 tracking-tight" {...props}>
+                      {children}
+                    </h1>
+                  ),
+                  h2: ({ children, ...props }) => (
+                    <h2 className="text-sm font-bold text-foreground mt-3.5 mb-2 tracking-tight" {...props}>
+                      {children}
+                    </h2>
+                  ),
+                  h3: ({ children, ...props }) => (
+                    <h3 className="text-xs font-semibold text-foreground mt-3 mb-1.5 uppercase tracking-wider" {...props}>
+                      {children}
+                    </h3>
+                  ),
+                  ul: ({ children, ...props }) => (
+                    <ul className="space-y-1.5 my-2.5 list-disc list-inside text-foreground/85" {...props}>
+                      {children}
+                    </ul>
+                  ),
+                  li: ({ children, ...props }) => (
+                    <li className="text-sm leading-relaxed" {...props}>
+                      {formatFinancialEntities(children)}
+                    </li>
+                  ),
+                  table: ({ children, ...props }) => (
+                    <div className="overflow-x-auto my-3 rounded-xl border border-white/10">
+                      <table className="w-full text-xs text-left border-collapse" {...props}>
                         {children}
-                      </h1>
-                    ),
-                    h2: ({ children, ...props }) => (
-                      <h2 className="text-sm font-bold text-foreground mt-3 mb-2" {...props}>
-                        {children}
-                      </h2>
-                    ),
-                    h3: ({ children, ...props }) => (
-                      <h3 className="text-xs font-semibold text-foreground/90 uppercase tracking-wider mt-3 mb-1.5" {...props}>
-                        {children}
-                      </h3>
-                    ),
-                    ul: ({ children, ...props }) => (
-                      <ul className="space-y-1.5 my-2.5 list-disc list-inside text-foreground/80" {...props}>
-                        {children}
-                      </ul>
-                    ),
-                    li: ({ children, ...props }) => (
-                      <li className="text-sm leading-relaxed" {...props}>
-                        {formatFinancialEntities(children)}
-                      </li>
-                    ),
-                    table: ({ children, ...props }) => (
-                      <div className="overflow-x-auto my-3 rounded-xl border border-white/10">
-                        <table className="w-full text-xs text-left border-collapse" {...props}>
+                      </table>
+                    </div>
+                  ),
+                  th: ({ children, ...props }) => (
+                    <th className="p-2.5 bg-white/5 border-b border-white/10 font-semibold text-foreground" {...props}>
+                      {children}
+                    </th>
+                  ),
+                  td: ({ children, ...props }) => (
+                    <td className="p-2.5 border-b border-white/5 text-foreground/80" {...props}>
+                      {formatFinancialEntities(children)}
+                    </td>
+                  ),
+                  pre: ({ children }) => <>{children}</>,
+                  code: ({ children, className, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || "");
+                    const isInline = !match && !String(children).includes("\n");
+
+                    if (isInline) {
+                      return (
+                        <code
+                          className="px-1.5 py-0.5 rounded-md bg-white/[0.06] border border-white/10 text-primary font-mono text-xs"
+                          {...props}
+                        >
                           {children}
-                        </table>
+                        </code>
+                      );
+                    }
+
+                    const codeContent = String(children).replace(/\n$/, "");
+                    const lang = match ? match[1] : "text";
+
+                    return (
+                      <div className="my-3 rounded-xl bg-white/[0.03] border border-white/10 overflow-hidden">
+                        <div className="flex items-center justify-between px-3.5 py-1.5 bg-white/[0.02] border-b border-white/5 text-[11px] text-muted-foreground font-mono">
+                          <span>{lang}</span>
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(codeContent)}
+                            className="hover:text-foreground text-muted-foreground/60 transition-colors cursor-pointer"
+                            aria-label="Copy code"
+                          >
+                            <Copy size={12} />
+                          </button>
+                        </div>
+                        <pre className="p-3 text-xs font-mono overflow-x-auto text-foreground/90 leading-relaxed scrollbar-hide">
+                          <code>{children}</code>
+                        </pre>
                       </div>
-                    ),
-                    th: ({ children, ...props }) => (
-                      <th className="p-2.5 bg-white/5 border-b border-white/10 font-semibold text-foreground" {...props}>
-                        {children}
-                      </th>
-                    ),
-                    td: ({ children, ...props }) => (
-                      <td className="p-2.5 border-b border-white/5 text-foreground/80" {...props}>
-                        {formatFinancialEntities(children)}
-                      </td>
-                    ),
-                    code: ({ children, className, ...props }) => (
-                      <code
-                        className={cn(
-                          "px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-primary font-mono text-xs",
-                          className
-                        )}
-                        {...props}
-                      >
-                        {children}
-                      </code>
-                    ),
-                  }}
-                >
-                  {cleanText}
-                </ReactMarkdown>
-              </div>
+                    );
+                  },
+                }}
+              >
+                {cleanText}
+              </ReactMarkdown>
             </div>
           ) : isStreamingMessage && !reasoningText ? (
-            <div className="flex items-center gap-2 py-3 px-4 rounded-xl bg-white/[0.02] border border-white/5 text-muted-foreground text-xs">
+            <div className="flex items-center gap-2 py-2 text-muted-foreground text-xs">
               <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
               <span>Synthesizing portfolio records and spending patterns...</span>
             </div>
