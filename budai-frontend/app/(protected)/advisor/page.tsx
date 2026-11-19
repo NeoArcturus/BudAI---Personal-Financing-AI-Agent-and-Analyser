@@ -11,8 +11,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch, getAuthToken, getApiUrl } from "@/lib/api";
 import { DefaultChatTransport } from "ai";
 
-import { AdvisorSidebar, BudAIChatSession } from "./components/AdvisorSidebar";
-import { MemoizedChatMessage } from "./components/MemoizedChatMessage";
 import {
   MessageScrollerProvider,
   MessageScroller,
@@ -23,7 +21,10 @@ import {
   ContextMeter,
   PromptInput,
   DetailLevel,
+  ChatMessage,
+  SessionSidebar,
 } from "@/components/ai-elements";
+import { TrendingUp, LineChart, ShieldCheck, Wallet } from "lucide-react";
 
 export type VerbosityMode = DetailLevel;
 
@@ -169,7 +170,10 @@ export default function AdvisorPage() {
                 }
 
 
-                const text = msg.content || "";
+                let text = msg.content || "";
+                if (msg.role === "user") {
+                  text = text.replace(/\[STYLE:\s*[^\]]+\]/gi, "").trim();
+                }
                 const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g;
                 let hasThinkTags = false;
                 let match;
@@ -334,45 +338,51 @@ export default function AdvisorPage() {
 
   return (
     <div className="flex h-full w-full bg-background text-foreground font-sans overflow-hidden transition-colors duration-500">
-      <AdvisorSidebar
-        sessions={sessions as BudAIChatSession[]}
+      <SessionSidebar
+        sessions={sessions as any}
         sessionsLoading={sessionsLoading}
         activeSessionId={activeSessionId}
-        router={router}
-        handleNewChat={handleNewChat}
-        handleDeleteSession={handleDeleteSession}
-        handleRenameSession={handleRenameSession}
+        onSelectSession={(id) => {
+          setActiveSessionId(id);
+          router.push(`/advisor?session=${id}`);
+        }}
+        onNewSession={handleNewChat}
+        onDeleteSession={handleDeleteSession}
+        onRenameSession={handleRenameSession}
       />
 
-      <main className="flex-1 flex flex-col h-full bg-black relative overflow-hidden">
-        <header className="h-16 flex items-center justify-between py-4 px-6 border-b border-white/10 shrink-0 bg-black/20 backdrop-blur-xl z-20">
+      <main className="flex-1 flex flex-col h-full bg-gradient-to-b from-[#07080c] via-[#090b11] to-[#040508] relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(0,242,255,0.06),transparent)]" />
+
+        <header className="h-16 flex items-center justify-between py-4 px-6 border-b border-white/10 shrink-0 bg-[#0d0e14]/60 backdrop-blur-xl z-20">
           <div className="flex flex-col">
-            <div className="flex items-center gap-3 mt-1">
-              <Text className="text-foreground font-black text-[13px] uppercase tracking-tight">
-                {activeSessionId ? "Advisory Session" : "New Session"}
-              </Text>
+            <div className="flex items-center gap-3">
+              <span className="text-foreground font-bold text-sm tracking-tight">
+                {activeSessionId ? "Advisory Session" : "Financial Consultation"}
+              </span>
               {status === "streaming" || status === "submitted" ? (
-                <span className="text-[9px] font-black text-primary uppercase tracking-widest opacity-50">
-                  Processing...
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 border border-primary/25 text-primary">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
+                  Analyzing
                 </span>
               ) : (
                 messages.length > 0 && (
-                  <Button
-                    size="sm"
-                    onPress={() => {
+                  <button
+                    type="button"
+                    onClick={() => {
                       setResumeStream(true);
                       setTimeout(() => setResumeStream(false), 500);
                     }}
-                    className="bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 h-6 px-3 ml-2 rounded-md text-[9px] uppercase tracking-widest font-bold cursor-pointer transition-all"
+                    className="bg-primary/10 text-primary hover:bg-primary/20 border border-primary/25 h-6 px-2.5 rounded-md text-[10px] font-medium cursor-pointer transition-all"
                   >
                     Resume Stream
-                  </Button>
+                  </button>
                 )
               )}
             </div>
             {activeSessionId && (
-              <span className="text-foreground/30 text-[10px] font-medium tracking-widest uppercase ml-1">
-                ID: {activeSessionId.split("-")[0]}
+              <span className="text-muted-foreground/60 text-[10px] font-mono mt-0.5">
+                Session: {activeSessionId.split("-")[0]}
               </span>
             )}
           </div>
@@ -387,29 +397,61 @@ export default function AdvisorPage() {
             <MessageScrollerViewport>
               <MessageScrollerContent>
                 {messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-foreground/30">
-                    <Text className="text-lg font-bold tracking-tighter uppercase mb-2">
-                      New Session
-                    </Text>
-                    <Text className="text-xs tracking-widest font-medium uppercase opacity-50 text-center max-w-sm leading-relaxed">
-                      How can I assist with your finances today?
-                    </Text>
-                    <div className="grid grid-cols-2 gap-4 w-full max-w-2xl mt-12">
+                  <div className="flex flex-col items-center justify-center py-12 px-4 max-w-3xl mx-auto w-full text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-4 text-primary shadow-[0_0_25px_rgba(0,242,255,0.15)]">
+                      <TrendingUp size={22} />
+                    </div>
+                    <h2 className="text-lg font-bold text-foreground mb-1 tracking-tight">
+                      BudAI Advisory Intelligence
+                    </h2>
+                    <p className="text-xs text-muted-foreground max-w-md leading-relaxed mb-8">
+                      Autonomous financial consultation, risk evaluation, and multi-account portfolio analysis.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full text-left">
                       {[
-                        "Analyze my latest spending trends",
-                        "What's my cash flow looking like?",
-                        "Review my high-value transactions",
-                        "Review my account summary",
-                      ].map((hint, idx) => (
-                        <Button
+                        {
+                          title: "Analyze Spending Patterns",
+                          desc: "Identify monthly trends, anomalies, and recurring rhythms.",
+                          icon: <TrendingUp size={16} className="text-primary shrink-0" />,
+                          prompt: "Analyze my latest spending trends and highlight any anomalies.",
+                        },
+                        {
+                          title: "Cash Flow & Runway",
+                          desc: "Evaluate liquidity trajectory and upcoming obligations.",
+                          icon: <LineChart size={16} className="text-blue-400 shrink-0" />,
+                          prompt: "What is my cash flow looking like and how is my liquidity runway?",
+                        },
+                        {
+                          title: "Audit High-Value Outflows",
+                          desc: "Review significant single purchases and transfers.",
+                          icon: <ShieldCheck size={16} className="text-emerald-400 shrink-0" />,
+                          prompt: "Review my highest-value transactions and check for unexpected spikes.",
+                        },
+                        {
+                          title: "Portfolio Overview",
+                          desc: "Consolidated breakdown across connected bank accounts.",
+                          icon: <Wallet size={16} className="text-purple-400 shrink-0" />,
+                          prompt: "Give me an account summary across all my connected accounts.",
+                        },
+                      ].map((item, idx) => (
+                        <div
                           key={idx}
-                          onPress={() => handleSend(hint)}
-                          className="h-16 bg-white/2 border border-white/5 hover:bg-white/5 hover:border-primary/30 flex items-center justify-start px-6 rounded-xl transition-all group cursor-pointer"
+                          onClick={() => handleSend(item.prompt)}
+                          className="group p-4 rounded-2xl bg-[#0d0e14]/50 hover:bg-white/[0.04] border border-white/10 hover:border-primary/40 transition-all cursor-pointer shadow-sm flex items-start gap-3.5 backdrop-blur-md"
                         >
-                          <span className="text-[10px] font-black text-foreground/50 group-hover:text-primary uppercase tracking-widest text-left whitespace-normal leading-tight">
-                            {hint}
-                          </span>
-                        </Button>
+                          <div className="p-2 rounded-xl bg-white/[0.03] border border-white/5 group-hover:bg-primary/10 group-hover:border-primary/20 transition-all">
+                            {item.icon}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
+                              {item.title}
+                            </h3>
+                            <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                              {item.desc}
+                            </p>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -421,7 +463,7 @@ export default function AdvisorPage() {
                         messageId={message.id}
                         scrollAnchor={message.role === "user"}
                       >
-                        <MemoizedChatMessage
+                        <ChatMessage
                           message={message}
                           status={status}
                           isLastMessage={i === messages.length - 1}
@@ -434,8 +476,8 @@ export default function AdvisorPage() {
 
                     {error && (
                       <div className="flex justify-center my-4">
-                        <div className="bg-danger/20 text-danger text-xs font-black uppercase tracking-widest px-4 py-2 rounded-full border border-danger/30">
-                          Connection Error. Retrying...
+                        <div className="bg-danger/15 text-danger text-xs font-semibold px-4 py-2 rounded-full border border-danger/30">
+                          Connection temporarily interrupted. Retrying...
                         </div>
                       </div>
                     )}
@@ -447,7 +489,7 @@ export default function AdvisorPage() {
           </MessageScroller>
         </MessageScrollerProvider>
 
-        <div className="p-4 pb-8 sm:p-8 sm:pb-16 shrink-0 relative z-20">
+        <div className="px-4 pt-2 pb-28 sm:px-8 sm:pb-32 shrink-0 relative z-20">
           <div className="max-w-4xl mx-auto w-full relative">
             <PromptInput
               onSend={handleSend}
@@ -457,9 +499,9 @@ export default function AdvisorPage() {
               detailLevel={verbosity}
               onDetailLevelChange={handleVerbosityChange}
             />
-            <div className="text-center mt-3">
-              <p className="text-[8px] text-foreground/30 uppercase tracking-[0.3em] font-black">
-                AI can make mistakes. Please verify important information.
+            <div className="text-center mt-2.5">
+              <p className="text-[10px] text-muted-foreground/50 font-normal">
+                BudAI provides automated data insights. Verify critical transactions before executing external actions.
               </p>
             </div>
           </div>
