@@ -131,7 +131,11 @@ def query_transactions(account_id: Optional[str] = None, start_date: Optional[st
             rows = session.execute(query).all()
             
             if not rows:
-                return json.dumps({"status": "success", "data": []})
+                return json.dumps({
+                    "status": "success",
+                    "data": [],
+                    "notice": "No transactions found matching your criteria. Note: Bank transaction history for this user only exists from 2025-12-01 onwards. Earlier historical periods (e.g. 2024 or Oct-Nov 2025) are not present in the database."
+                })
                 
             results = []
             for t, cat in rows:
@@ -183,18 +187,26 @@ def aggregate_financial_data(group_by: str, metric: str = "sum", account_id: Opt
             else:
                 return json.dumps({"status": "error", "message": "Invalid metric parameter."})
 
-            query = select(group_col.label('group_key'), metric_col).select_from(Transaction)
+            query = select(group_col.label('group_key'), Transaction.currency.label('currency'), metric_col).select_from(Transaction)
             if group_by == "category":
                 query = query.join(MerchantKnowledge, Transaction.merchant_knowledge_uuid == MerchantKnowledge.knowledge_uuid, isouter=True)
             query = _apply_transaction_filters(query, user_uuid, account_id, start_date, end_date, categories, None, None, transaction_type, session)
             
-            query = query.group_by(group_col)
+            query = query.group_by(group_col, Transaction.currency).order_by(group_col.desc(), Transaction.currency.asc())
             
             results = session.execute(query).all()
             
+            if not results:
+                return json.dumps({
+                    "status": "success",
+                    "data": [],
+                    "notice": "No transactions found matching your criteria. Note: Bank transaction history for this user only exists from 2025-12-01 onwards. Earlier historical periods (e.g. 2024 or Oct-Nov 2025) are not present in the database."
+                })
+
             data = []
             for row in results:
                 key = row.group_key
+                curr = getattr(row, 'currency', 'GBP') or 'GBP'
                 # Format dates to string
                 if isinstance(key, datetime):
                     key = key.strftime("%Y-%m-%d")
@@ -208,6 +220,7 @@ def aggregate_financial_data(group_by: str, metric: str = "sum", account_id: Opt
                     
                 data.append({
                     "group": str(key) if key else "Uncategorized",
+                    "currency": curr,
                     "value": val
                 })
                 

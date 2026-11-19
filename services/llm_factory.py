@@ -375,5 +375,12 @@ class LLMFactory:
 def get_chat_llm(temperature: float = 0.0, timeout: Optional[float] = None, **kwargs: Any) -> BaseChatModel:
     return LLMFactory.get_chat_model(temperature=temperature, timeout=timeout, **kwargs)
 
+def get_model_context_limit(model_name: Optional[str] = None) -> int:
+    """Returns active model context window limit in tokens, defaulting to cluster limit (20224)."""
+    env_limit = os.getenv("LLM_CONTEXT_LIMIT")
+    if env_limit and env_limit.isdigit():
+        return int(env_limit)
+    return 20224
+
 def get_cluster_status() -> Dict[str, Any]:
     return get_cluster_manager().get_status()

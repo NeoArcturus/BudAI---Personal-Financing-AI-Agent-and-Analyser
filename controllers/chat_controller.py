@@ -423,11 +423,13 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
 
             compute_time_ms = int((time.time() - time_metrics["start"]) * 1000)
             ttft_ms = time_metrics["ttft"] if time_metrics["ttft"] is not None else compute_time_ms
+            from services.llm_factory import get_model_context_limit
             telemetry_data = {
                 "type": "telemetry",
                 "ttft_ms": ttft_ms,
                 "compute_time_ms": compute_time_ms,
                 "tokens": tokens_generated["count"],
+                "context_limit": get_model_context_limit(),
                 "verbosity": request.verbosity or "balanced"
             }
             await queue.put(f'8:[{json.dumps(telemetry_data)}]\n')

@@ -69,6 +69,7 @@ class AnalyserAgent:
                         "2. If you see a mathematically significant spike (e.g., 30% or more in a category compared to last month), you MUST use the `send_system_alert` tool to alert the user.\n"
                         "3. Do not make up numbers. Use only the SQL output provided by your tools.\n"
                         "4. Be proactive but concise. DO NOT use emojis in your response under any circumstances.\n"
+                        "5. When citing individual transactions, append their transaction ID in the format `[tx:<id>]` (e.g., `[tx:txn-12345]`) so the interface can display inline interactive hover proof cards.\n"
                     )
                 )
                 messages = [sys_msg] + messages
