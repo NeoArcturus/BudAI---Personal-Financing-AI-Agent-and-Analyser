@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { CheckCircle2, CircleDashed, AlertCircle, Layers } from "lucide-react";
 import {
   Trace,
@@ -34,18 +34,34 @@ export function Task({
   defaultOpen = false,
   className,
 }: TaskProps) {
-  if (!steps.length) return null;
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const hasRunning = steps.some((s) => s.status === "running" || s.status === "queued");
   const hasFailed = steps.some((s) => s.status === "failed");
   const completedCount = steps.filter((s) => s.status === "completed").length;
 
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (hasRunning) {
+      interval = setInterval(() => {
+        setElapsedSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setElapsedSeconds(0);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [hasRunning]);
+
+  if (!steps.length) return null;
+
   const headerTitle =
     title ||
     (hasRunning
-      ? `Running checks (${completedCount}/${steps.length})...`
+      ? `Checking records (${completedCount}/${steps.length}) ${elapsedSeconds > 0 ? `(${elapsedSeconds}s)` : ""}...`
       : hasFailed
-      ? `Checks completed with errors (${completedCount}/${steps.length})`
+      ? `Checks completed with issues (${completedCount}/${steps.length})`
       : `Checks completed (${steps.length} steps)`);
 
   return (
@@ -65,21 +81,29 @@ export function Task({
             {steps.map((step, idx) => {
               const isRunning = step.status === "running" || step.status === "queued";
               const isFailed = step.status === "failed";
-              const duration = step.durationMs
+              const duration = isRunning && elapsedSeconds > 0
+                ? `${elapsedSeconds}s`
+                : step.durationMs
                 ? `${(step.durationMs / 1000).toFixed(1)}s`
                 : undefined;
 
               return (
-                <TraceLine
-                  key={step.id || idx}
-                  status={isRunning ? "running" : isFailed ? "error" : "completed"}
-                  className="pl-2"
-                >
-                  <TraceTitle className="text-[11px] text-muted-foreground">
-                    {step.action || step.name}
-                  </TraceTitle>
-                  {duration && <TraceDescription>{duration}</TraceDescription>}
-                </TraceLine>
+                <div key={step.id || idx} className="flex flex-col">
+                  <TraceLine
+                    status={isRunning ? "running" : isFailed ? "error" : "completed"}
+                    className="pl-2"
+                  >
+                    <TraceTitle className="text-[11px] text-muted-foreground">
+                      {step.action || step.name}
+                    </TraceTitle>
+                    {duration && <TraceDescription>{duration}</TraceDescription>}
+                  </TraceLine>
+                  {isRunning && elapsedSeconds >= 20 && (
+                    <span className="text-[10px] text-primary/75 italic pl-6 pt-0.5 animate-pulse">
+                      Gathering records across all your connected accounts...
+                    </span>
+                  )}
+                </div>
               );
             })}
           </div>

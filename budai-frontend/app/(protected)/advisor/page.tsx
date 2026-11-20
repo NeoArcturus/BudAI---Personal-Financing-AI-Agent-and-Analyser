@@ -18,11 +18,11 @@ import {
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerButton,
-  ContextMeter,
   PromptInput,
   DetailLevel,
   ChatMessage,
   SessionSidebar,
+  Suggestions,
 } from "@/components/ai-elements";
 import { TrendingUp, LineChart, ShieldCheck, Wallet, RotateCw } from "lucide-react";
 
@@ -59,12 +59,13 @@ export default function AdvisorPage() {
   const { data: sessions = [], isLoading: sessionsLoading } = useChatSessions();
 
   const [activeSessionId, setActiveSessionId] = useState(sessionParam || "");
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
 
   const lastFetchedId = React.useRef("");
 
   const [resumeStream, setResumeStream] = useState(false);
   const [showReasoning, setShowReasoning] = useState(false);
-  const [verbosity, setVerbosity] = useState<VerbosityMode>("balanced");
+  const [verbosity, setVerbosity] = useState<VerbosityMode>("medium");
 
   useEffect(() => {
     const saved = localStorage.getItem("budai_show_reasoning");
@@ -72,7 +73,7 @@ export default function AdvisorPage() {
       setTimeout(() => setShowReasoning(true), 0);
     }
     const savedVerbosity = localStorage.getItem("budai_chat_verbosity") as VerbosityMode;
-    if (savedVerbosity && ["concise", "balanced", "deep_dive"].includes(savedVerbosity)) {
+    if (savedVerbosity && ["low", "medium", "high", "concise", "balanced", "deep_dive"].includes(savedVerbosity)) {
       setVerbosity(savedVerbosity);
     }
   }, []);
@@ -115,10 +116,67 @@ export default function AdvisorPage() {
       headers: () => ({
         Authorization: `Bearer ${getAuthToken()}`,
       }),
+      fetch: async (url, init) => {
+        const res = await fetch(url, { ...init, keepalive: true });
+        if (!res.body) return res;
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        const encoder = new TextEncoder();
+        let buffer = "";
+
+        const stream = new ReadableStream({
+          async pull(controller) {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) {
+                if (buffer) {
+                  const lines = buffer
+                    .split("\n")
+                    .filter(
+                      (l) =>
+                        !l.trim().startsWith(": keep-alive") &&
+                        !l.trim().startsWith(":keep-alive")
+                    );
+                  if (lines.length > 0) {
+                    controller.enqueue(encoder.encode(lines.join("\n")));
+                  }
+                }
+                controller.close();
+                return;
+              }
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() ?? "";
+
+              const cleanLines = lines.filter(
+                (l) =>
+                  !l.trim().startsWith(": keep-alive") &&
+                  !l.trim().startsWith(":keep-alive")
+              );
+
+              if (cleanLines.length > 0) {
+                controller.enqueue(encoder.encode(cleanLines.join("\n") + "\n"));
+                return;
+              }
+            }
+          },
+          cancel(reason) {
+            return reader.cancel(reason);
+          },
+        });
+
+        return new Response(stream, {
+          status: res.status,
+          statusText: res.statusText,
+          headers: res.headers,
+        });
+      },
     });
   }, []);
 
-  const { messages, setMessages, status, sendMessage, stop, error } =
+  const { messages, setMessages, status, sendMessage, regenerate, stop, error } =
     useChat<BudAIMessage>({
       id: "budai-advisor-chat",
       transport,
@@ -178,23 +236,26 @@ export default function AdvisorPage() {
                   text = text.replace(/\[STYLE:\s*[^\]]+\]/gi, "").trim();
                 }
                 const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g;
-                let hasThinkTags = false;
                 let match;
                 let lastIndex = 0;
 
                 while ((match = thinkRegex.exec(text)) !== null) {
-                  hasThinkTags = true;
                   if (match.index > lastIndex) {
                     parts.push({
                       type: "text",
                       text: text.substring(lastIndex, match.index),
                     });
                   }
-                  parts.push({ type: "reasoning", text: match[1] });
+                  if (match[1]) {
+                    parts.push({
+                      type: "reasoning",
+                      text: match[1],
+                    });
+                  }
                   lastIndex = thinkRegex.lastIndex;
                 }
 
-                if (hasThinkTags) {
+                if (parts.length > 0) {
                   if (lastIndex < text.length) {
                     parts.push({
                       type: "text",
@@ -237,7 +298,7 @@ export default function AdvisorPage() {
     }
   }, [sessionParam, status, setMessages]);
 
-  const handleSend = async (text: string, selectedVerbosity: VerbosityMode = verbosity) => {
+  const handleSend = async (text: string, selectedEffort?: string) => {
     try {
       if (typeof sendMessage === "function") {
         let currentSessionId = activeSessionId;
@@ -256,7 +317,7 @@ export default function AdvisorPage() {
           {
             body: {
               session_id: currentSessionId,
-              verbosity: selectedVerbosity,
+              verbosity: selectedEffort || verbosity,
             },
           },
         );
@@ -283,11 +344,45 @@ export default function AdvisorPage() {
     }
   }, [promptParam, sessionParam]);
 
-  const handleNewChat = () => {
+  const handleNewChat = async () => {
+    try {
+      setIsCreatingSession(true);
+      const res = await apiFetch(
+        "/api/chat/sessions",
+        {
+          method: "POST",
+          body: JSON.stringify({ title: "New Session" }),
+        },
+        true,
+      );
+      if (res.ok) {
+        const data = (await res.json()) as { session_id?: string };
+        if (data?.session_id) {
+          lastFetchedId.current = data.session_id;
+          setActiveSessionId(data.session_id);
+          setMessages([]);
+          await queryClient.invalidateQueries({ queryKey: ["chat-sessions"] });
+          router.push(`/advisor?session=${data.session_id}`);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to create new session:", err);
+    } finally {
+      setIsCreatingSession(false);
+    }
+
     lastFetchedId.current = "";
     setActiveSessionId("");
     setMessages([]);
     router.push("/advisor");
+  };
+
+  const handleRestoreCheckpoint = (messageId: string) => {
+    const idx = messages.findIndex((m) => m.id === messageId);
+    if (idx !== -1) {
+      setMessages(messages.slice(0, idx + 1));
+    }
   };
 
   const handleDeleteSession = async (id: string) => {
@@ -419,15 +514,16 @@ export default function AdvisorPage() {
         onNewSession={handleNewChat}
         onDeleteSession={handleDeleteSession}
         onRenameSession={handleRenameSession}
+        isCreatingSession={isCreatingSession}
       />
 
-      <main className="flex-1 flex flex-col h-full bg-gradient-to-b from-[#07080c] via-[#090b11] to-[#040508] relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(0,242,255,0.06),transparent)]" />
+      <main className="flex-1 flex flex-col h-full bg-[#0c131d] relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(0,242,255,0.05),transparent)]" />
 
-        <header className="h-16 flex items-center justify-between py-4 px-6 border-b border-white/10 shrink-0 bg-[#0d0e14]/60 backdrop-blur-xl z-20">
+        <header className="h-16 flex items-center justify-between py-4 px-6 border-b border-[#1a2636] shrink-0 bg-[#0c131d]/85 backdrop-blur-xl z-20">
           <div className="flex flex-col">
             <div className="flex items-center gap-3">
-              <span className="text-foreground font-bold text-sm tracking-tight">
+              <span className="text-foreground font-semibold text-sm tracking-tight">
                 {activeSessionId ? "Advisory Session" : "Financial Consultation"}
               </span>
               {status === "streaming" || status === "submitted" ? (
@@ -458,13 +554,16 @@ export default function AdvisorPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <ContextMeter
-              tokens={currentTokens}
-              limit={currentLimit}
-              inputTokens={inputTokens}
-              outputTokens={outputTokens}
-              reasoningTokens={reasoningTokens}
-            />
+            <button
+              type="button"
+              onClick={handleNewChat}
+              disabled={isCreatingSession}
+              className="h-8 px-3 rounded-lg border border-[#1e2d40] bg-[#121d2b]/80 hover:bg-[#162436] disabled:opacity-50 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Start new conversation"
+            >
+              <RotateCw size={13} className={isCreatingSession ? "animate-spin" : ""} />
+              <span>New Chat</span>
+            </button>
           </div>
         </header>
 
@@ -478,35 +577,35 @@ export default function AdvisorPage() {
                       <TrendingUp size={22} />
                     </div>
                     <h2 className="text-lg font-bold text-foreground mb-1 tracking-tight">
-                      BudAI Advisory Intelligence
+                      Financial Advisor
                     </h2>
                     <p className="text-xs text-muted-foreground max-w-md leading-relaxed mb-8">
-                      Autonomous financial consultation, risk evaluation, and multi-account portfolio analysis.
+                      Ask about your spending, bills, or bank balance across all your accounts.
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full text-left">
                       {[
                         {
-                          title: "Analyze Spending Patterns",
-                          desc: "Identify monthly trends, anomalies, and recurring rhythms.",
+                          title: "Spending Breakdown",
+                          desc: "See where your money goes and spot anything unusual.",
                           icon: <TrendingUp size={16} className="text-primary shrink-0" />,
-                          prompt: "Analyze my latest spending trends and highlight any anomalies.",
+                          prompt: "Break down my spending this month and highlight any unusual transactions.",
                         },
                         {
-                          title: "Cash Flow & Runway",
-                          desc: "Evaluate liquidity trajectory and upcoming obligations.",
+                          title: "Income & Balance",
+                          desc: "See how long your money will last and what bills are coming up.",
                           icon: <LineChart size={16} className="text-blue-400 shrink-0" />,
-                          prompt: "What is my cash flow looking like and how is my liquidity runway?",
+                          prompt: "How long will my current balance last based on upcoming bills and expenses?",
                         },
                         {
-                          title: "Audit High-Value Outflows",
-                          desc: "Review significant single purchases and transfers.",
+                          title: "Large Expenses",
+                          desc: "Review your biggest purchases and transfers.",
                           icon: <ShieldCheck size={16} className="text-emerald-400 shrink-0" />,
-                          prompt: "Review my highest-value transactions and check for unexpected spikes.",
+                          prompt: "What were my largest purchases recently?",
                         },
                         {
-                          title: "Portfolio Overview",
-                          desc: "Consolidated breakdown across connected bank accounts.",
+                          title: "All Accounts Overview",
+                          desc: "A summary across all your linked bank accounts.",
                           icon: <Wallet size={16} className="text-purple-400 shrink-0" />,
                           prompt: "Give me an account summary across all my connected accounts.",
                         },
@@ -514,9 +613,9 @@ export default function AdvisorPage() {
                         <div
                           key={idx}
                           onClick={() => handleSend(item.prompt)}
-                          className="group p-4 rounded-2xl bg-[#0d0e14]/50 hover:bg-white/[0.04] border border-white/10 hover:border-primary/40 transition-all cursor-pointer shadow-sm flex items-start gap-3.5 backdrop-blur-md"
+                          className="group p-4 rounded-2xl bg-[#121d2b]/70 hover:bg-[#152335] border border-[#1e2d40] hover:border-primary/40 transition-all cursor-pointer shadow-sm flex items-start gap-3.5 backdrop-blur-md"
                         >
-                          <div className="p-2 rounded-xl bg-white/[0.03] border border-white/5 group-hover:bg-primary/10 group-hover:border-primary/20 transition-all">
+                          <div className="p-2 rounded-xl bg-primary/10 border border-primary/20 text-primary transition-all">
                             {item.icon}
                           </div>
                           <div className="min-w-0 flex-1">
@@ -533,22 +632,23 @@ export default function AdvisorPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-start justify-between pb-5 border-b border-white/5 mb-6">
+                    <div className="flex items-start justify-between pb-5 border-b border-[#1a2636] mb-6">
                       <div>
                         <h1 className="text-base font-semibold text-foreground tracking-tight">
-                          {activeSessionId ? "Advisory Thread" : "New Thread"}
+                          {activeSessionId ? "Advisory Session" : "New Conversation"}
                         </h1>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Inquire about allocations, risk exposures, or cash flow.
+                          Ask about your spending, bills, or account balances.
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={handleNewChat}
-                        className="w-8 h-8 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all cursor-pointer"
-                        title="New Thread"
+                        disabled={isCreatingSession}
+                        className="w-8 h-8 rounded-full border border-[#1e2d40] bg-[#121d2b] hover:bg-[#162436] flex items-center justify-center text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                        title="New Conversation"
                       >
-                        <RotateCw size={14} />
+                        <RotateCw size={14} className={isCreatingSession ? "animate-spin" : ""} />
                       </button>
                     </div>
 
@@ -563,6 +663,8 @@ export default function AdvisorPage() {
                           status={status}
                           isLastMessage={i === messages.length - 1}
                           sendMessage={sendMessage}
+                          reload={() => regenerate()}
+                          onRestoreCheckpoint={handleRestoreCheckpoint}
                           activeSessionId={activeSessionId}
                           showReasoning={showReasoning}
                         />
@@ -586,17 +688,32 @@ export default function AdvisorPage() {
 
         <div className="px-4 pt-2 pb-28 sm:px-8 sm:pb-32 shrink-0 relative z-20">
           <div className="max-w-4xl mx-auto w-full relative">
+            <Suggestions
+              suggestions={[
+                "Where did my money go this month?",
+                "Upcoming bills and subscriptions",
+                "Total balance across all accounts",
+                "Largest purchases recently",
+              ]}
+              onSelect={(p) => handleSend(p)}
+              className="mb-2.5"
+            />
             <PromptInput
-              onSend={handleSend}
+              onSend={(text, effort) => handleSend(text, effort)}
               isGenerating={status === "streaming" || status === "submitted"}
               onStop={stop}
               isLocked={isLocked}
               detailLevel={verbosity}
               onDetailLevelChange={handleVerbosityChange}
+              currentTokens={currentTokens}
+              maxTokens={currentLimit}
+              inputTokens={inputTokens}
+              outputTokens={outputTokens}
+              reasoningTokens={reasoningTokens}
             />
             <div className="text-center mt-2.5">
-              <p className="text-[10px] text-muted-foreground/50 font-normal">
-                BudAI provides automated data insights. Verify critical transactions before executing external actions.
+              <p className="text-[10px] text-muted-foreground/60 font-normal">
+                BudAI provides financial insights. Always verify details with your bank before making financial decisions.
               </p>
             </div>
           </div>

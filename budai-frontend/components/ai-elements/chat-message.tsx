@@ -17,6 +17,7 @@ import { Task } from "./task";
 import { ToolInvocation } from "./tool";
 import { Confirmation } from "./confirmation";
 import { InlineCitation } from "./inline-citation";
+import { Checkpoint } from "./checkpoint";
 import { DynamicChart } from "./widgets/DynamicChart";
 import { TransactionSplitterWidget } from "./widgets/TransactionSplitterWidget";
 import { useDashboardStore } from "@/store/dashboardStore";
@@ -55,6 +56,8 @@ export interface ChatMessageProps {
       };
     }
   ) => void;
+  reload?: () => void;
+  onRestoreCheckpoint?: (messageId: string) => void;
   activeSessionId?: string;
   showReasoning?: boolean;
 }
@@ -109,11 +112,14 @@ export const ChatMessage = React.memo(
     status = "ready",
     isLastMessage = false,
     sendMessage,
+    reload,
+    onRestoreCheckpoint,
     activeSessionId = "",
     showReasoning = false,
   }: ChatMessageProps) => {
     const isAssistant = message.role === "assistant";
     const isStreamingMessage = status === "streaming" && isLastMessage;
+    const isStreamTerminated = !isStreamingMessage && status !== "streaming";
 
     // Aggregate annotations
     const allAnnotations = useMemo(() => {
@@ -128,7 +134,7 @@ export const ChatMessage = React.memo(
       return [...direct, ...fromParts];
     }, [message.annotations, message.parts]);
 
-    // Subagent step trace
+    // Subagent step trace with auto-dismissal on interrupted streams
     const subagents: SubagentStep[] = useMemo(() => {
       const stepsMap = new Map<string, SubagentStep>();
       for (const ann of allAnnotations) {
@@ -141,7 +147,26 @@ export const ChatMessage = React.memo(
           });
         }
       }
-      return Array.from(stepsMap.values());
+      return Array.from(stepsMap.values()).map((step) => {
+        if (isStreamTerminated && (step.status === "running" || step.status === "queued")) {
+          return {
+            ...step,
+            status: "failed" as const,
+            action: step.action ? `${step.action} (interrupted)` : "Interrupted",
+          };
+        }
+        return step;
+      });
+    }, [allAnnotations, isStreamTerminated]);
+
+    // Checkpoint Data
+    const checkpointData = useMemo(() => {
+      for (const ann of allAnnotations) {
+        if (ann.type === "checkpoint" || ann.type === "data-checkpoint") {
+          return ann.data || ann;
+        }
+      }
+      return null;
     }, [allAnnotations]);
 
     // Telemetry
@@ -466,16 +491,34 @@ export const ChatMessage = React.memo(
           ) : isStreamingMessage && !reasoningText ? (
             <div className="flex items-center gap-2 py-2 text-muted-foreground text-xs">
               <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
-              <span>Synthesizing portfolio records and spending patterns...</span>
+              <span>Checking your transactions and spending...</span>
             </div>
           ) : null}
+
+          {/* Checkpoint Save Point */}
+          {checkpointData && (
+            <Checkpoint
+              label={checkpointData.label || "Save point"}
+              onRestore={
+                message.id && onRestoreCheckpoint
+                  ? () => onRestoreCheckpoint(message.id!)
+                  : undefined
+              }
+            />
+          )}
 
           {/* Action Footer */}
           <MessageFooter
             textToCopy={cleanText}
             onRetry={
               isLastMessage && !isStreamingMessage
-                ? () => sendMessage?.({ text: "Please retry the last response" })
+                ? () => {
+                    if (typeof reload === "function") {
+                      reload();
+                    } else {
+                      sendMessage?.({ text: "Please retry the last response" });
+                    }
+                  }
                 : undefined
             }
           />

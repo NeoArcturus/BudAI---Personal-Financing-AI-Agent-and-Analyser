@@ -12,3 +12,4 @@ export * from "./prompt-input";
 export * from "./queue";
 export * from "./chat-message";
 export * from "./session-sidebar";
+export * from "./suggestion";

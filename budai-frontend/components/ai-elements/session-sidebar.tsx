@@ -10,6 +10,7 @@ import {
   Edit2,
   Check,
   X,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,7 @@ export interface SessionSidebarProps {
   onNewSession: () => void;
   onDeleteSession: (id: string) => void;
   onRenameSession: (id: string, newTitle: string) => Promise<void>;
+  isCreatingSession?: boolean;
   className?: string;
 }
 
@@ -38,6 +40,7 @@ export function SessionSidebar({
   onNewSession,
   onDeleteSession,
   onRenameSession,
+  isCreatingSession = false,
   className,
 }: SessionSidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -65,27 +68,32 @@ export function SessionSidebar({
   return (
     <aside
       className={cn(
-        "hidden md:flex md:w-64 h-full flex-col shrink-0 bg-[#0d0e14]/60 backdrop-blur-xl border-r border-white/10 transition-colors duration-300 select-none",
+        "hidden md:flex md:w-64 h-full flex-col shrink-0 bg-[#0c131d]/90 backdrop-blur-xl border-r border-[#1a2636] transition-colors duration-300 select-none",
         className
       )}
     >
       {/* Top New Session Action */}
-      <div className="p-4 border-b border-white/5">
+      <div className="p-4 border-b border-[#1a2636]">
         <button
           type="button"
           onClick={onNewSession}
-          className="w-full h-10 px-4 flex items-center justify-center gap-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 hover:border-primary/40 transition-all font-semibold text-xs shadow-[0_0_15px_rgba(0,242,255,0.08)] hover:shadow-[0_0_20px_rgba(0,242,255,0.18)] cursor-pointer group"
+          disabled={isCreatingSession}
+          className="w-full h-10 px-4 flex items-center justify-center gap-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 hover:border-primary/40 disabled:opacity-50 transition-all font-semibold text-xs shadow-[0_0_15px_rgba(0,242,255,0.08)] hover:shadow-[0_0_20px_rgba(0,242,255,0.18)] cursor-pointer group"
         >
-          <Plus
-            size={15}
-            className="group-hover:rotate-90 transition-transform duration-300"
-          />
-          <span>New Session</span>
+          {isCreatingSession ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : (
+            <Plus
+              size={15}
+              className="group-hover:rotate-90 transition-transform duration-300"
+            />
+          )}
+          <span>{isCreatingSession ? "Creating..." : "New Session"}</span>
         </button>
       </div>
 
       {/* Header */}
-      <div className="px-5 pt-4 pb-2 flex items-center gap-2 text-muted-foreground/60 text-xs font-medium">
+      <div className="px-5 pt-4 pb-2 flex items-center gap-2 text-muted-foreground/70 text-xs font-medium">
         <History size={13} />
         <span>Recent Conversations</span>
       </div>
@@ -97,7 +105,7 @@ export function SessionSidebar({
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="w-full h-11 rounded-xl bg-white/[0.03] animate-pulse border border-white/5"
+                className="w-full h-11 rounded-xl bg-[#131d2b]/60 animate-pulse border border-[#1a2636]"
               />
             ))}
           </div>
@@ -114,7 +122,7 @@ export function SessionSidebar({
               return (
                 <div
                   key={s.session_id}
-                  className="flex items-center gap-1.5 p-1.5 rounded-xl bg-white/[0.05] border border-primary/40"
+                  className="flex items-center gap-1.5 p-1.5 rounded-xl bg-[#131d2b] border border-primary/40"
                 >
                   <input
                     type="text"
@@ -138,7 +146,7 @@ export function SessionSidebar({
                   <button
                     type="button"
                     onClick={handleCancelEdit}
-                    className="p-1 rounded-md text-muted-foreground hover:bg-white/10 transition-colors"
+                    className="p-1 rounded-md text-muted-foreground hover:bg-[#1a293d] transition-colors"
                     aria-label="Cancel editing"
                   >
                     <X size={13} />
@@ -153,8 +161,8 @@ export function SessionSidebar({
                 className={cn(
                   "group relative flex items-center justify-between rounded-xl px-3 py-2.5 text-xs transition-all cursor-pointer border",
                   isActive
-                    ? "bg-primary/10 text-primary border-primary/25 shadow-xs font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04] border-transparent"
+                    ? "bg-[#131d2b] text-primary border-primary/30 shadow-xs font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-[#131d2b]/60 border-transparent"
                 )}
                 onClick={() => onSelectSession(s.session_id)}
               >
@@ -181,7 +189,7 @@ export function SessionSidebar({
                     onClick={() =>
                       setActiveMenuId(activeMenuId === s.session_id ? null : s.session_id)
                     }
-                    className="p-1 rounded-md hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+                    className="p-1 rounded-md hover:bg-[#1a293d] text-muted-foreground hover:text-foreground transition-colors"
                     aria-label="Session options"
                   >
                     <MoreVertical size={13} />
@@ -189,13 +197,13 @@ export function SessionSidebar({
 
                   {activeMenuId === s.session_id && (
                     <div
-                      className="absolute right-0 top-full mt-1 w-32 rounded-xl bg-[#0d0e14] border border-white/10 p-1 shadow-2xl z-50 flex flex-col gap-0.5"
+                      className="absolute right-0 top-full mt-1 w-32 rounded-xl bg-[#121d2b] border border-[#1e2d40] p-1 shadow-2xl z-50 flex flex-col gap-0.5"
                       onMouseLeave={() => setActiveMenuId(null)}
                     >
                       <button
                         type="button"
                         onClick={() => startEditing(s)}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-foreground/80 hover:text-foreground hover:bg-white/10 transition-colors"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-foreground/80 hover:text-foreground hover:bg-[#1a293d] transition-colors"
                       >
                         <Edit2 size={12} />
                         <span>Rename</span>
