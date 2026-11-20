@@ -57,7 +57,7 @@ class ForecasterAgent:
         from services.llm_factory import get_chat_llm
         llm = get_chat_llm(temperature=0).bind_tools(tools)
         
-        def evaluate_node(state: AgentState):
+        async def evaluate_node(state: AgentState):
             logger.info("ForecasterAgent evaluating state...")
             messages = state.get("messages", [])
             
@@ -81,7 +81,7 @@ class ForecasterAgent:
                 )
                 messages = [sys_msg] + messages
                 
-            response = llm.invoke(messages)
+            response = await llm.ainvoke(messages)
             return {"messages": [response]}
             
         def should_continue(state: AgentState):

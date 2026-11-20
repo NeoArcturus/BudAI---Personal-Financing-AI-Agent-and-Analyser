@@ -430,7 +430,7 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
         async def keep_alive():
             try:
                 while True:
-                    await asyncio.sleep(12.0)
+                    await asyncio.sleep(4.0)
                     await queue.put(": keep-alive\n\n")
             except asyncio.CancelledError:
                 pass
@@ -490,7 +490,7 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
 
             while True:
                 try:
-                    item = await asyncio.wait_for(queue.get(), timeout=12.0)
+                    item = await asyncio.wait_for(queue.get(), timeout=4.0)
                 except asyncio.TimeoutError:
                     yield ": keep-alive\n\n"
                     continue

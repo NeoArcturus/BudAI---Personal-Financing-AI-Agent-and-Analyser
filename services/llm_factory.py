@@ -203,7 +203,10 @@ class LoadBalancedChatOpenAI(ChatOpenAI):
 
     def _sync_client_url(self, target_url: str):
         formatted_url = httpx.URL(f"{target_url}/" if not target_url.endswith("/") else target_url)
-        self.root_client.base_url = formatted_url
+        if hasattr(self, "root_client") and self.root_client:
+            self.root_client.base_url = formatted_url
+        if hasattr(self, "root_async_client") and self.root_async_client:
+            self.root_async_client.base_url = formatted_url
         if hasattr(self, "async_root_client") and self.async_root_client:
             self.async_root_client.base_url = formatted_url
 

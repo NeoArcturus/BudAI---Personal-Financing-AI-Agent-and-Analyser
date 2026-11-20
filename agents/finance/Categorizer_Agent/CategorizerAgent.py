@@ -213,7 +213,7 @@ class CategorizerAgent:
         llm = get_chat_llm(temperature=0)
         llm_with_tools = llm.bind_tools(tools)
         
-        def evaluate_node(state: CategorizerState):
+        async def evaluate_node(state: CategorizerState):
             logger.info(json.dumps({"message": "Categorizer Agent evaluating state.", "status_code": 200}))
             messages = list(state.get("messages", []))
             
@@ -245,7 +245,7 @@ class CategorizerAgent:
                 )
                 messages.insert(0, SystemMessage(content=detailed_prompt))
                 
-            response = llm_with_tools.invoke(messages)
+            response = await llm_with_tools.ainvoke(messages)
             return {"messages": [response]}
             
         def should_continue(state: CategorizerState):

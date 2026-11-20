@@ -56,7 +56,7 @@ class AnalyserAgent:
                 return "tools"
             return END
 
-        def call_model(state: AgentState):
+        async def call_model(state: AgentState):
             messages = state["messages"]
             
             if not any(isinstance(m, SystemMessage) for m in messages):
@@ -74,7 +74,7 @@ class AnalyserAgent:
                 )
                 messages = [sys_msg] + messages
                 
-            response = llm.invoke(messages)
+            response = await llm.ainvoke(messages)
             return {"messages": [response]}
             
         workflow = StateGraph(AgentState)

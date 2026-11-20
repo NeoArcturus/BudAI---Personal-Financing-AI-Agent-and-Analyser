@@ -94,7 +94,7 @@ class HealthAgent:
             timeout=600.0,
         ).bind_tools(tools)
         
-        def evaluate_node(state: AgentState):
+        async def evaluate_node(state: AgentState):
             logger.info("HealthAgent evaluating state...")
             messages = state.get("messages", [])
             
@@ -124,7 +124,7 @@ ROUTING (Use these tools):
                 )
                 messages = [sys_msg] + messages
                 
-            response = llm.invoke(messages)
+            response = await llm.ainvoke(messages)
             return {"messages": [response]}
             
         def should_continue(state: AgentState):
