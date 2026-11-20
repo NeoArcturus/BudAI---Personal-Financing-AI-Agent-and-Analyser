@@ -327,20 +327,26 @@ export default function AdvisorPage() {
     lastMessage?.annotations?.some((ann) => ann.type === "htil_interrupt"),
   );
 
-  const { currentTokens, currentLimit } = React.useMemo(() => {
+  const { currentTokens, currentLimit, inputTokens, outputTokens, reasoningTokens } = React.useMemo(() => {
     let tokens = 0;
-    let limit = 128000;
+    let limit = 20224;
+    let inTokens = 0;
+    let outTokens = 0;
+    let rTokens = 0;
 
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
 
       // Check annotations
       const tel = msg.annotations?.find((a) => a.type === "telemetry") as
-        | { tokens?: number; context_limit?: number }
+        | { tokens?: number; context_limit?: number; input_tokens?: number; output_tokens?: number; reasoning_tokens?: number }
         | undefined;
       if (tel?.tokens) {
         tokens = tel.tokens;
         if (tel.context_limit) limit = tel.context_limit;
+        if (tel.input_tokens) inTokens = tel.input_tokens;
+        if (tel.output_tokens) outTokens = tel.output_tokens;
+        if (tel.reasoning_tokens) rTokens = tel.reasoning_tokens;
         break;
       }
 
@@ -353,6 +359,9 @@ export default function AdvisorPage() {
             if (item && item.type === "telemetry") {
               if (item.tokens) tokens = item.tokens;
               if (item.context_limit) limit = item.context_limit;
+              if (item.input_tokens) inTokens = item.input_tokens;
+              if (item.output_tokens) outTokens = item.output_tokens;
+              if (item.reasoning_tokens) rTokens = item.reasoning_tokens;
               break;
             }
           }
@@ -361,18 +370,40 @@ export default function AdvisorPage() {
       }
       if (tokens > 0) break;
 
+      // Check message metadata usage from Vercel AI SDK
+      const metaUsage = (msg as any).metadata?.usage;
+      if (metaUsage) {
+        inTokens = metaUsage.inputTokens ?? metaUsage.promptTokens ?? 0;
+        outTokens = metaUsage.outputTokens ?? metaUsage.completionTokens ?? 0;
+        tokens = metaUsage.totalTokens ?? (inTokens + outTokens);
+        break;
+      }
+
       // Check usage fallback
       if (msg.usage?.totalTokens) {
         tokens = msg.usage.totalTokens;
+        outTokens = msg.usage.completionTokens ?? 0;
+        inTokens = msg.usage.promptTokens ?? Math.max(0, tokens - outTokens);
         break;
       }
       if (msg.usage?.completionTokens) {
-        tokens = msg.usage.completionTokens;
+        outTokens = msg.usage.completionTokens;
+        tokens = outTokens;
         break;
       }
     }
 
-    return { currentTokens: tokens, currentLimit: limit };
+    if (tokens > 0 && inTokens === 0 && outTokens === 0) {
+      outTokens = tokens;
+    }
+
+    return {
+      currentTokens: tokens,
+      currentLimit: limit,
+      inputTokens: inTokens,
+      outputTokens: outTokens,
+      reasoningTokens: rTokens,
+    };
   }, [messages]);
 
   return (
@@ -427,7 +458,13 @@ export default function AdvisorPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <ContextMeter tokens={currentTokens} limit={currentLimit} />
+            <ContextMeter
+              tokens={currentTokens}
+              limit={currentLimit}
+              inputTokens={inputTokens}
+              outputTokens={outputTokens}
+              reasoningTokens={reasoningTokens}
+            />
           </div>
         </header>
 

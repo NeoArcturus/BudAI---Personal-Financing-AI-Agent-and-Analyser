@@ -303,6 +303,12 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
         msg_id = request.messageId or f"msg_{uuid.uuid4().hex[:8]}"
         reasoning_msg_id = f"reasoning_{uuid.uuid4().hex[:8]}"
 
+        token_stats = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_tokens": 0
+        }
+
         async def process_events():
             try:
                 async for event in budai_app.astream_events(input_data, version="v2", config=config):
@@ -315,6 +321,7 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                                 if time_metrics["ttft"] is None:
                                     time_metrics["ttft"] = int((time.time() - time_metrics["start"]) * 1000)
                                 tokens_generated["count"] += 1
+                                token_stats["reasoning_tokens"] += 1
                                 full_reasoning_response.append(reasoning)
                                 sys.stderr.write(f"\033[90m{reasoning}\033[0m")
                                 sys.stderr.flush()
@@ -323,6 +330,7 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                         if chunk and hasattr(chunk, "content") and chunk.content:
                             delta = chunk.content
                             tokens_generated["count"] += 1
+                            token_stats["output_tokens"] += 1
 
                             if delta:
                                 if time_metrics["ttft"] is None:
@@ -331,6 +339,21 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                                 sys.stderr.write(f"\033[96m{delta}\033[0m")
                                 sys.stderr.flush()
                                 await queue.put(f'0:{json.dumps(delta)}\n')
+
+                    elif kind == "on_chat_model_end":
+                        output = event.get("data", {}).get("output")
+                        if output:
+                            usage = getattr(output, "usage_metadata", None)
+                            if usage and isinstance(usage, dict):
+                                if usage.get("input_tokens"):
+                                    token_stats["input_tokens"] += usage.get("input_tokens", 0)
+                                if usage.get("output_tokens") and token_stats["output_tokens"] == 0:
+                                    token_stats["output_tokens"] = usage.get("output_tokens", 0)
+                            elif hasattr(output, "response_metadata"):
+                                resp_meta = output.response_metadata or {}
+                                token_usage = resp_meta.get("token_usage", {})
+                                if token_usage.get("prompt_tokens"):
+                                    token_stats["input_tokens"] += token_usage.get("prompt_tokens", 0)
 
                     elif kind == "on_tool_start":
                         tool_name = event.get("name")
@@ -426,18 +449,34 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
             compute_time_ms = int((time.time() - time_metrics["start"]) * 1000)
             ttft_ms = time_metrics["ttft"] if time_metrics["ttft"] is not None else compute_time_ms
             from services.llm_factory import get_model_context_limit
+
+            prompt_tokens = token_stats["input_tokens"] if token_stats["input_tokens"] > 0 else max(80, len(effective_user_input) // 3)
+            completion_tokens = token_stats["output_tokens"] + token_stats["reasoning_tokens"]
+            if completion_tokens == 0:
+                completion_tokens = tokens_generated["count"]
+            total_tokens = prompt_tokens + completion_tokens
+
             telemetry_data = {
                 "type": "telemetry",
                 "ttft_ms": ttft_ms,
                 "compute_time_ms": compute_time_ms,
-                "tokens": tokens_generated["count"],
+                "tokens": total_tokens,
+                "input_tokens": prompt_tokens,
+                "output_tokens": completion_tokens,
+                "reasoning_tokens": token_stats["reasoning_tokens"],
                 "context_limit": get_model_context_limit(),
                 "verbosity": request.verbosity or "balanced"
             }
             await queue.put(f'8:[{json.dumps(telemetry_data)}]\n')
 
-            usage_data = {"finishReason": "stop", "usage": {
-                "completionTokens": tokens_generated["count"], "promptTokens": 0}}
+            usage_data = {
+                "finishReason": "stop",
+                "usage": {
+                    "promptTokens": prompt_tokens,
+                    "completionTokens": completion_tokens,
+                    "totalTokens": total_tokens
+                }
+            }
             await queue.put(f'd:{json.dumps(usage_data)}\n')
             await queue.put(None)
 
@@ -487,7 +526,8 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                             yield item
                         elif item.startswith("d:"):
                             usage_data = json.loads(item[2:].strip())
-                            finish_item = f'data: {json.dumps({"type": "finish", "finishReason": usage_data.get("finishReason", "stop")})}\n\n'
+                            u = usage_data.get("usage", {})
+                            finish_item = f'data: {json.dumps({"type": "finish", "finishReason": usage_data.get("finishReason", "stop"), "messageMetadata": {"usage": {"inputTokens": u.get("promptTokens", 0), "outputTokens": u.get("completionTokens", 0), "totalTokens": u.get("totalTokens", 0)}}})}\n\n'
                     except Exception as parse_e:
                         logger.error(f"Failed to convert stream format: {parse_e}. Item was: {item!r}")
 
@@ -517,7 +557,7 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                                 content=final_response,
                                 ttft_ms=ttft,
                                 compute_time_ms=compute_time,
-                                tokens=tokens_generated["count"],
+                                tokens=total_tokens,
                                 reasoning_content="".join(full_reasoning_response) if full_reasoning_response else None
                             )
                             session.add(new_msg)
