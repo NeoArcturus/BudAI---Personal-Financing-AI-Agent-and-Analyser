@@ -385,6 +385,26 @@ export default function AdvisorPage() {
     }
   };
 
+  const handleReload = () => {
+    let currentSessionId = activeSessionId;
+
+    if (!currentSessionId || currentSessionId === "new-session") {
+      currentSessionId = crypto.randomUUID();
+      setActiveSessionId(currentSessionId);
+      lastFetchedId.current = currentSessionId;
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", `/advisor?session=${currentSessionId}`);
+      }
+    }
+
+    regenerate({
+      body: {
+        session_id: currentSessionId,
+        verbosity,
+      },
+    });
+  };
+
   const handleDeleteSession = async (id: string) => {
     try {
       await apiFetch(`/api/chat/sessions/${id}`, { method: "DELETE" }, true);
@@ -663,7 +683,7 @@ export default function AdvisorPage() {
                           status={status}
                           isLastMessage={i === messages.length - 1}
                           sendMessage={sendMessage}
-                          reload={() => regenerate()}
+                          reload={handleReload}
                           onRestoreCheckpoint={handleRestoreCheckpoint}
                           activeSessionId={activeSessionId}
                           showReasoning={showReasoning}

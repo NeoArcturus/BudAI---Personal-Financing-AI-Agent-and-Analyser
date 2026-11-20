@@ -136,7 +136,7 @@ def analyser_prompt_modifier(state: BudAIState) -> list[BaseMessage]:
     raw_messages = state.get("messages", [])
     trimmed = trim_messages(
         raw_messages,
-        max_tokens=3500,
+        max_tokens=2200,
         strategy="last",
         token_counter=_estimate_message_tokens,
         start_on="human",

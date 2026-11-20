@@ -516,7 +516,14 @@ export const ChatMessage = React.memo(
                     if (typeof reload === "function") {
                       reload();
                     } else {
-                      sendMessage?.({ text: "Please retry the last response" });
+                      sendMessage?.(
+                        { text: "Please retry the last response" },
+                        {
+                          body: {
+                            session_id: activeSessionId || null,
+                          },
+                        }
+                      );
                     }
                   }
                 : undefined

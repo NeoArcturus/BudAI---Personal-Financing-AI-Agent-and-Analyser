@@ -142,19 +142,37 @@ async def generate_session_title(session_id: str, first_msg: str):
 
 async def execute_chat_graph_async(initial_state: dict):
     """Initializes the database records for a chat session."""
-    user_uuid = initial_state['user_uuid']
+    user_uuid = str(initial_state['user_uuid'])
     session_id = initial_state.get('session_id')
+    user_input = initial_state['user_input']
 
     try:
         with SessionLocal() as session:
+            from datetime import timedelta
+            from models.database_models import utc_now
+
+            # Idempotency check: if user submitted identical prompt within the last 45s, reuse session and prevent duplicates
+            recent_duplicate = session.query(ChatHistory).filter(
+                ChatHistory.user_uuid == user_uuid,
+                ChatHistory.role == "user",
+                ChatHistory.content == user_input,
+                ChatHistory.timestamp >= utc_now() - timedelta(seconds=45)
+            ).order_by(ChatHistory.timestamp.desc()).first()
+
+            if recent_duplicate:
+                if not session_id or session_id != recent_duplicate.session_id:
+                    session_id = recent_duplicate.session_id
+                    initial_state['session_id'] = session_id
+                logger.info(f"Idempotent retry detected for session {session_id}. Skipping duplicate ChatHistory insertion.")
+                return
+
             db_session = None
             if session_id:
                 db_session = session.query(ChatSession).filter_by(
                     session_id=session_id, user_uuid=user_uuid).first()
 
             if not db_session:
-                new_session_id = session_id if session_id else str(
-                    uuid.uuid4())
+                new_session_id = session_id if session_id else str(uuid.uuid4())
                 db_session = ChatSession(
                     session_id=new_session_id, user_uuid=user_uuid, title="Analyzing...")
                 session.add(db_session)
@@ -162,17 +180,16 @@ async def execute_chat_graph_async(initial_state: dict):
                 initial_state['session_id'] = new_session_id
                 session_id = new_session_id
                 asyncio.create_task(generate_session_title(
-                    session_id, initial_state['user_input']))
+                    session_id, user_input))
             else:
-                from models.database_models import utc_now
                 db_session.last_updated = utc_now()
-                if db_session.title == "New Conversation":
+                if db_session.title in ("New Conversation", "Analyzing..."):
                     asyncio.create_task(generate_session_title(
-                        session_id, initial_state['user_input']))
+                        session_id, user_input))
                 session.commit()
 
             new_msg = ChatHistory(user_uuid=user_uuid, session_id=session_id,
-                                  role="user", content=initial_state['user_input'])
+                                  role="user", content=user_input)
             session.add(new_msg)
             session.commit()
     except Exception as e:

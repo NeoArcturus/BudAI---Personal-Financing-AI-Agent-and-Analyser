@@ -209,7 +209,23 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
     """Streams a chat response back using Server-Sent Events."""
     GlobalLLMManager.try_acquire()
 
-    thread_id = request.session_id or str(uuid.uuid4())
+    thread_id = request.session_id
+    if not thread_id:
+        from datetime import timedelta
+        from models.database_models import utc_now
+        try:
+            with SessionLocal() as s:
+                recent_sess = s.query(ChatSession).filter(
+                    ChatSession.user_uuid == str(current_user.user_uuid),
+                    ChatSession.last_updated >= utc_now() - timedelta(minutes=2)
+                ).order_by(ChatSession.last_updated.desc()).first()
+                if recent_sess:
+                    thread_id = recent_sess.session_id
+        except Exception as e:
+            logger.warning(f"Failed to lookup recent session: {e}")
+        if not thread_id:
+            thread_id = str(uuid.uuid4())
+
     resume_command = None
     user_input = ""
     if request.messages:
@@ -246,11 +262,14 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
     }
 
     if not resume_command:
-        await execute_chat_graph_async({
+        state_to_exec = {
             "user_uuid": current_user.user_uuid,
             "session_id": thread_id,
             "user_input": effective_user_input
-        })
+        }
+        await execute_chat_graph_async(state_to_exec)
+        thread_id = state_to_exec.get("session_id") or thread_id
+        initial_state["session_id"] = thread_id
 
     async def generate_response():
         config = {"run_name": "budai-agent-chat", "configurable": {"thread_id": thread_id}}
