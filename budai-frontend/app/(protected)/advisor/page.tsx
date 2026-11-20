@@ -24,7 +24,7 @@ import {
   ChatMessage,
   SessionSidebar,
 } from "@/components/ai-elements";
-import { TrendingUp, LineChart, ShieldCheck, Wallet } from "lucide-react";
+import { TrendingUp, LineChart, ShieldCheck, Wallet, RotateCw } from "lucide-react";
 
 export type VerbosityMode = DetailLevel;
 
@@ -112,15 +112,15 @@ export default function AdvisorPage() {
   const transport = React.useMemo(() => {
     return new DefaultChatTransport({
       api: getApiUrl("/api/chat/stream"),
-      headers: {
+      headers: () => ({
         Authorization: `Bearer ${getAuthToken()}`,
-      },
+      }),
     });
   }, []);
 
   const { messages, setMessages, status, sendMessage, stop, error } =
     useChat<BudAIMessage>({
-      id: activeSessionId || "new-session",
+      id: "budai-advisor-chat",
       transport,
       onError: (err) => {
         if (err.message.includes("401")) {
@@ -140,6 +140,11 @@ export default function AdvisorPage() {
 
   useEffect(() => {
     if (sessionParam && sessionParam !== lastFetchedId.current) {
+      // Guard against interrupting an active streaming response
+      if (status === "streaming" || status === "submitted") {
+        return;
+      }
+
       lastFetchedId.current = sessionParam;
 
       const fetchSessionMessages = async () => {
@@ -161,14 +166,12 @@ export default function AdvisorPage() {
                 const msg = m as BudAIChatMessage;
                 const parts: Array<{ type: "text" | "reasoning"; text: string }> = [];
 
-
                 if (msg.reasoning_content) {
                   parts.push({
                     type: "reasoning",
                     text: msg.reasoning_content,
                   });
                 }
-
 
                 let text = msg.content || "";
                 if (msg.role === "user") {
@@ -222,9 +225,7 @@ export default function AdvisorPage() {
                 } as BudAIMessage;
               },
             );
-            setTimeout(() => {
-              setMessages(formattedMessages);
-            }, 50);
+            setMessages(formattedMessages);
           }
         } catch (error) {
           console.error("Failed to fetch session messages:", error);
@@ -234,7 +235,7 @@ export default function AdvisorPage() {
 
       fetchSessionMessages();
     }
-  }, [sessionParam, setMessages]);
+  }, [sessionParam, status, setMessages]);
 
   const handleSend = async (text: string, selectedVerbosity: VerbosityMode = verbosity) => {
     try {
@@ -244,7 +245,10 @@ export default function AdvisorPage() {
         if (!currentSessionId || currentSessionId === "new-session") {
           currentSessionId = crypto.randomUUID();
           setActiveSessionId(currentSessionId);
-          router.replace(`/advisor?session=${currentSessionId}`);
+          lastFetchedId.current = currentSessionId;
+          if (typeof window !== "undefined") {
+            window.history.replaceState(null, "", `/advisor?session=${currentSessionId}`);
+          }
         }
 
         sendMessage(
@@ -265,25 +269,25 @@ export default function AdvisorPage() {
     }
   };
 
-  const handleNewChat = async () => {
-    try {
-      const res = await apiFetch(
-        "/api/chat/sessions",
-        { method: "POST" },
-        true,
-      );
-      const data = (await res.json()) as { session_id?: string };
-      if (data && data.session_id) {
-        lastFetchedId.current = "";
-        setActiveSessionId(data.session_id);
-        setMessages([]);
-        queryClient.invalidateQueries({ queryKey: ["chat-sessions"] });
-        router.push(`/advisor?session=${data.session_id}`);
+  const promptParam = searchParams.get("prompt");
+  const initialPromptHandled = React.useRef(false);
+
+  useEffect(() => {
+    if (promptParam && !initialPromptHandled.current) {
+      initialPromptHandled.current = true;
+      if (typeof window !== "undefined") {
+        const cleanUrl = sessionParam ? `/advisor?session=${sessionParam}` : `/advisor`;
+        window.history.replaceState(null, "", cleanUrl);
       }
-    } catch (error) {
-      console.error("Failed to create new session:", error);
-      toast.danger("Failed to start new chat");
+      handleSend(promptParam);
     }
+  }, [promptParam, sessionParam]);
+
+  const handleNewChat = () => {
+    lastFetchedId.current = "";
+    setActiveSessionId("");
+    setMessages([]);
+    router.push("/advisor");
   };
 
   const handleDeleteSession = async (id: string) => {
@@ -323,17 +327,52 @@ export default function AdvisorPage() {
     lastMessage?.annotations?.some((ann) => ann.type === "htil_interrupt"),
   );
 
-  const currentTokens = React.useMemo(() => {
+  const { currentTokens, currentLimit } = React.useMemo(() => {
+    let tokens = 0;
+    let limit = 128000;
+
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
+
+      // Check annotations
       const tel = msg.annotations?.find((a) => a.type === "telemetry") as
-        | { tokens?: number }
+        | { tokens?: number; context_limit?: number }
         | undefined;
-      if (tel?.tokens) return tel.tokens;
-      if (msg.usage?.totalTokens) return msg.usage.totalTokens;
-      if (msg.usage?.completionTokens) return msg.usage.completionTokens;
+      if (tel?.tokens) {
+        tokens = tel.tokens;
+        if (tel.context_limit) limit = tel.context_limit;
+        break;
+      }
+
+      // Check stream parts
+      if (msg.parts && Array.isArray(msg.parts)) {
+        for (const p of msg.parts) {
+          const d = (p as any).data;
+          const list = Array.isArray(d) ? d : [d];
+          for (const item of list) {
+            if (item && item.type === "telemetry") {
+              if (item.tokens) tokens = item.tokens;
+              if (item.context_limit) limit = item.context_limit;
+              break;
+            }
+          }
+          if (tokens > 0) break;
+        }
+      }
+      if (tokens > 0) break;
+
+      // Check usage fallback
+      if (msg.usage?.totalTokens) {
+        tokens = msg.usage.totalTokens;
+        break;
+      }
+      if (msg.usage?.completionTokens) {
+        tokens = msg.usage.completionTokens;
+        break;
+      }
     }
-    return 0;
+
+    return { currentTokens: tokens, currentLimit: limit };
   }, [messages]);
 
   return (
@@ -388,7 +427,7 @@ export default function AdvisorPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <ContextMeter tokens={currentTokens} limit={128000} />
+            <ContextMeter tokens={currentTokens} limit={currentLimit} />
           </div>
         </header>
 
@@ -457,6 +496,25 @@ export default function AdvisorPage() {
                   </div>
                 ) : (
                   <>
+                    <div className="flex items-start justify-between pb-5 border-b border-white/5 mb-6">
+                      <div>
+                        <h1 className="text-base font-semibold text-foreground tracking-tight">
+                          {activeSessionId ? "Advisory Thread" : "New Thread"}
+                        </h1>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Inquire about allocations, risk exposures, or cash flow.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleNewChat}
+                        className="w-8 h-8 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                        title="New Thread"
+                      >
+                        <RotateCw size={14} />
+                      </button>
+                    </div>
+
                     {messages.map((message, i) => (
                       <MessageScrollerItem
                         key={message.id || i}

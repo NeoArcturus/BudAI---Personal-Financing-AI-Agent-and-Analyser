@@ -407,8 +407,8 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
         async def keep_alive():
             try:
                 while True:
-                    await queue.put(f'8:[{json.dumps({"type": "thinking_context", "status": "Thinking"})}]\n')
-                    await asyncio.sleep(2.5)
+                    await asyncio.sleep(12.0)
+                    await queue.put(": keep-alive\n\n")
             except asyncio.CancelledError:
                 pass
 
@@ -419,7 +419,9 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
 
         async def wait_all():
             await tasks[0]
-            await asyncio.sleep(0.5)
+            if len(tasks) > 1 and not tasks[1].done():
+                tasks[1].cancel()
+            await asyncio.sleep(0.1)
 
             compute_time_ms = int((time.time() - time_metrics["start"]) * 1000)
             ttft_ms = time_metrics["ttft"] if time_metrics["ttft"] is not None else compute_time_ms
@@ -448,13 +450,21 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
             finish_item = None
 
             while True:
-                item = await queue.get()
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=12.0)
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+                    continue
+
                 if item is None:
                     break
                 if isinstance(item, Exception):
                     raise item
 
                 if isinstance(item, str):
+                    if item.startswith(":"):
+                        yield item
+                        continue
                     try:
                         if item.startswith("0:"):
                             content = json.loads(item[2:].strip())

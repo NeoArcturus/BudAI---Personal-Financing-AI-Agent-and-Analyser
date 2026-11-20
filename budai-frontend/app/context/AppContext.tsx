@@ -20,8 +20,7 @@ import {
   toast,
 } from "@heroui/react";
 import { useRouter } from "next/navigation";
-import { useChat, UIMessage } from "@ai-sdk/react";
-import { DefaultChatTransport, JSONValue } from "ai";
+import { UIMessage } from "@ai-sdk/react";
 import {
   Account,
   Transaction,
@@ -228,169 +227,6 @@ export const BudAIProvider = ({
     bankRef.current = bankName;
   }, [currentSessionId, bankName]);
 
-  const chat = useChat({
-    id: "budai-primary-chat",
-    experimental_throttle: 16,
-    transport: new DefaultChatTransport({
-      api: getApiUrl("/api/chat/stream"),
-      headers: () => ({
-        Authorization: `Bearer ${getAuthToken()}`,
-      }),
-      prepareSendMessagesRequest: ({ messages, trigger, messageId }) => {
-        return {
-          body: {
-            messages,
-            trigger,
-            messageId,
-            session_id: sessionRef.current,
-            active_account_id: bankRef.current,
-          },
-        };
-      },
-    }),
-    async onToolCall({ toolCall }) {
-      if (toolCall.toolName === "render_account_selector") {
-        setIsAccountSelectorOpen(true);
-      }
-    },
-    onData(dataPart) {
-      if (dataPart && typeof dataPart === "object" && "data" in dataPart) {
-        const part = dataPart as typeof dataPart & { data: JSONValue };
-        if (Array.isArray(part.data)) {
-          part.data.forEach((item) => {
-            const latestData = item as typeof item & {
-              type?: string;
-              title?: string;
-              profile_used?: string;
-            };
-            if (
-              latestData.type === "session_title_update" &&
-              latestData.title
-            ) {
-              setLocalSessions((prev) =>
-                prev.map((s) =>
-                  s.id === sessionRef.current
-                    ? { ...s, title: latestData.title as string }
-                    : s,
-                ),
-              );
-            } else if (latestData.type === "global_refresh_signal") {
-              queryClient.invalidateQueries();
-            } else if (
-              latestData.type === "thinking_context" &&
-              latestData.profile_used
-            ) {
-              setThinkingProfile(latestData.profile_used as string);
-            } else if (latestData.type === "trigger_account_selector") {
-              setIsAccountSelectorOpen(true);
-            }
-          });
-        }
-      }
-    },
-    onError(error) {
-      console.error("[BudAI Stream Error]:", error);
-      if (error?.message?.includes("423")) {
-        toast.danger("Advisor is busy please try later");
-      } else {
-        toast.danger("Connection error");
-      }
-    },
-  });
-
-  const { messages, status, setMessages, sendMessage } = chat;
-
-  const isLoading = status === "streaming" || status === "submitted";
-
-  const localSessionsRef = useRef(localSessions);
-
-  useEffect(() => {
-    localSessionsRef.current = localSessions;
-  }, [localSessions]);
-
-  useEffect(() => {
-    if (!currentSessionId || isLoading) return;
-
-    const currentSession = localSessionsRef.current.find(
-      (s) => s.id === currentSessionId,
-    );
-    if (!currentSession) return;
-
-    if (currentSession.messages.length === 0) {
-      apiFetch(`/api/chat/sessions/${currentSessionId}`, {}, true)
-        .then((res) => res.json())
-        .then((data: unknown) => {
-          if (
-            data &&
-            typeof data === "object" &&
-            "messages" in data &&
-            Array.isArray((data as SessionResponse).messages)
-          ) {
-            const typedData = data as SessionResponse;
-            const serverMsgs: UIMessage[] = typedData.messages.map(
-              (m: ServerMessage) =>
-                ({
-                  id: m.id || crypto.randomUUID(),
-                  role: m.role,
-                  content: m.content,
-                  parts: [{ type: "text", text: m.content }],
-                  createdAt: new Date(m.timestamp),
-                  status: "ready",
-                }) as UIMessage,
-            );
-
-            if (!isLoading) {
-              setMessages(serverMsgs);
-              setLocalSessions((prev) =>
-                prev.map((s) =>
-                  s.id === currentSessionId
-                    ? { ...s, messages: serverMsgs }
-                    : s,
-                ),
-              );
-            }
-          }
-        })
-        .catch(() => {});
-    } else {
-      setMessages((current) => {
-        if (isLoading) return current;
-        if (
-          current.length > 0 &&
-          current[current.length - 1].role === "assistant"
-        ) {
-          return current;
-        }
-        return currentSession.messages;
-      });
-    }
-  }, [currentSessionId, isLoading, setMessages]);
-
-  useEffect(() => {
-    if (!currentSessionId || messages.length === 0) return;
-
-    const timeout = setTimeout(() => {
-      setLocalSessions((prev) => {
-        const session = prev.find((s) => s.id === currentSessionId);
-        if (!session) return prev;
-
-        const isSame =
-          session.messages.length === messages.length &&
-          session.messages.every((m, i) => m.id === messages[i]?.id);
-
-        if (isSame) return prev;
-
-        return prev.map((s) =>
-          s.id === currentSessionId
-            ? { ...s, messages, lastUpdated: new Date() }
-            : s,
-        );
-      });
-    }, 500);
-
-    return () => clearTimeout(timeout);
-  }, [messages, currentSessionId]);
-
   const createNewSession = (title: string, contextData?: AdvisorContext) => {
     const newSession: ChatSession = {
       id: crypto.randomUUID(),
@@ -401,7 +237,6 @@ export const BudAIProvider = ({
     };
     setLocalSessions((prev) => [newSession, ...prev]);
     setCurrentSessionId(newSession.id);
-    setMessages([]);
     return newSession.id;
   };
 
@@ -409,7 +244,6 @@ export const BudAIProvider = ({
     setLocalSessions((prev) => prev.filter((s) => s.id !== id));
     if (currentSessionId === id) {
       setCurrentSessionId(null);
-      setMessages([]);
     }
     try {
       await apiFetch(`/api/chat/sessions/${id}`, { method: "DELETE" }, true);
@@ -442,38 +276,12 @@ export const BudAIProvider = ({
   };
 
   const sendChatMessage = async (textToSend: string, sessionId?: string) => {
-    if (!textToSend.trim() || isLoading) return;
-
-    let targetId = sessionId || currentSessionId;
-    if (!targetId) {
-      targetId = createNewSession("New Conversation");
-    } else if (targetId !== currentSessionId) {
-      setCurrentSessionId(targetId);
-    }
-
-    await sendMessage({
-      id: crypto.randomUUID(),
-      role: "user",
-      parts: [{ type: "text", text: textToSend }],
-    });
-
-    setLocalSessions((prev) =>
-      prev.map((s) =>
-        s.id === targetId
-          ? {
-              ...s,
-              title:
-                s.messages.length <= 2
-                  ? textToSend.length > 30
-                    ? textToSend.slice(0, 30) + "..."
-                    : textToSend
-                  : s.title,
-            }
-          : s,
-      ),
-    );
-
-    return targetId;
+    if (!textToSend.trim()) return;
+    const targetUrl = sessionId
+      ? `/advisor?session=${encodeURIComponent(sessionId)}&prompt=${encodeURIComponent(textToSend.trim())}`
+      : `/advisor?prompt=${encodeURIComponent(textToSend.trim())}`;
+    router.push(targetUrl);
+    return sessionId || "new";
   };
 
   const handleAiChartTrigger = async (
@@ -538,8 +346,8 @@ export const BudAIProvider = ({
         sessions: localSessions,
         createNewSession,
         deleteSession,
-        isChatLoading: isLoading,
-        chatMessages: messages || [],
+        isChatLoading: false,
+        chatMessages: [],
         sendChatMessage,
         thinkingProfile,
         isAccountSelectorOpen,

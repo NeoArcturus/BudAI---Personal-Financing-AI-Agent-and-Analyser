@@ -428,6 +428,7 @@ export const ChatMessage = React.memo(
 
                     const codeContent = String(children).replace(/\n$/, "");
                     const lang = match ? match[1] : "text";
+                    const lines = codeContent.split("\n");
 
                     return (
                       <div className="my-3 rounded-xl bg-white/[0.03] border border-white/10 overflow-hidden">
@@ -443,7 +444,16 @@ export const ChatMessage = React.memo(
                           </button>
                         </div>
                         <pre className="p-3 text-xs font-mono overflow-x-auto text-foreground/90 leading-relaxed scrollbar-hide">
-                          <code>{children}</code>
+                          <code className="table w-full">
+                            {lines.map((line, idx) => (
+                              <div key={idx} className="table-row">
+                                <span className="table-cell pr-4 text-right select-none text-muted-foreground/40 font-mono text-[11px] w-6">
+                                  {idx + 1}
+                                </span>
+                                <span className="table-cell whitespace-pre">{line}</span>
+                              </div>
+                            ))}
+                          </code>
                         </pre>
                       </div>
                     );

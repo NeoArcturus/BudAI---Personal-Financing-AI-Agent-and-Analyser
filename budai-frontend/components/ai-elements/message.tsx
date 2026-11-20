@@ -59,9 +59,9 @@ export function Bubble({
   return (
     <div
       className={cn(
-        "rounded-2xl px-4 py-2.5 text-xs text-foreground leading-relaxed transition-all shadow-xs",
+        "rounded-2xl sm:rounded-full px-4 sm:px-5 py-2 sm:py-2.5 text-sm text-foreground leading-relaxed transition-all shadow-xs",
         variant === "muted"
-          ? "bg-foreground/5 border border-white/10 backdrop-blur-md"
+          ? "bg-white/[0.08] border border-white/10 backdrop-blur-md"
           : "bg-primary/10 border border-primary/20",
         align === "end" ? "ml-auto max-w-xl" : "mr-auto max-w-xl",
         className

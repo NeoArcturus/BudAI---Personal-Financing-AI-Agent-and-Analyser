@@ -134,9 +134,8 @@ export default function GlobalSearchModal() {
 
     if (item.type === "action") {
       if (query.trim()) {
-        sendChatMessage(query);
+        router.push(`/advisor?prompt=${encodeURIComponent(query.trim())}`);
       }
-      router.push("/home");
     } else if ((item.type === "nav" || item.type === "account") && item.path) {
       router.push(item.path);
     } else if (item.type === "transaction") {
