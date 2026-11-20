@@ -15,12 +15,15 @@ from schemas.api_schema import (
     ChatRequest, StreamChatRequest, ChatSessionResponse,
     ChatMessageResponse, ChatSessionRenameRequest
 )
-from services.orchestrator_graph import execute_chat_graph_async, get_session_history, budai_app
+from services.orchestrator_graph import execute_chat_graph_async, get_session_history
+from agents.finance.Analyser_Agent.AnalyserAgent import get_analyser_app
 from config import SessionLocal, redis_client
 from services.llm_manager import GlobalLLMManager
 from services.logger_setup import get_core_logger
 
 logger = get_core_logger(__name__)
+
+budai_app = get_analyser_app()
 
 
 async def get_task_status(task_id: str):
@@ -374,6 +377,15 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                             "call_monte_carlo_simulation_agent": ("MonteCarloEngine", "Running Bates jump-diffusion simulations"),
                             "call_subscription_detection_agent": ("SubscriptionWorker", "Auditing active recurring billing"),
                             "get_connected_accounts_orchestrator": ("AccountWorker", "Querying verified bank accounts"),
+                            "get_liability_horizon_orchestrator": ("LiabilityWorker", "Calculating liability horizon & scheduled sweeps"),
+                            "query_transactions": ("AnalyserAgent", "Querying verified transaction records"),
+                            "aggregate_financial_data": ("AnalyserAgent", "Analyzing historical spending & cashflow"),
+                            "get_user_lifestyle_profile_wrapper": ("LifestyleWorker", "Profiling behavioral spending personas"),
+                            "get_semantic_anomalies_wrapper": ("AnomalyWorker", "Screening semantic transaction anomalies"),
+                            "get_lifestyle_trajectory_wrapper": ("LifestyleWorker", "Analyzing 3-month lifestyle trajectory"),
+                            "benchmark_persona_budget_wrapper": ("LifestyleWorker", "Benchmarking spending against persona averages"),
+                            "predict_impulse_vulnerability_wrapper": ("LifestyleWorker", "Predicting impulse spending windows"),
+                            "get_upcoming_subscriptions_wrapper": ("SubscriptionWorker", "Auditing upcoming recurring bills"),
                         }
                         if tool_name in agent_map:
                             agent_name, agent_action = agent_map[tool_name]
@@ -418,6 +430,15 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                             "call_monte_carlo_simulation_agent": "MonteCarloEngine",
                             "call_subscription_detection_agent": "SubscriptionWorker",
                             "get_connected_accounts_orchestrator": "AccountWorker",
+                            "get_liability_horizon_orchestrator": "LiabilityWorker",
+                            "query_transactions": "AnalyserAgent",
+                            "aggregate_financial_data": "AnalyserAgent",
+                            "get_user_lifestyle_profile_wrapper": "LifestyleWorker",
+                            "get_semantic_anomalies_wrapper": "AnomalyWorker",
+                            "get_lifestyle_trajectory_wrapper": "LifestyleWorker",
+                            "benchmark_persona_budget_wrapper": "LifestyleWorker",
+                            "predict_impulse_vulnerability_wrapper": "LifestyleWorker",
+                            "get_upcoming_subscriptions_wrapper": "SubscriptionWorker",
                         }
                         if tool_name in agent_end_map:
                             agent_name = agent_end_map[tool_name]
@@ -550,6 +571,11 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                         with SessionLocal() as session:
                             compute_time = int((time.time() - time_metrics["start"]) * 1000)
                             ttft = time_metrics["ttft"] if time_metrics["ttft"] is not None else compute_time
+                            prompt_toks = token_stats["input_tokens"] if token_stats["input_tokens"] > 0 else max(80, len(effective_user_input) // 3)
+                            comp_toks = token_stats["output_tokens"] + token_stats["reasoning_tokens"]
+                            if comp_toks == 0:
+                                comp_toks = tokens_generated["count"]
+                            total_toks = prompt_toks + comp_toks
                             new_msg = ChatHistory(
                                 user_uuid=current_user.user_uuid,
                                 session_id=thread_id,
@@ -557,7 +583,7 @@ async def stream_chat(request: StreamChatRequest, current_user: User):
                                 content=final_response,
                                 ttft_ms=ttft,
                                 compute_time_ms=compute_time,
-                                tokens=total_tokens,
+                                tokens=total_toks,
                                 reasoning_content="".join(full_reasoning_response) if full_reasoning_response else None
                             )
                             session.add(new_msg)

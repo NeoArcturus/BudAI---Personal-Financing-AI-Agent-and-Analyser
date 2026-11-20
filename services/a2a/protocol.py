@@ -44,3 +44,25 @@ class A2AResponse(BaseModel):
     payload: Dict[str, Any] = Field(default_factory=dict)
     error_message: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+class A2AStreamEvent(BaseModel):
+    """
+    Standardized real-time streaming event emitted during internalized A2A execution.
+    Powers live SSE streaming directly to the client UI.
+    """
+    event_type: Literal[
+        "step_start",
+        "step_progress",
+        "step_complete",
+        "reasoning_chunk",
+        "text_chunk",
+        "tool_call",
+        "chart_call",
+        "telemetry",
+        "error"
+    ]
+    sender: str
+    recipient: Optional[str] = None
+    correlation_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    data: Dict[str, Any] = Field(default_factory=dict)
+    timestamp: datetime = Field(default_factory=datetime.utcnow)

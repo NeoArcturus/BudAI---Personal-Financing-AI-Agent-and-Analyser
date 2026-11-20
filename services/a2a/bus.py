@@ -1,8 +1,9 @@
 import asyncio
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, AsyncIterator
+import inspect
 from config import redis_client
-from services.a2a.protocol import A2AMessage, A2AResponse
+from services.a2a.protocol import A2AMessage, A2AResponse, A2AStreamEvent
 from services.a2a.registry import get_agent_registry
 from services.logger_setup import get_core_logger
 
@@ -90,6 +91,72 @@ class A2ABus:
             error_message=f"No registered handler for recipient agent '{msg.recipient}'"
         )
 
+    async def stream_request(self, msg: A2AMessage) -> AsyncIterator[A2AStreamEvent]:
+        """
+        Streaming request pattern across the internalized A2A bus.
+        Dispatches to the registered agent handler and yields real-time A2AStreamEvent items.
+        """
+        if msg.recursion_depth > 5:
+            yield A2AStreamEvent(
+                event_type="error",
+                sender=msg.recipient,
+                recipient=msg.sender,
+                correlation_id=msg.correlation_id,
+                data={"error": "Recursion depth limit exceeded"}
+            )
+            return
+
+        handler = self.registry.get_handler(msg.recipient)
+        if not handler:
+            yield A2AStreamEvent(
+                event_type="error",
+                sender=msg.recipient,
+                recipient=msg.sender,
+                correlation_id=msg.correlation_id,
+                data={"error": f"No registered handler for recipient agent '{msg.recipient}'"}
+            )
+            return
+
+        yield A2AStreamEvent(
+            event_type="step_start",
+            sender=msg.recipient,
+            recipient=msg.sender,
+            correlation_id=msg.correlation_id,
+            data={"action": f"Executing {msg.intent}", "status": "running"}
+        )
+
+        try:
+            if inspect.isasyncgenfunction(handler):
+                async for event in handler(msg):
+                    if isinstance(event, A2AStreamEvent):
+                        yield event
+                    else:
+                        yield A2AStreamEvent(
+                            event_type="step_progress",
+                            sender=msg.recipient,
+                            recipient=msg.sender,
+                            correlation_id=msg.correlation_id,
+                            data={"payload": event}
+                        )
+            else:
+                resp = await self._invoke_handler(handler, msg)
+                yield A2AStreamEvent(
+                    event_type="step_complete",
+                    sender=msg.recipient,
+                    recipient=msg.sender,
+                    correlation_id=msg.correlation_id,
+                    data={"response": resp.model_dump() if hasattr(resp, "model_dump") else str(resp), "status": "completed"}
+                )
+        except Exception as e:
+            logger.error(f"Error in stream_request for {msg.recipient}: {e}")
+            yield A2AStreamEvent(
+                event_type="error",
+                sender=msg.recipient,
+                recipient=msg.sender,
+                correlation_id=msg.correlation_id,
+                data={"error": str(e)}
+            )
+
     async def _invoke_handler(self, handler, msg: A2AMessage) -> A2AResponse:
         if asyncio.iscoroutinefunction(handler):
             return await handler(msg)
@@ -101,4 +168,7 @@ def get_a2a_bus() -> A2ABus:
     global _bus_instance
     if _bus_instance is None:
         _bus_instance = A2ABus()
+    if not _bus_instance.registry.list_agents():
+        from services.a2a.bootstrap import register_all_a2a_workers
+        register_all_a2a_workers()
     return _bus_instance

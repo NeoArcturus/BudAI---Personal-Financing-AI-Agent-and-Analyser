@@ -365,14 +365,10 @@ def orchestrator_prompt_modifier(state: BudAIState) -> list[BaseMessage]:
     )
     return [SystemMessage(content=default_orchestrator_prompt)] + trimmed
 
-budai_app = create_react_agent(
-    model=supervisor_llm,
-    tools=supervisor_tools,
-    state_schema=BudAIState,
-    prompt=orchestrator_prompt_modifier,
-    checkpointer=InMemorySaver()
-)
+from agents.finance.Analyser_Agent.AnalyserAgent import get_analyser_app
+
+budai_app = get_analyser_app()
 
 def get_orchestrator_app():
-    """Returns the compiled LangGraph Orchestrator App."""
-    return budai_app
+    """Returns the compiled LangGraph A2A Analyser App."""
+    return get_analyser_app()
